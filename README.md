@@ -12,6 +12,7 @@ common Finder file operations.
 ## Status
 
 The project is pre-alpha. See [the product requirements and architecture](docs/FINDER_VIM_SPEC.md)
+and [the performance architecture](docs/PERFORMANCE.md)
 before changing implementation or packaging decisions.
 
 ## Design principles

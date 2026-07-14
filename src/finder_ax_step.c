@@ -39,7 +39,7 @@ typedef struct {
     navigation_role_t role;
 } navigation_context_t;
 
-static const int worker_idle_timeout_milliseconds = 300;
+static const int worker_idle_timeout_milliseconds = 750;
 static const char *program_path;
 extern char **environ;
 
@@ -211,7 +211,18 @@ static CFIndex selected_count(
     navigation_role_t role,
     CFArrayRef items
 ) {
-    (void)container;
+    CFStringRef selected_attribute = role == navigation_outline
+        ? kAXSelectedRowsAttribute
+        : kAXSelectedChildrenAttribute;
+    CFArrayRef selected = copy_array_attribute(container, selected_attribute);
+    if (selected) {
+        CFIndex count = CFArrayGetCount(selected);
+        CFRelease(selected);
+        return count;
+    }
+
+    // Compatibility fallback for Finder views that do not expose a selection
+    // array. The common path above uses one AX request regardless of item count.
     if (role == navigation_list || role == navigation_grid) {
         CFIndex count = 0;
         CFIndex item_count = CFArrayGetCount(items);
@@ -275,14 +286,9 @@ static AXUIElementRef copy_navigation_container(
     AXUIElementRef current = (AXUIElementRef)CFRetain(focused);
     for (int depth = 0; depth < 10; ++depth) {
         if (role_of(current, role)) {
-            AXUIElementRef best = NULL;
-            double best_score = -1;
-            find_best_container(current, 0, &best, &best_score);
-            if (best) {
-                CFRelease(current);
-                role_of(best, role);
-                return best;
-            }
+            // The nearest supported ancestor is already the active Finder
+            // view. Recursively rescanning its descendants makes a cold key
+            // press proportional to the number of displayed files.
             return current;
         }
 
@@ -357,19 +363,36 @@ static void navigation_context_release(navigation_context_t *context) {
     memset(context, 0, sizeof(*context));
 }
 
+static AXUIElementRef copy_direct_child_of_container(
+    AXUIElementRef element,
+    AXUIElementRef container
+) {
+    AXUIElementRef current = (AXUIElementRef)CFRetain(element);
+    for (int depth = 0; depth < 8; ++depth) {
+        CFTypeRef parent = copy_attribute(current, kAXParentAttribute);
+        if (!parent || CFGetTypeID(parent) != AXUIElementGetTypeID()) {
+            if (parent) CFRelease(parent);
+            break;
+        }
+        if (CFEqual(parent, container)) {
+            CFRelease(parent);
+            return current;
+        }
+        CFRelease(current);
+        current = (AXUIElementRef)parent;
+    }
+    CFRelease(current);
+    return NULL;
+}
+
 static CFIndex current_index(const navigation_context_t *context) {
     CFIndex item_count = CFArrayGetCount(context->items);
-    if (context->role == navigation_outline) {
-        for (CFIndex index = 0; index < item_count; ++index) {
-            AXUIElementRef item = (AXUIElementRef)CFArrayGetValueAtIndex(context->items, index);
-            if (bool_attribute(item, kAXSelectedAttribute)) return index;
-        }
-        return -1;
-    }
-
+    CFStringRef selected_attribute = context->role == navigation_outline
+        ? kAXSelectedRowsAttribute
+        : kAXSelectedChildrenAttribute;
     CFArrayRef selected = copy_array_attribute(
         context->container,
-        kAXSelectedChildrenAttribute
+        selected_attribute
     );
     if (selected && CFArrayGetCount(selected) > 0) {
         AXUIElementRef selected_item = (AXUIElementRef)CFArrayGetValueAtIndex(
@@ -381,18 +404,38 @@ static CFIndex current_index(const navigation_context_t *context) {
             CFRangeMake(0, item_count),
             selected_item
         );
+        if (index == kCFNotFound && context->role != navigation_outline) {
+            AXUIElementRef direct_child = copy_direct_child_of_container(
+                selected_item,
+                context->container
+            );
+            if (direct_child) {
+                index = CFArrayGetFirstIndexOfValue(
+                    context->items,
+                    CFRangeMake(0, item_count),
+                    direct_child
+                );
+                CFRelease(direct_child);
+            }
+        }
         CFRelease(selected);
         if (index != kCFNotFound) return index;
     } else if (selected) {
         CFRelease(selected);
     }
 
+    // Compatibility fallback when the container does not expose its selected
+    // rows/children. This is intentionally kept off the common path.
     for (CFIndex index = 0; index < item_count; ++index) {
         AXUIElementRef item = (AXUIElementRef)CFArrayGetValueAtIndex(
             context->items,
             index
         );
-        if (descendant_selected(item, 0)) return index;
+        if (context->role == navigation_outline) {
+            if (bool_attribute(item, kAXSelectedAttribute)) return index;
+        } else if (descendant_selected(item, 0)) {
+            return index;
+        }
     }
     return -1;
 }
