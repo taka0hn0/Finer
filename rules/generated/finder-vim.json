@@ -1,0 +1,3578 @@
+{
+  "title": "Finder Vim (development snapshot)",
+  "rules": [
+    {
+      "description": "Finder Vim Utility Commands",
+      "manipulators": [
+        {
+          "conditions": [
+            {
+              "bundle_identifiers": [
+                "^com\\.apple\\.finder$"
+              ],
+              "type": "frontmost_application_if"
+            },
+            {
+              "expression": "accessibility.focused_ui_element.role_string like 'AXText*'",
+              "type": "expression_unless"
+            },
+            {
+              "name": "finder_visual_mode",
+              "type": "variable_unless",
+              "value": 1
+            },
+            {
+              "name": "finder_g_prefix",
+              "type": "variable_if",
+              "value": 1
+            }
+          ],
+          "description": "Normal Mode: Press gg for List first or Grid column top",
+          "from": {
+            "key_code": "g"
+          },
+          "to": [
+            {
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_step first >/dev/null 2>&1"
+            },
+            {
+              "set_variable": {
+                "name": "finder_g_prefix",
+                "value": 0
+              }
+            }
+          ],
+          "type": "basic"
+        },
+        {
+          "conditions": [
+            {
+              "bundle_identifiers": [
+                "^com\\.apple\\.finder$"
+              ],
+              "type": "frontmost_application_if"
+            },
+            {
+              "expression": "accessibility.focused_ui_element.role_string like 'AXText*'",
+              "type": "expression_unless"
+            },
+            {
+              "name": "finder_visual_mode",
+              "type": "variable_unless",
+              "value": 1
+            }
+          ],
+          "description": "Normal Mode: Press G for List last or Grid column bottom",
+          "from": {
+            "key_code": "g",
+            "modifiers": {
+              "mandatory": [
+                "shift"
+              ],
+              "optional": [
+                "caps_lock"
+              ]
+            }
+          },
+          "to": [
+            {
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_step last >/dev/null 2>&1"
+            }
+          ],
+          "type": "basic"
+        },
+        {
+          "conditions": [
+            {
+              "bundle_identifiers": [
+                "^com\\.apple\\.finder$"
+              ],
+              "type": "frontmost_application_if"
+            },
+            {
+              "expression": "accessibility.focused_ui_element.role_string like 'AXText*'",
+              "type": "expression_unless"
+            },
+            {
+              "name": "finder_visual_mode",
+              "type": "variable_unless",
+              "value": 1
+            }
+          ],
+          "description": "Normal Mode: Start gg sequence",
+          "from": {
+            "key_code": "g"
+          },
+          "parameters": {
+            "basic.to_delayed_action_delay_milliseconds": 1000
+          },
+          "to": [
+            {
+              "set_variable": {
+                "name": "finder_g_prefix",
+                "value": 1
+              }
+            }
+          ],
+          "to_delayed_action": {
+            "to_if_canceled": [
+              {
+                "set_variable": {
+                  "name": "finder_g_prefix",
+                  "value": 0
+                }
+              }
+            ],
+            "to_if_invoked": [
+              {
+                "set_variable": {
+                  "name": "finder_g_prefix",
+                  "value": 0
+                }
+              }
+            ]
+          },
+          "type": "basic"
+        },
+        {
+          "conditions": [
+            {
+              "bundle_identifiers": [
+                "^com\\.apple\\.finder$"
+              ],
+              "type": "frontmost_application_if"
+            },
+            {
+              "expression": "accessibility.focused_ui_element.role_string like 'AXText*'",
+              "type": "expression_unless"
+            },
+            {
+              "name": "finder_visual_mode",
+              "type": "variable_unless",
+              "value": 1
+            },
+            {
+              "name": "finder_c_prefix",
+              "type": "variable_if",
+              "value": 1
+            }
+          ],
+          "description": "Normal Mode: Press cc to copy absolute paths",
+          "from": {
+            "key_code": "c"
+          },
+          "to": [
+            {
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_move copy-absolute >/dev/null 2>&1"
+            },
+            {
+              "set_variable": {
+                "name": "finder_c_prefix",
+                "value": 0
+              }
+            }
+          ],
+          "type": "basic"
+        },
+        {
+          "conditions": [
+            {
+              "bundle_identifiers": [
+                "^com\\.apple\\.finder$"
+              ],
+              "type": "frontmost_application_if"
+            },
+            {
+              "expression": "accessibility.focused_ui_element.role_string like 'AXText*'",
+              "type": "expression_unless"
+            },
+            {
+              "name": "finder_visual_mode",
+              "type": "variable_unless",
+              "value": 1
+            },
+            {
+              "name": "finder_c_prefix",
+              "type": "variable_if",
+              "value": 1
+            }
+          ],
+          "description": "Normal Mode: Press cd to copy containing directory paths",
+          "from": {
+            "key_code": "d"
+          },
+          "to": [
+            {
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_move copy-directory >/dev/null 2>&1"
+            },
+            {
+              "set_variable": {
+                "name": "finder_c_prefix",
+                "value": 0
+              }
+            }
+          ],
+          "type": "basic"
+        },
+        {
+          "conditions": [
+            {
+              "bundle_identifiers": [
+                "^com\\.apple\\.finder$"
+              ],
+              "type": "frontmost_application_if"
+            },
+            {
+              "expression": "accessibility.focused_ui_element.role_string like 'AXText*'",
+              "type": "expression_unless"
+            },
+            {
+              "name": "finder_visual_mode",
+              "type": "variable_unless",
+              "value": 1
+            },
+            {
+              "name": "finder_c_prefix",
+              "type": "variable_if",
+              "value": 1
+            }
+          ],
+          "description": "Normal Mode: Press cf to copy names with extensions",
+          "from": {
+            "key_code": "f"
+          },
+          "to": [
+            {
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_move copy-filename >/dev/null 2>&1"
+            },
+            {
+              "set_variable": {
+                "name": "finder_c_prefix",
+                "value": 0
+              }
+            }
+          ],
+          "type": "basic"
+        },
+        {
+          "conditions": [
+            {
+              "bundle_identifiers": [
+                "^com\\.apple\\.finder$"
+              ],
+              "type": "frontmost_application_if"
+            },
+            {
+              "expression": "accessibility.focused_ui_element.role_string like 'AXText*'",
+              "type": "expression_unless"
+            },
+            {
+              "name": "finder_visual_mode",
+              "type": "variable_unless",
+              "value": 1
+            },
+            {
+              "name": "finder_c_prefix",
+              "type": "variable_if",
+              "value": 1
+            }
+          ],
+          "description": "Normal Mode: Press cn to copy names without extensions",
+          "from": {
+            "key_code": "n"
+          },
+          "to": [
+            {
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_move copy-stem >/dev/null 2>&1"
+            },
+            {
+              "set_variable": {
+                "name": "finder_c_prefix",
+                "value": 0
+              }
+            }
+          ],
+          "type": "basic"
+        },
+        {
+          "conditions": [
+            {
+              "bundle_identifiers": [
+                "^com\\.apple\\.finder$"
+              ],
+              "type": "frontmost_application_if"
+            },
+            {
+              "expression": "accessibility.focused_ui_element.role_string like 'AXText*'",
+              "type": "expression_unless"
+            },
+            {
+              "name": "finder_visual_mode",
+              "type": "variable_unless",
+              "value": 1
+            }
+          ],
+          "description": "Normal Mode: Start c copy sequence",
+          "from": {
+            "key_code": "c"
+          },
+          "parameters": {
+            "basic.to_delayed_action_delay_milliseconds": 1000
+          },
+          "to": [
+            {
+              "set_variable": {
+                "name": "finder_c_prefix",
+                "value": 1
+              }
+            }
+          ],
+          "to_delayed_action": {
+            "to_if_canceled": [
+              {
+                "set_variable": {
+                  "name": "finder_c_prefix",
+                  "value": 0
+                }
+              }
+            ],
+            "to_if_invoked": [
+              {
+                "set_variable": {
+                  "name": "finder_c_prefix",
+                  "value": 0
+                }
+              }
+            ]
+          },
+          "type": "basic"
+        },
+        {
+          "conditions": [
+            {
+              "bundle_identifiers": [
+                "^com\\.apple\\.finder$"
+              ],
+              "type": "frontmost_application_if"
+            },
+            {
+              "expression": "accessibility.focused_ui_element.role_string like 'AXText*'",
+              "type": "expression_unless"
+            },
+            {
+              "name": "finder_visual_mode",
+              "type": "variable_unless",
+              "value": 1
+            }
+          ],
+          "description": "Normal Mode: Press - to open the parent directory",
+          "from": {
+            "key_code": "hyphen"
+          },
+          "to": [
+            {
+              "key_code": "up_arrow",
+              "modifiers": [
+                "command"
+              ]
+            }
+          ],
+          "type": "basic"
+        },
+        {
+          "conditions": [
+            {
+              "bundle_identifiers": [
+                "^com\\.apple\\.finder$"
+              ],
+              "type": "frontmost_application_if"
+            },
+            {
+              "expression": "accessibility.focused_ui_element.role_string like 'AXText*'",
+              "type": "expression_unless"
+            },
+            {
+              "name": "finder_visual_mode",
+              "type": "variable_unless",
+              "value": 1
+            }
+          ],
+          "description": "Normal Mode: Press i to show Get Info",
+          "from": {
+            "key_code": "i"
+          },
+          "to": [
+            {
+              "key_code": "i",
+              "modifiers": [
+                "command"
+              ]
+            }
+          ],
+          "type": "basic"
+        },
+        {
+          "conditions": [
+            {
+              "bundle_identifiers": [
+                "^com\\.apple\\.finder$"
+              ],
+              "type": "frontmost_application_if"
+            },
+            {
+              "expression": "accessibility.focused_ui_element.role_string like 'AXText*'",
+              "type": "expression_unless"
+            },
+            {
+              "name": "finder_visual_mode",
+              "type": "variable_unless",
+              "value": 1
+            }
+          ],
+          "description": "Normal Mode: Press n to create a new folder",
+          "from": {
+            "key_code": "n"
+          },
+          "to": [
+            {
+              "key_code": "n",
+              "modifiers": [
+                "command",
+                "shift"
+              ]
+            }
+          ],
+          "type": "basic"
+        },
+        {
+          "conditions": [
+            {
+              "bundle_identifiers": [
+                "^com\\.apple\\.finder$"
+              ],
+              "type": "frontmost_application_if"
+            },
+            {
+              "expression": "accessibility.focused_ui_element.role_string like 'AXText*'",
+              "type": "expression_unless"
+            },
+            {
+              "name": "finder_visual_mode",
+              "type": "variable_unless",
+              "value": 1
+            }
+          ],
+          "description": "Normal Mode: Press . to toggle hidden files",
+          "from": {
+            "key_code": "period"
+          },
+          "to": [
+            {
+              "key_code": "period",
+              "modifiers": [
+                "command",
+                "shift"
+              ]
+            }
+          ],
+          "type": "basic"
+        }
+      ]
+    },
+    {
+      "description": "Vim Navigation Logic for Finder",
+      "manipulators": [
+        {
+          "conditions": [
+            {
+              "bundle_identifiers": [
+                "^com\\.apple\\.finder$"
+              ],
+              "type": "frontmost_application_if"
+            },
+            {
+              "expression": "accessibility.focused_ui_element.role_string like 'AXText*'",
+              "type": "expression_unless"
+            },
+            {
+              "name": "finder_visual_mode",
+              "type": "variable_unless",
+              "value": 1
+            }
+          ],
+          "description": "Normal Mode: Add 1 to Finder motion count",
+          "from": {
+            "key_code": "1"
+          },
+          "to": [
+            {
+              "set_variable": {
+                "expression": "finder_motion_count > 0 ? ((finder_motion_count * 10 + 1) > 99 ? 99 : (finder_motion_count * 10 + 1)) : 1",
+                "name": "finder_motion_count"
+              }
+            },
+            {
+              "set_variable": {
+                "expression": "system.now.milliseconds + 1500",
+                "name": "finder_motion_count_expiration"
+              }
+            }
+          ],
+          "type": "basic"
+        },
+        {
+          "conditions": [
+            {
+              "bundle_identifiers": [
+                "^com\\.apple\\.finder$"
+              ],
+              "type": "frontmost_application_if"
+            },
+            {
+              "expression": "accessibility.focused_ui_element.role_string like 'AXText*'",
+              "type": "expression_unless"
+            },
+            {
+              "name": "finder_visual_mode",
+              "type": "variable_unless",
+              "value": 1
+            }
+          ],
+          "description": "Normal Mode: Add 2 to Finder motion count",
+          "from": {
+            "key_code": "2"
+          },
+          "to": [
+            {
+              "set_variable": {
+                "expression": "finder_motion_count > 0 ? ((finder_motion_count * 10 + 2) > 99 ? 99 : (finder_motion_count * 10 + 2)) : 2",
+                "name": "finder_motion_count"
+              }
+            },
+            {
+              "set_variable": {
+                "expression": "system.now.milliseconds + 1500",
+                "name": "finder_motion_count_expiration"
+              }
+            }
+          ],
+          "type": "basic"
+        },
+        {
+          "conditions": [
+            {
+              "bundle_identifiers": [
+                "^com\\.apple\\.finder$"
+              ],
+              "type": "frontmost_application_if"
+            },
+            {
+              "expression": "accessibility.focused_ui_element.role_string like 'AXText*'",
+              "type": "expression_unless"
+            },
+            {
+              "name": "finder_visual_mode",
+              "type": "variable_unless",
+              "value": 1
+            }
+          ],
+          "description": "Normal Mode: Add 3 to Finder motion count",
+          "from": {
+            "key_code": "3"
+          },
+          "to": [
+            {
+              "set_variable": {
+                "expression": "finder_motion_count > 0 ? ((finder_motion_count * 10 + 3) > 99 ? 99 : (finder_motion_count * 10 + 3)) : 3",
+                "name": "finder_motion_count"
+              }
+            },
+            {
+              "set_variable": {
+                "expression": "system.now.milliseconds + 1500",
+                "name": "finder_motion_count_expiration"
+              }
+            }
+          ],
+          "type": "basic"
+        },
+        {
+          "conditions": [
+            {
+              "bundle_identifiers": [
+                "^com\\.apple\\.finder$"
+              ],
+              "type": "frontmost_application_if"
+            },
+            {
+              "expression": "accessibility.focused_ui_element.role_string like 'AXText*'",
+              "type": "expression_unless"
+            },
+            {
+              "name": "finder_visual_mode",
+              "type": "variable_unless",
+              "value": 1
+            }
+          ],
+          "description": "Normal Mode: Add 4 to Finder motion count",
+          "from": {
+            "key_code": "4"
+          },
+          "to": [
+            {
+              "set_variable": {
+                "expression": "finder_motion_count > 0 ? ((finder_motion_count * 10 + 4) > 99 ? 99 : (finder_motion_count * 10 + 4)) : 4",
+                "name": "finder_motion_count"
+              }
+            },
+            {
+              "set_variable": {
+                "expression": "system.now.milliseconds + 1500",
+                "name": "finder_motion_count_expiration"
+              }
+            }
+          ],
+          "type": "basic"
+        },
+        {
+          "conditions": [
+            {
+              "bundle_identifiers": [
+                "^com\\.apple\\.finder$"
+              ],
+              "type": "frontmost_application_if"
+            },
+            {
+              "expression": "accessibility.focused_ui_element.role_string like 'AXText*'",
+              "type": "expression_unless"
+            },
+            {
+              "name": "finder_visual_mode",
+              "type": "variable_unless",
+              "value": 1
+            }
+          ],
+          "description": "Normal Mode: Add 5 to Finder motion count",
+          "from": {
+            "key_code": "5"
+          },
+          "to": [
+            {
+              "set_variable": {
+                "expression": "finder_motion_count > 0 ? ((finder_motion_count * 10 + 5) > 99 ? 99 : (finder_motion_count * 10 + 5)) : 5",
+                "name": "finder_motion_count"
+              }
+            },
+            {
+              "set_variable": {
+                "expression": "system.now.milliseconds + 1500",
+                "name": "finder_motion_count_expiration"
+              }
+            }
+          ],
+          "type": "basic"
+        },
+        {
+          "conditions": [
+            {
+              "bundle_identifiers": [
+                "^com\\.apple\\.finder$"
+              ],
+              "type": "frontmost_application_if"
+            },
+            {
+              "expression": "accessibility.focused_ui_element.role_string like 'AXText*'",
+              "type": "expression_unless"
+            },
+            {
+              "name": "finder_visual_mode",
+              "type": "variable_unless",
+              "value": 1
+            }
+          ],
+          "description": "Normal Mode: Add 6 to Finder motion count",
+          "from": {
+            "key_code": "6"
+          },
+          "to": [
+            {
+              "set_variable": {
+                "expression": "finder_motion_count > 0 ? ((finder_motion_count * 10 + 6) > 99 ? 99 : (finder_motion_count * 10 + 6)) : 6",
+                "name": "finder_motion_count"
+              }
+            },
+            {
+              "set_variable": {
+                "expression": "system.now.milliseconds + 1500",
+                "name": "finder_motion_count_expiration"
+              }
+            }
+          ],
+          "type": "basic"
+        },
+        {
+          "conditions": [
+            {
+              "bundle_identifiers": [
+                "^com\\.apple\\.finder$"
+              ],
+              "type": "frontmost_application_if"
+            },
+            {
+              "expression": "accessibility.focused_ui_element.role_string like 'AXText*'",
+              "type": "expression_unless"
+            },
+            {
+              "name": "finder_visual_mode",
+              "type": "variable_unless",
+              "value": 1
+            }
+          ],
+          "description": "Normal Mode: Add 7 to Finder motion count",
+          "from": {
+            "key_code": "7"
+          },
+          "to": [
+            {
+              "set_variable": {
+                "expression": "finder_motion_count > 0 ? ((finder_motion_count * 10 + 7) > 99 ? 99 : (finder_motion_count * 10 + 7)) : 7",
+                "name": "finder_motion_count"
+              }
+            },
+            {
+              "set_variable": {
+                "expression": "system.now.milliseconds + 1500",
+                "name": "finder_motion_count_expiration"
+              }
+            }
+          ],
+          "type": "basic"
+        },
+        {
+          "conditions": [
+            {
+              "bundle_identifiers": [
+                "^com\\.apple\\.finder$"
+              ],
+              "type": "frontmost_application_if"
+            },
+            {
+              "expression": "accessibility.focused_ui_element.role_string like 'AXText*'",
+              "type": "expression_unless"
+            },
+            {
+              "name": "finder_visual_mode",
+              "type": "variable_unless",
+              "value": 1
+            }
+          ],
+          "description": "Normal Mode: Add 8 to Finder motion count",
+          "from": {
+            "key_code": "8"
+          },
+          "to": [
+            {
+              "set_variable": {
+                "expression": "finder_motion_count > 0 ? ((finder_motion_count * 10 + 8) > 99 ? 99 : (finder_motion_count * 10 + 8)) : 8",
+                "name": "finder_motion_count"
+              }
+            },
+            {
+              "set_variable": {
+                "expression": "system.now.milliseconds + 1500",
+                "name": "finder_motion_count_expiration"
+              }
+            }
+          ],
+          "type": "basic"
+        },
+        {
+          "conditions": [
+            {
+              "bundle_identifiers": [
+                "^com\\.apple\\.finder$"
+              ],
+              "type": "frontmost_application_if"
+            },
+            {
+              "expression": "accessibility.focused_ui_element.role_string like 'AXText*'",
+              "type": "expression_unless"
+            },
+            {
+              "name": "finder_visual_mode",
+              "type": "variable_unless",
+              "value": 1
+            }
+          ],
+          "description": "Normal Mode: Add 9 to Finder motion count",
+          "from": {
+            "key_code": "9"
+          },
+          "to": [
+            {
+              "set_variable": {
+                "expression": "finder_motion_count > 0 ? ((finder_motion_count * 10 + 9) > 99 ? 99 : (finder_motion_count * 10 + 9)) : 9",
+                "name": "finder_motion_count"
+              }
+            },
+            {
+              "set_variable": {
+                "expression": "system.now.milliseconds + 1500",
+                "name": "finder_motion_count_expiration"
+              }
+            }
+          ],
+          "type": "basic"
+        },
+        {
+          "conditions": [
+            {
+              "bundle_identifiers": [
+                "^com\\.apple\\.finder$"
+              ],
+              "type": "frontmost_application_if"
+            },
+            {
+              "expression": "accessibility.focused_ui_element.role_string like 'AXText*'",
+              "type": "expression_unless"
+            },
+            {
+              "name": "finder_visual_mode",
+              "type": "variable_unless",
+              "value": 1
+            },
+            {
+              "expression": "finder_motion_count > 0",
+              "type": "expression_if"
+            }
+          ],
+          "description": "Normal Mode: Add 0 to Finder motion count",
+          "from": {
+            "key_code": "0"
+          },
+          "to": [
+            {
+              "set_variable": {
+                "expression": "((finder_motion_count * 10 + 0) > 99 ? 99 : (finder_motion_count * 10 + 0))",
+                "name": "finder_motion_count"
+              }
+            },
+            {
+              "set_variable": {
+                "expression": "system.now.milliseconds + 1500",
+                "name": "finder_motion_count_expiration"
+              }
+            }
+          ],
+          "type": "basic"
+        },
+        {
+          "conditions": [
+            {
+              "bundle_identifiers": [
+                "^com\\.apple\\.finder$"
+              ],
+              "type": "frontmost_application_if"
+            },
+            {
+              "expression": "accessibility.focused_ui_element.role_string like 'AXText*'",
+              "type": "expression_unless"
+            },
+            {
+              "name": "finder_visual_mode",
+              "type": "variable_unless",
+              "value": 1
+            },
+            {
+              "expression": "finder_motion_count > 0",
+              "type": "expression_if"
+            }
+          ],
+          "description": "Normal Mode: Move down by Finder motion count",
+          "from": {
+            "key_code": "j"
+          },
+          "to": [
+            {
+              "conditions": [
+                {
+                  "expression": "finder_motion_count == 1",
+                  "type": "expression_if"
+                }
+              ],
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_move down 1 >/dev/null 2>&1"
+            },
+            {
+              "conditions": [
+                {
+                  "expression": "finder_motion_count == 2",
+                  "type": "expression_if"
+                }
+              ],
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_move down 2 >/dev/null 2>&1"
+            },
+            {
+              "conditions": [
+                {
+                  "expression": "finder_motion_count == 3",
+                  "type": "expression_if"
+                }
+              ],
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_move down 3 >/dev/null 2>&1"
+            },
+            {
+              "conditions": [
+                {
+                  "expression": "finder_motion_count == 4",
+                  "type": "expression_if"
+                }
+              ],
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_move down 4 >/dev/null 2>&1"
+            },
+            {
+              "conditions": [
+                {
+                  "expression": "finder_motion_count == 5",
+                  "type": "expression_if"
+                }
+              ],
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_move down 5 >/dev/null 2>&1"
+            },
+            {
+              "conditions": [
+                {
+                  "expression": "finder_motion_count == 6",
+                  "type": "expression_if"
+                }
+              ],
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_move down 6 >/dev/null 2>&1"
+            },
+            {
+              "conditions": [
+                {
+                  "expression": "finder_motion_count == 7",
+                  "type": "expression_if"
+                }
+              ],
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_move down 7 >/dev/null 2>&1"
+            },
+            {
+              "conditions": [
+                {
+                  "expression": "finder_motion_count == 8",
+                  "type": "expression_if"
+                }
+              ],
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_move down 8 >/dev/null 2>&1"
+            },
+            {
+              "conditions": [
+                {
+                  "expression": "finder_motion_count == 9",
+                  "type": "expression_if"
+                }
+              ],
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_move down 9 >/dev/null 2>&1"
+            },
+            {
+              "conditions": [
+                {
+                  "expression": "finder_motion_count == 10",
+                  "type": "expression_if"
+                }
+              ],
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_move down 10 >/dev/null 2>&1"
+            },
+            {
+              "conditions": [
+                {
+                  "expression": "finder_motion_count == 11",
+                  "type": "expression_if"
+                }
+              ],
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_move down 11 >/dev/null 2>&1"
+            },
+            {
+              "conditions": [
+                {
+                  "expression": "finder_motion_count == 12",
+                  "type": "expression_if"
+                }
+              ],
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_move down 12 >/dev/null 2>&1"
+            },
+            {
+              "conditions": [
+                {
+                  "expression": "finder_motion_count == 13",
+                  "type": "expression_if"
+                }
+              ],
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_move down 13 >/dev/null 2>&1"
+            },
+            {
+              "conditions": [
+                {
+                  "expression": "finder_motion_count == 14",
+                  "type": "expression_if"
+                }
+              ],
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_move down 14 >/dev/null 2>&1"
+            },
+            {
+              "conditions": [
+                {
+                  "expression": "finder_motion_count == 15",
+                  "type": "expression_if"
+                }
+              ],
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_move down 15 >/dev/null 2>&1"
+            },
+            {
+              "conditions": [
+                {
+                  "expression": "finder_motion_count == 16",
+                  "type": "expression_if"
+                }
+              ],
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_move down 16 >/dev/null 2>&1"
+            },
+            {
+              "conditions": [
+                {
+                  "expression": "finder_motion_count == 17",
+                  "type": "expression_if"
+                }
+              ],
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_move down 17 >/dev/null 2>&1"
+            },
+            {
+              "conditions": [
+                {
+                  "expression": "finder_motion_count == 18",
+                  "type": "expression_if"
+                }
+              ],
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_move down 18 >/dev/null 2>&1"
+            },
+            {
+              "conditions": [
+                {
+                  "expression": "finder_motion_count == 19",
+                  "type": "expression_if"
+                }
+              ],
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_move down 19 >/dev/null 2>&1"
+            },
+            {
+              "conditions": [
+                {
+                  "expression": "finder_motion_count == 20",
+                  "type": "expression_if"
+                }
+              ],
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_move down 20 >/dev/null 2>&1"
+            },
+            {
+              "conditions": [
+                {
+                  "expression": "finder_motion_count == 21",
+                  "type": "expression_if"
+                }
+              ],
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_move down 21 >/dev/null 2>&1"
+            },
+            {
+              "conditions": [
+                {
+                  "expression": "finder_motion_count == 22",
+                  "type": "expression_if"
+                }
+              ],
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_move down 22 >/dev/null 2>&1"
+            },
+            {
+              "conditions": [
+                {
+                  "expression": "finder_motion_count == 23",
+                  "type": "expression_if"
+                }
+              ],
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_move down 23 >/dev/null 2>&1"
+            },
+            {
+              "conditions": [
+                {
+                  "expression": "finder_motion_count == 24",
+                  "type": "expression_if"
+                }
+              ],
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_move down 24 >/dev/null 2>&1"
+            },
+            {
+              "conditions": [
+                {
+                  "expression": "finder_motion_count == 25",
+                  "type": "expression_if"
+                }
+              ],
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_move down 25 >/dev/null 2>&1"
+            },
+            {
+              "conditions": [
+                {
+                  "expression": "finder_motion_count == 26",
+                  "type": "expression_if"
+                }
+              ],
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_move down 26 >/dev/null 2>&1"
+            },
+            {
+              "conditions": [
+                {
+                  "expression": "finder_motion_count == 27",
+                  "type": "expression_if"
+                }
+              ],
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_move down 27 >/dev/null 2>&1"
+            },
+            {
+              "conditions": [
+                {
+                  "expression": "finder_motion_count == 28",
+                  "type": "expression_if"
+                }
+              ],
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_move down 28 >/dev/null 2>&1"
+            },
+            {
+              "conditions": [
+                {
+                  "expression": "finder_motion_count == 29",
+                  "type": "expression_if"
+                }
+              ],
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_move down 29 >/dev/null 2>&1"
+            },
+            {
+              "conditions": [
+                {
+                  "expression": "finder_motion_count == 30",
+                  "type": "expression_if"
+                }
+              ],
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_move down 30 >/dev/null 2>&1"
+            },
+            {
+              "conditions": [
+                {
+                  "expression": "finder_motion_count == 31",
+                  "type": "expression_if"
+                }
+              ],
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_move down 31 >/dev/null 2>&1"
+            },
+            {
+              "conditions": [
+                {
+                  "expression": "finder_motion_count == 32",
+                  "type": "expression_if"
+                }
+              ],
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_move down 32 >/dev/null 2>&1"
+            },
+            {
+              "conditions": [
+                {
+                  "expression": "finder_motion_count == 33",
+                  "type": "expression_if"
+                }
+              ],
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_move down 33 >/dev/null 2>&1"
+            },
+            {
+              "conditions": [
+                {
+                  "expression": "finder_motion_count == 34",
+                  "type": "expression_if"
+                }
+              ],
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_move down 34 >/dev/null 2>&1"
+            },
+            {
+              "conditions": [
+                {
+                  "expression": "finder_motion_count == 35",
+                  "type": "expression_if"
+                }
+              ],
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_move down 35 >/dev/null 2>&1"
+            },
+            {
+              "conditions": [
+                {
+                  "expression": "finder_motion_count == 36",
+                  "type": "expression_if"
+                }
+              ],
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_move down 36 >/dev/null 2>&1"
+            },
+            {
+              "conditions": [
+                {
+                  "expression": "finder_motion_count == 37",
+                  "type": "expression_if"
+                }
+              ],
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_move down 37 >/dev/null 2>&1"
+            },
+            {
+              "conditions": [
+                {
+                  "expression": "finder_motion_count == 38",
+                  "type": "expression_if"
+                }
+              ],
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_move down 38 >/dev/null 2>&1"
+            },
+            {
+              "conditions": [
+                {
+                  "expression": "finder_motion_count == 39",
+                  "type": "expression_if"
+                }
+              ],
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_move down 39 >/dev/null 2>&1"
+            },
+            {
+              "conditions": [
+                {
+                  "expression": "finder_motion_count == 40",
+                  "type": "expression_if"
+                }
+              ],
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_move down 40 >/dev/null 2>&1"
+            },
+            {
+              "conditions": [
+                {
+                  "expression": "finder_motion_count == 41",
+                  "type": "expression_if"
+                }
+              ],
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_move down 41 >/dev/null 2>&1"
+            },
+            {
+              "conditions": [
+                {
+                  "expression": "finder_motion_count == 42",
+                  "type": "expression_if"
+                }
+              ],
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_move down 42 >/dev/null 2>&1"
+            },
+            {
+              "conditions": [
+                {
+                  "expression": "finder_motion_count == 43",
+                  "type": "expression_if"
+                }
+              ],
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_move down 43 >/dev/null 2>&1"
+            },
+            {
+              "conditions": [
+                {
+                  "expression": "finder_motion_count == 44",
+                  "type": "expression_if"
+                }
+              ],
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_move down 44 >/dev/null 2>&1"
+            },
+            {
+              "conditions": [
+                {
+                  "expression": "finder_motion_count == 45",
+                  "type": "expression_if"
+                }
+              ],
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_move down 45 >/dev/null 2>&1"
+            },
+            {
+              "conditions": [
+                {
+                  "expression": "finder_motion_count == 46",
+                  "type": "expression_if"
+                }
+              ],
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_move down 46 >/dev/null 2>&1"
+            },
+            {
+              "conditions": [
+                {
+                  "expression": "finder_motion_count == 47",
+                  "type": "expression_if"
+                }
+              ],
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_move down 47 >/dev/null 2>&1"
+            },
+            {
+              "conditions": [
+                {
+                  "expression": "finder_motion_count == 48",
+                  "type": "expression_if"
+                }
+              ],
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_move down 48 >/dev/null 2>&1"
+            },
+            {
+              "conditions": [
+                {
+                  "expression": "finder_motion_count == 49",
+                  "type": "expression_if"
+                }
+              ],
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_move down 49 >/dev/null 2>&1"
+            },
+            {
+              "conditions": [
+                {
+                  "expression": "finder_motion_count == 50",
+                  "type": "expression_if"
+                }
+              ],
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_move down 50 >/dev/null 2>&1"
+            },
+            {
+              "conditions": [
+                {
+                  "expression": "finder_motion_count == 51",
+                  "type": "expression_if"
+                }
+              ],
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_move down 51 >/dev/null 2>&1"
+            },
+            {
+              "conditions": [
+                {
+                  "expression": "finder_motion_count == 52",
+                  "type": "expression_if"
+                }
+              ],
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_move down 52 >/dev/null 2>&1"
+            },
+            {
+              "conditions": [
+                {
+                  "expression": "finder_motion_count == 53",
+                  "type": "expression_if"
+                }
+              ],
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_move down 53 >/dev/null 2>&1"
+            },
+            {
+              "conditions": [
+                {
+                  "expression": "finder_motion_count == 54",
+                  "type": "expression_if"
+                }
+              ],
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_move down 54 >/dev/null 2>&1"
+            },
+            {
+              "conditions": [
+                {
+                  "expression": "finder_motion_count == 55",
+                  "type": "expression_if"
+                }
+              ],
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_move down 55 >/dev/null 2>&1"
+            },
+            {
+              "conditions": [
+                {
+                  "expression": "finder_motion_count == 56",
+                  "type": "expression_if"
+                }
+              ],
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_move down 56 >/dev/null 2>&1"
+            },
+            {
+              "conditions": [
+                {
+                  "expression": "finder_motion_count == 57",
+                  "type": "expression_if"
+                }
+              ],
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_move down 57 >/dev/null 2>&1"
+            },
+            {
+              "conditions": [
+                {
+                  "expression": "finder_motion_count == 58",
+                  "type": "expression_if"
+                }
+              ],
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_move down 58 >/dev/null 2>&1"
+            },
+            {
+              "conditions": [
+                {
+                  "expression": "finder_motion_count == 59",
+                  "type": "expression_if"
+                }
+              ],
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_move down 59 >/dev/null 2>&1"
+            },
+            {
+              "conditions": [
+                {
+                  "expression": "finder_motion_count == 60",
+                  "type": "expression_if"
+                }
+              ],
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_move down 60 >/dev/null 2>&1"
+            },
+            {
+              "conditions": [
+                {
+                  "expression": "finder_motion_count == 61",
+                  "type": "expression_if"
+                }
+              ],
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_move down 61 >/dev/null 2>&1"
+            },
+            {
+              "conditions": [
+                {
+                  "expression": "finder_motion_count == 62",
+                  "type": "expression_if"
+                }
+              ],
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_move down 62 >/dev/null 2>&1"
+            },
+            {
+              "conditions": [
+                {
+                  "expression": "finder_motion_count == 63",
+                  "type": "expression_if"
+                }
+              ],
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_move down 63 >/dev/null 2>&1"
+            },
+            {
+              "conditions": [
+                {
+                  "expression": "finder_motion_count == 64",
+                  "type": "expression_if"
+                }
+              ],
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_move down 64 >/dev/null 2>&1"
+            },
+            {
+              "conditions": [
+                {
+                  "expression": "finder_motion_count == 65",
+                  "type": "expression_if"
+                }
+              ],
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_move down 65 >/dev/null 2>&1"
+            },
+            {
+              "conditions": [
+                {
+                  "expression": "finder_motion_count == 66",
+                  "type": "expression_if"
+                }
+              ],
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_move down 66 >/dev/null 2>&1"
+            },
+            {
+              "conditions": [
+                {
+                  "expression": "finder_motion_count == 67",
+                  "type": "expression_if"
+                }
+              ],
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_move down 67 >/dev/null 2>&1"
+            },
+            {
+              "conditions": [
+                {
+                  "expression": "finder_motion_count == 68",
+                  "type": "expression_if"
+                }
+              ],
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_move down 68 >/dev/null 2>&1"
+            },
+            {
+              "conditions": [
+                {
+                  "expression": "finder_motion_count == 69",
+                  "type": "expression_if"
+                }
+              ],
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_move down 69 >/dev/null 2>&1"
+            },
+            {
+              "conditions": [
+                {
+                  "expression": "finder_motion_count == 70",
+                  "type": "expression_if"
+                }
+              ],
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_move down 70 >/dev/null 2>&1"
+            },
+            {
+              "conditions": [
+                {
+                  "expression": "finder_motion_count == 71",
+                  "type": "expression_if"
+                }
+              ],
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_move down 71 >/dev/null 2>&1"
+            },
+            {
+              "conditions": [
+                {
+                  "expression": "finder_motion_count == 72",
+                  "type": "expression_if"
+                }
+              ],
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_move down 72 >/dev/null 2>&1"
+            },
+            {
+              "conditions": [
+                {
+                  "expression": "finder_motion_count == 73",
+                  "type": "expression_if"
+                }
+              ],
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_move down 73 >/dev/null 2>&1"
+            },
+            {
+              "conditions": [
+                {
+                  "expression": "finder_motion_count == 74",
+                  "type": "expression_if"
+                }
+              ],
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_move down 74 >/dev/null 2>&1"
+            },
+            {
+              "conditions": [
+                {
+                  "expression": "finder_motion_count == 75",
+                  "type": "expression_if"
+                }
+              ],
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_move down 75 >/dev/null 2>&1"
+            },
+            {
+              "conditions": [
+                {
+                  "expression": "finder_motion_count == 76",
+                  "type": "expression_if"
+                }
+              ],
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_move down 76 >/dev/null 2>&1"
+            },
+            {
+              "conditions": [
+                {
+                  "expression": "finder_motion_count == 77",
+                  "type": "expression_if"
+                }
+              ],
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_move down 77 >/dev/null 2>&1"
+            },
+            {
+              "conditions": [
+                {
+                  "expression": "finder_motion_count == 78",
+                  "type": "expression_if"
+                }
+              ],
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_move down 78 >/dev/null 2>&1"
+            },
+            {
+              "conditions": [
+                {
+                  "expression": "finder_motion_count == 79",
+                  "type": "expression_if"
+                }
+              ],
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_move down 79 >/dev/null 2>&1"
+            },
+            {
+              "conditions": [
+                {
+                  "expression": "finder_motion_count == 80",
+                  "type": "expression_if"
+                }
+              ],
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_move down 80 >/dev/null 2>&1"
+            },
+            {
+              "conditions": [
+                {
+                  "expression": "finder_motion_count == 81",
+                  "type": "expression_if"
+                }
+              ],
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_move down 81 >/dev/null 2>&1"
+            },
+            {
+              "conditions": [
+                {
+                  "expression": "finder_motion_count == 82",
+                  "type": "expression_if"
+                }
+              ],
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_move down 82 >/dev/null 2>&1"
+            },
+            {
+              "conditions": [
+                {
+                  "expression": "finder_motion_count == 83",
+                  "type": "expression_if"
+                }
+              ],
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_move down 83 >/dev/null 2>&1"
+            },
+            {
+              "conditions": [
+                {
+                  "expression": "finder_motion_count == 84",
+                  "type": "expression_if"
+                }
+              ],
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_move down 84 >/dev/null 2>&1"
+            },
+            {
+              "conditions": [
+                {
+                  "expression": "finder_motion_count == 85",
+                  "type": "expression_if"
+                }
+              ],
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_move down 85 >/dev/null 2>&1"
+            },
+            {
+              "conditions": [
+                {
+                  "expression": "finder_motion_count == 86",
+                  "type": "expression_if"
+                }
+              ],
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_move down 86 >/dev/null 2>&1"
+            },
+            {
+              "conditions": [
+                {
+                  "expression": "finder_motion_count == 87",
+                  "type": "expression_if"
+                }
+              ],
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_move down 87 >/dev/null 2>&1"
+            },
+            {
+              "conditions": [
+                {
+                  "expression": "finder_motion_count == 88",
+                  "type": "expression_if"
+                }
+              ],
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_move down 88 >/dev/null 2>&1"
+            },
+            {
+              "conditions": [
+                {
+                  "expression": "finder_motion_count == 89",
+                  "type": "expression_if"
+                }
+              ],
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_move down 89 >/dev/null 2>&1"
+            },
+            {
+              "conditions": [
+                {
+                  "expression": "finder_motion_count == 90",
+                  "type": "expression_if"
+                }
+              ],
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_move down 90 >/dev/null 2>&1"
+            },
+            {
+              "conditions": [
+                {
+                  "expression": "finder_motion_count == 91",
+                  "type": "expression_if"
+                }
+              ],
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_move down 91 >/dev/null 2>&1"
+            },
+            {
+              "conditions": [
+                {
+                  "expression": "finder_motion_count == 92",
+                  "type": "expression_if"
+                }
+              ],
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_move down 92 >/dev/null 2>&1"
+            },
+            {
+              "conditions": [
+                {
+                  "expression": "finder_motion_count == 93",
+                  "type": "expression_if"
+                }
+              ],
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_move down 93 >/dev/null 2>&1"
+            },
+            {
+              "conditions": [
+                {
+                  "expression": "finder_motion_count == 94",
+                  "type": "expression_if"
+                }
+              ],
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_move down 94 >/dev/null 2>&1"
+            },
+            {
+              "conditions": [
+                {
+                  "expression": "finder_motion_count == 95",
+                  "type": "expression_if"
+                }
+              ],
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_move down 95 >/dev/null 2>&1"
+            },
+            {
+              "conditions": [
+                {
+                  "expression": "finder_motion_count == 96",
+                  "type": "expression_if"
+                }
+              ],
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_move down 96 >/dev/null 2>&1"
+            },
+            {
+              "conditions": [
+                {
+                  "expression": "finder_motion_count == 97",
+                  "type": "expression_if"
+                }
+              ],
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_move down 97 >/dev/null 2>&1"
+            },
+            {
+              "conditions": [
+                {
+                  "expression": "finder_motion_count == 98",
+                  "type": "expression_if"
+                }
+              ],
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_move down 98 >/dev/null 2>&1"
+            },
+            {
+              "conditions": [
+                {
+                  "expression": "finder_motion_count == 99",
+                  "type": "expression_if"
+                }
+              ],
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_move down 99 >/dev/null 2>&1"
+            },
+            {
+              "set_variable": {
+                "name": "finder_motion_count",
+                "value": 0
+              }
+            },
+            {
+              "set_variable": {
+                "name": "finder_motion_count_expiration",
+                "value": 0
+              }
+            }
+          ],
+          "type": "basic"
+        },
+        {
+          "conditions": [
+            {
+              "bundle_identifiers": [
+                "^com\\.apple\\.finder$"
+              ],
+              "type": "frontmost_application_if"
+            },
+            {
+              "expression": "accessibility.focused_ui_element.role_string like 'AXText*'",
+              "type": "expression_unless"
+            },
+            {
+              "name": "finder_visual_mode",
+              "type": "variable_unless",
+              "value": 1
+            },
+            {
+              "expression": "finder_motion_count > 0",
+              "type": "expression_if"
+            }
+          ],
+          "description": "Normal Mode: Move up by Finder motion count",
+          "from": {
+            "key_code": "k"
+          },
+          "to": [
+            {
+              "conditions": [
+                {
+                  "expression": "finder_motion_count == 1",
+                  "type": "expression_if"
+                }
+              ],
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_move up 1 >/dev/null 2>&1"
+            },
+            {
+              "conditions": [
+                {
+                  "expression": "finder_motion_count == 2",
+                  "type": "expression_if"
+                }
+              ],
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_move up 2 >/dev/null 2>&1"
+            },
+            {
+              "conditions": [
+                {
+                  "expression": "finder_motion_count == 3",
+                  "type": "expression_if"
+                }
+              ],
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_move up 3 >/dev/null 2>&1"
+            },
+            {
+              "conditions": [
+                {
+                  "expression": "finder_motion_count == 4",
+                  "type": "expression_if"
+                }
+              ],
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_move up 4 >/dev/null 2>&1"
+            },
+            {
+              "conditions": [
+                {
+                  "expression": "finder_motion_count == 5",
+                  "type": "expression_if"
+                }
+              ],
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_move up 5 >/dev/null 2>&1"
+            },
+            {
+              "conditions": [
+                {
+                  "expression": "finder_motion_count == 6",
+                  "type": "expression_if"
+                }
+              ],
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_move up 6 >/dev/null 2>&1"
+            },
+            {
+              "conditions": [
+                {
+                  "expression": "finder_motion_count == 7",
+                  "type": "expression_if"
+                }
+              ],
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_move up 7 >/dev/null 2>&1"
+            },
+            {
+              "conditions": [
+                {
+                  "expression": "finder_motion_count == 8",
+                  "type": "expression_if"
+                }
+              ],
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_move up 8 >/dev/null 2>&1"
+            },
+            {
+              "conditions": [
+                {
+                  "expression": "finder_motion_count == 9",
+                  "type": "expression_if"
+                }
+              ],
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_move up 9 >/dev/null 2>&1"
+            },
+            {
+              "conditions": [
+                {
+                  "expression": "finder_motion_count == 10",
+                  "type": "expression_if"
+                }
+              ],
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_move up 10 >/dev/null 2>&1"
+            },
+            {
+              "conditions": [
+                {
+                  "expression": "finder_motion_count == 11",
+                  "type": "expression_if"
+                }
+              ],
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_move up 11 >/dev/null 2>&1"
+            },
+            {
+              "conditions": [
+                {
+                  "expression": "finder_motion_count == 12",
+                  "type": "expression_if"
+                }
+              ],
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_move up 12 >/dev/null 2>&1"
+            },
+            {
+              "conditions": [
+                {
+                  "expression": "finder_motion_count == 13",
+                  "type": "expression_if"
+                }
+              ],
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_move up 13 >/dev/null 2>&1"
+            },
+            {
+              "conditions": [
+                {
+                  "expression": "finder_motion_count == 14",
+                  "type": "expression_if"
+                }
+              ],
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_move up 14 >/dev/null 2>&1"
+            },
+            {
+              "conditions": [
+                {
+                  "expression": "finder_motion_count == 15",
+                  "type": "expression_if"
+                }
+              ],
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_move up 15 >/dev/null 2>&1"
+            },
+            {
+              "conditions": [
+                {
+                  "expression": "finder_motion_count == 16",
+                  "type": "expression_if"
+                }
+              ],
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_move up 16 >/dev/null 2>&1"
+            },
+            {
+              "conditions": [
+                {
+                  "expression": "finder_motion_count == 17",
+                  "type": "expression_if"
+                }
+              ],
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_move up 17 >/dev/null 2>&1"
+            },
+            {
+              "conditions": [
+                {
+                  "expression": "finder_motion_count == 18",
+                  "type": "expression_if"
+                }
+              ],
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_move up 18 >/dev/null 2>&1"
+            },
+            {
+              "conditions": [
+                {
+                  "expression": "finder_motion_count == 19",
+                  "type": "expression_if"
+                }
+              ],
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_move up 19 >/dev/null 2>&1"
+            },
+            {
+              "conditions": [
+                {
+                  "expression": "finder_motion_count == 20",
+                  "type": "expression_if"
+                }
+              ],
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_move up 20 >/dev/null 2>&1"
+            },
+            {
+              "conditions": [
+                {
+                  "expression": "finder_motion_count == 21",
+                  "type": "expression_if"
+                }
+              ],
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_move up 21 >/dev/null 2>&1"
+            },
+            {
+              "conditions": [
+                {
+                  "expression": "finder_motion_count == 22",
+                  "type": "expression_if"
+                }
+              ],
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_move up 22 >/dev/null 2>&1"
+            },
+            {
+              "conditions": [
+                {
+                  "expression": "finder_motion_count == 23",
+                  "type": "expression_if"
+                }
+              ],
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_move up 23 >/dev/null 2>&1"
+            },
+            {
+              "conditions": [
+                {
+                  "expression": "finder_motion_count == 24",
+                  "type": "expression_if"
+                }
+              ],
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_move up 24 >/dev/null 2>&1"
+            },
+            {
+              "conditions": [
+                {
+                  "expression": "finder_motion_count == 25",
+                  "type": "expression_if"
+                }
+              ],
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_move up 25 >/dev/null 2>&1"
+            },
+            {
+              "conditions": [
+                {
+                  "expression": "finder_motion_count == 26",
+                  "type": "expression_if"
+                }
+              ],
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_move up 26 >/dev/null 2>&1"
+            },
+            {
+              "conditions": [
+                {
+                  "expression": "finder_motion_count == 27",
+                  "type": "expression_if"
+                }
+              ],
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_move up 27 >/dev/null 2>&1"
+            },
+            {
+              "conditions": [
+                {
+                  "expression": "finder_motion_count == 28",
+                  "type": "expression_if"
+                }
+              ],
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_move up 28 >/dev/null 2>&1"
+            },
+            {
+              "conditions": [
+                {
+                  "expression": "finder_motion_count == 29",
+                  "type": "expression_if"
+                }
+              ],
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_move up 29 >/dev/null 2>&1"
+            },
+            {
+              "conditions": [
+                {
+                  "expression": "finder_motion_count == 30",
+                  "type": "expression_if"
+                }
+              ],
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_move up 30 >/dev/null 2>&1"
+            },
+            {
+              "conditions": [
+                {
+                  "expression": "finder_motion_count == 31",
+                  "type": "expression_if"
+                }
+              ],
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_move up 31 >/dev/null 2>&1"
+            },
+            {
+              "conditions": [
+                {
+                  "expression": "finder_motion_count == 32",
+                  "type": "expression_if"
+                }
+              ],
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_move up 32 >/dev/null 2>&1"
+            },
+            {
+              "conditions": [
+                {
+                  "expression": "finder_motion_count == 33",
+                  "type": "expression_if"
+                }
+              ],
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_move up 33 >/dev/null 2>&1"
+            },
+            {
+              "conditions": [
+                {
+                  "expression": "finder_motion_count == 34",
+                  "type": "expression_if"
+                }
+              ],
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_move up 34 >/dev/null 2>&1"
+            },
+            {
+              "conditions": [
+                {
+                  "expression": "finder_motion_count == 35",
+                  "type": "expression_if"
+                }
+              ],
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_move up 35 >/dev/null 2>&1"
+            },
+            {
+              "conditions": [
+                {
+                  "expression": "finder_motion_count == 36",
+                  "type": "expression_if"
+                }
+              ],
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_move up 36 >/dev/null 2>&1"
+            },
+            {
+              "conditions": [
+                {
+                  "expression": "finder_motion_count == 37",
+                  "type": "expression_if"
+                }
+              ],
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_move up 37 >/dev/null 2>&1"
+            },
+            {
+              "conditions": [
+                {
+                  "expression": "finder_motion_count == 38",
+                  "type": "expression_if"
+                }
+              ],
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_move up 38 >/dev/null 2>&1"
+            },
+            {
+              "conditions": [
+                {
+                  "expression": "finder_motion_count == 39",
+                  "type": "expression_if"
+                }
+              ],
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_move up 39 >/dev/null 2>&1"
+            },
+            {
+              "conditions": [
+                {
+                  "expression": "finder_motion_count == 40",
+                  "type": "expression_if"
+                }
+              ],
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_move up 40 >/dev/null 2>&1"
+            },
+            {
+              "conditions": [
+                {
+                  "expression": "finder_motion_count == 41",
+                  "type": "expression_if"
+                }
+              ],
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_move up 41 >/dev/null 2>&1"
+            },
+            {
+              "conditions": [
+                {
+                  "expression": "finder_motion_count == 42",
+                  "type": "expression_if"
+                }
+              ],
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_move up 42 >/dev/null 2>&1"
+            },
+            {
+              "conditions": [
+                {
+                  "expression": "finder_motion_count == 43",
+                  "type": "expression_if"
+                }
+              ],
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_move up 43 >/dev/null 2>&1"
+            },
+            {
+              "conditions": [
+                {
+                  "expression": "finder_motion_count == 44",
+                  "type": "expression_if"
+                }
+              ],
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_move up 44 >/dev/null 2>&1"
+            },
+            {
+              "conditions": [
+                {
+                  "expression": "finder_motion_count == 45",
+                  "type": "expression_if"
+                }
+              ],
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_move up 45 >/dev/null 2>&1"
+            },
+            {
+              "conditions": [
+                {
+                  "expression": "finder_motion_count == 46",
+                  "type": "expression_if"
+                }
+              ],
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_move up 46 >/dev/null 2>&1"
+            },
+            {
+              "conditions": [
+                {
+                  "expression": "finder_motion_count == 47",
+                  "type": "expression_if"
+                }
+              ],
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_move up 47 >/dev/null 2>&1"
+            },
+            {
+              "conditions": [
+                {
+                  "expression": "finder_motion_count == 48",
+                  "type": "expression_if"
+                }
+              ],
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_move up 48 >/dev/null 2>&1"
+            },
+            {
+              "conditions": [
+                {
+                  "expression": "finder_motion_count == 49",
+                  "type": "expression_if"
+                }
+              ],
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_move up 49 >/dev/null 2>&1"
+            },
+            {
+              "conditions": [
+                {
+                  "expression": "finder_motion_count == 50",
+                  "type": "expression_if"
+                }
+              ],
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_move up 50 >/dev/null 2>&1"
+            },
+            {
+              "conditions": [
+                {
+                  "expression": "finder_motion_count == 51",
+                  "type": "expression_if"
+                }
+              ],
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_move up 51 >/dev/null 2>&1"
+            },
+            {
+              "conditions": [
+                {
+                  "expression": "finder_motion_count == 52",
+                  "type": "expression_if"
+                }
+              ],
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_move up 52 >/dev/null 2>&1"
+            },
+            {
+              "conditions": [
+                {
+                  "expression": "finder_motion_count == 53",
+                  "type": "expression_if"
+                }
+              ],
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_move up 53 >/dev/null 2>&1"
+            },
+            {
+              "conditions": [
+                {
+                  "expression": "finder_motion_count == 54",
+                  "type": "expression_if"
+                }
+              ],
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_move up 54 >/dev/null 2>&1"
+            },
+            {
+              "conditions": [
+                {
+                  "expression": "finder_motion_count == 55",
+                  "type": "expression_if"
+                }
+              ],
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_move up 55 >/dev/null 2>&1"
+            },
+            {
+              "conditions": [
+                {
+                  "expression": "finder_motion_count == 56",
+                  "type": "expression_if"
+                }
+              ],
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_move up 56 >/dev/null 2>&1"
+            },
+            {
+              "conditions": [
+                {
+                  "expression": "finder_motion_count == 57",
+                  "type": "expression_if"
+                }
+              ],
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_move up 57 >/dev/null 2>&1"
+            },
+            {
+              "conditions": [
+                {
+                  "expression": "finder_motion_count == 58",
+                  "type": "expression_if"
+                }
+              ],
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_move up 58 >/dev/null 2>&1"
+            },
+            {
+              "conditions": [
+                {
+                  "expression": "finder_motion_count == 59",
+                  "type": "expression_if"
+                }
+              ],
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_move up 59 >/dev/null 2>&1"
+            },
+            {
+              "conditions": [
+                {
+                  "expression": "finder_motion_count == 60",
+                  "type": "expression_if"
+                }
+              ],
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_move up 60 >/dev/null 2>&1"
+            },
+            {
+              "conditions": [
+                {
+                  "expression": "finder_motion_count == 61",
+                  "type": "expression_if"
+                }
+              ],
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_move up 61 >/dev/null 2>&1"
+            },
+            {
+              "conditions": [
+                {
+                  "expression": "finder_motion_count == 62",
+                  "type": "expression_if"
+                }
+              ],
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_move up 62 >/dev/null 2>&1"
+            },
+            {
+              "conditions": [
+                {
+                  "expression": "finder_motion_count == 63",
+                  "type": "expression_if"
+                }
+              ],
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_move up 63 >/dev/null 2>&1"
+            },
+            {
+              "conditions": [
+                {
+                  "expression": "finder_motion_count == 64",
+                  "type": "expression_if"
+                }
+              ],
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_move up 64 >/dev/null 2>&1"
+            },
+            {
+              "conditions": [
+                {
+                  "expression": "finder_motion_count == 65",
+                  "type": "expression_if"
+                }
+              ],
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_move up 65 >/dev/null 2>&1"
+            },
+            {
+              "conditions": [
+                {
+                  "expression": "finder_motion_count == 66",
+                  "type": "expression_if"
+                }
+              ],
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_move up 66 >/dev/null 2>&1"
+            },
+            {
+              "conditions": [
+                {
+                  "expression": "finder_motion_count == 67",
+                  "type": "expression_if"
+                }
+              ],
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_move up 67 >/dev/null 2>&1"
+            },
+            {
+              "conditions": [
+                {
+                  "expression": "finder_motion_count == 68",
+                  "type": "expression_if"
+                }
+              ],
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_move up 68 >/dev/null 2>&1"
+            },
+            {
+              "conditions": [
+                {
+                  "expression": "finder_motion_count == 69",
+                  "type": "expression_if"
+                }
+              ],
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_move up 69 >/dev/null 2>&1"
+            },
+            {
+              "conditions": [
+                {
+                  "expression": "finder_motion_count == 70",
+                  "type": "expression_if"
+                }
+              ],
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_move up 70 >/dev/null 2>&1"
+            },
+            {
+              "conditions": [
+                {
+                  "expression": "finder_motion_count == 71",
+                  "type": "expression_if"
+                }
+              ],
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_move up 71 >/dev/null 2>&1"
+            },
+            {
+              "conditions": [
+                {
+                  "expression": "finder_motion_count == 72",
+                  "type": "expression_if"
+                }
+              ],
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_move up 72 >/dev/null 2>&1"
+            },
+            {
+              "conditions": [
+                {
+                  "expression": "finder_motion_count == 73",
+                  "type": "expression_if"
+                }
+              ],
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_move up 73 >/dev/null 2>&1"
+            },
+            {
+              "conditions": [
+                {
+                  "expression": "finder_motion_count == 74",
+                  "type": "expression_if"
+                }
+              ],
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_move up 74 >/dev/null 2>&1"
+            },
+            {
+              "conditions": [
+                {
+                  "expression": "finder_motion_count == 75",
+                  "type": "expression_if"
+                }
+              ],
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_move up 75 >/dev/null 2>&1"
+            },
+            {
+              "conditions": [
+                {
+                  "expression": "finder_motion_count == 76",
+                  "type": "expression_if"
+                }
+              ],
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_move up 76 >/dev/null 2>&1"
+            },
+            {
+              "conditions": [
+                {
+                  "expression": "finder_motion_count == 77",
+                  "type": "expression_if"
+                }
+              ],
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_move up 77 >/dev/null 2>&1"
+            },
+            {
+              "conditions": [
+                {
+                  "expression": "finder_motion_count == 78",
+                  "type": "expression_if"
+                }
+              ],
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_move up 78 >/dev/null 2>&1"
+            },
+            {
+              "conditions": [
+                {
+                  "expression": "finder_motion_count == 79",
+                  "type": "expression_if"
+                }
+              ],
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_move up 79 >/dev/null 2>&1"
+            },
+            {
+              "conditions": [
+                {
+                  "expression": "finder_motion_count == 80",
+                  "type": "expression_if"
+                }
+              ],
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_move up 80 >/dev/null 2>&1"
+            },
+            {
+              "conditions": [
+                {
+                  "expression": "finder_motion_count == 81",
+                  "type": "expression_if"
+                }
+              ],
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_move up 81 >/dev/null 2>&1"
+            },
+            {
+              "conditions": [
+                {
+                  "expression": "finder_motion_count == 82",
+                  "type": "expression_if"
+                }
+              ],
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_move up 82 >/dev/null 2>&1"
+            },
+            {
+              "conditions": [
+                {
+                  "expression": "finder_motion_count == 83",
+                  "type": "expression_if"
+                }
+              ],
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_move up 83 >/dev/null 2>&1"
+            },
+            {
+              "conditions": [
+                {
+                  "expression": "finder_motion_count == 84",
+                  "type": "expression_if"
+                }
+              ],
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_move up 84 >/dev/null 2>&1"
+            },
+            {
+              "conditions": [
+                {
+                  "expression": "finder_motion_count == 85",
+                  "type": "expression_if"
+                }
+              ],
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_move up 85 >/dev/null 2>&1"
+            },
+            {
+              "conditions": [
+                {
+                  "expression": "finder_motion_count == 86",
+                  "type": "expression_if"
+                }
+              ],
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_move up 86 >/dev/null 2>&1"
+            },
+            {
+              "conditions": [
+                {
+                  "expression": "finder_motion_count == 87",
+                  "type": "expression_if"
+                }
+              ],
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_move up 87 >/dev/null 2>&1"
+            },
+            {
+              "conditions": [
+                {
+                  "expression": "finder_motion_count == 88",
+                  "type": "expression_if"
+                }
+              ],
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_move up 88 >/dev/null 2>&1"
+            },
+            {
+              "conditions": [
+                {
+                  "expression": "finder_motion_count == 89",
+                  "type": "expression_if"
+                }
+              ],
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_move up 89 >/dev/null 2>&1"
+            },
+            {
+              "conditions": [
+                {
+                  "expression": "finder_motion_count == 90",
+                  "type": "expression_if"
+                }
+              ],
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_move up 90 >/dev/null 2>&1"
+            },
+            {
+              "conditions": [
+                {
+                  "expression": "finder_motion_count == 91",
+                  "type": "expression_if"
+                }
+              ],
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_move up 91 >/dev/null 2>&1"
+            },
+            {
+              "conditions": [
+                {
+                  "expression": "finder_motion_count == 92",
+                  "type": "expression_if"
+                }
+              ],
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_move up 92 >/dev/null 2>&1"
+            },
+            {
+              "conditions": [
+                {
+                  "expression": "finder_motion_count == 93",
+                  "type": "expression_if"
+                }
+              ],
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_move up 93 >/dev/null 2>&1"
+            },
+            {
+              "conditions": [
+                {
+                  "expression": "finder_motion_count == 94",
+                  "type": "expression_if"
+                }
+              ],
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_move up 94 >/dev/null 2>&1"
+            },
+            {
+              "conditions": [
+                {
+                  "expression": "finder_motion_count == 95",
+                  "type": "expression_if"
+                }
+              ],
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_move up 95 >/dev/null 2>&1"
+            },
+            {
+              "conditions": [
+                {
+                  "expression": "finder_motion_count == 96",
+                  "type": "expression_if"
+                }
+              ],
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_move up 96 >/dev/null 2>&1"
+            },
+            {
+              "conditions": [
+                {
+                  "expression": "finder_motion_count == 97",
+                  "type": "expression_if"
+                }
+              ],
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_move up 97 >/dev/null 2>&1"
+            },
+            {
+              "conditions": [
+                {
+                  "expression": "finder_motion_count == 98",
+                  "type": "expression_if"
+                }
+              ],
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_move up 98 >/dev/null 2>&1"
+            },
+            {
+              "conditions": [
+                {
+                  "expression": "finder_motion_count == 99",
+                  "type": "expression_if"
+                }
+              ],
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_move up 99 >/dev/null 2>&1"
+            },
+            {
+              "set_variable": {
+                "name": "finder_motion_count",
+                "value": 0
+              }
+            },
+            {
+              "set_variable": {
+                "name": "finder_motion_count_expiration",
+                "value": 0
+              }
+            }
+          ],
+          "type": "basic"
+        },
+        {
+          "conditions": [
+            {
+              "bundle_identifiers": [
+                "^com\\.apple\\.finder$"
+              ],
+              "type": "frontmost_application_if"
+            },
+            {
+              "expression": "accessibility.focused_ui_element.role_string like 'AXText*'",
+              "type": "expression_unless"
+            },
+            {
+              "name": "finder_visual_mode",
+              "type": "variable_unless",
+              "value": 1
+            }
+          ],
+          "description": "Normal Mode: Map h to reverse Grid row wrap with transient C worker",
+          "from": {
+            "key_code": "h"
+          },
+          "parameters": {
+            "basic.to_if_held_down_threshold_milliseconds": 150
+          },
+          "to": [
+            {
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_step hold-start left >/dev/null 2>&1"
+            }
+          ],
+          "to_after_key_up": [
+            {
+              "shell_command": "exec /usr/bin/truncate -s 0 $HOME/.local/state/finder-vim/finder_left_hold.txt"
+            }
+          ],
+          "to_if_held_down": [
+            {
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_step hold-repeat left >/dev/null 2>&1"
+            }
+          ],
+          "type": "basic"
+        },
+        {
+          "conditions": [
+            {
+              "bundle_identifiers": [
+                "^com\\.apple\\.finder$"
+              ],
+              "type": "frontmost_application_if"
+            },
+            {
+              "expression": "accessibility.focused_ui_element.role_string like 'AXText*'",
+              "type": "expression_unless"
+            },
+            {
+              "name": "finder_visual_mode",
+              "type": "variable_unless",
+              "value": 1
+            }
+          ],
+          "description": "Normal Mode: Map j to List wrap or Grid down with transient C worker",
+          "from": {
+            "key_code": "j"
+          },
+          "parameters": {
+            "basic.to_if_held_down_threshold_milliseconds": 150
+          },
+          "to": [
+            {
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_step hold-start down >/dev/null 2>&1"
+            }
+          ],
+          "to_after_key_up": [
+            {
+              "shell_command": "exec /usr/bin/truncate -s 0 $HOME/.local/state/finder-vim/finder_down_hold.txt"
+            }
+          ],
+          "to_if_held_down": [
+            {
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_step hold-repeat down >/dev/null 2>&1"
+            }
+          ],
+          "type": "basic"
+        },
+        {
+          "conditions": [
+            {
+              "bundle_identifiers": [
+                "^com\\.apple\\.finder$"
+              ],
+              "type": "frontmost_application_if"
+            },
+            {
+              "expression": "accessibility.focused_ui_element.role_string like 'AXText*'",
+              "type": "expression_unless"
+            },
+            {
+              "name": "finder_visual_mode",
+              "type": "variable_unless",
+              "value": 1
+            }
+          ],
+          "description": "Normal Mode: Map k to List wrap or Grid up with transient C worker",
+          "from": {
+            "key_code": "k"
+          },
+          "parameters": {
+            "basic.to_if_held_down_threshold_milliseconds": 150
+          },
+          "to": [
+            {
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_step hold-start up >/dev/null 2>&1"
+            }
+          ],
+          "to_after_key_up": [
+            {
+              "shell_command": "exec /usr/bin/truncate -s 0 $HOME/.local/state/finder-vim/finder_up_hold.txt"
+            }
+          ],
+          "to_if_held_down": [
+            {
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_step hold-repeat up >/dev/null 2>&1"
+            }
+          ],
+          "type": "basic"
+        },
+        {
+          "conditions": [
+            {
+              "bundle_identifiers": [
+                "^com\\.apple\\.finder$"
+              ],
+              "type": "frontmost_application_if"
+            },
+            {
+              "expression": "accessibility.focused_ui_element.role_string like 'AXText*'",
+              "type": "expression_unless"
+            },
+            {
+              "name": "finder_visual_mode",
+              "type": "variable_unless",
+              "value": 1
+            }
+          ],
+          "description": "Normal Mode: Map l to forward Grid row wrap with transient C worker",
+          "from": {
+            "key_code": "l"
+          },
+          "parameters": {
+            "basic.to_if_held_down_threshold_milliseconds": 150
+          },
+          "to": [
+            {
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_step hold-start right >/dev/null 2>&1"
+            }
+          ],
+          "to_after_key_up": [
+            {
+              "shell_command": "exec /usr/bin/truncate -s 0 $HOME/.local/state/finder-vim/finder_right_hold.txt"
+            }
+          ],
+          "to_if_held_down": [
+            {
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_step hold-repeat right >/dev/null 2>&1"
+            }
+          ],
+          "type": "basic"
+        },
+        {
+          "conditions": [
+            {
+              "bundle_identifiers": [
+                "^com\\.apple\\.finder$"
+              ],
+              "type": "frontmost_application_if"
+            },
+            {
+              "expression": "accessibility.focused_ui_element.role_string like 'AXText*'",
+              "type": "expression_unless"
+            },
+            {
+              "name": "finder_visual_mode",
+              "type": "variable_unless",
+              "value": 1
+            }
+          ],
+          "description": "Normal Mode -> Visual Mode: Press v to start range selection",
+          "from": {
+            "key_code": "v"
+          },
+          "to": [
+            {
+              "shell_command": "exec /usr/bin/truncate -s 0 $HOME/.local/state/finder-vim/finder_marks.txt"
+            },
+            {
+              "set_variable": {
+                "name": "finder_visual_mode",
+                "value": 1
+              }
+            }
+          ],
+          "type": "basic"
+        },
+        {
+          "conditions": [
+            {
+              "bundle_identifiers": [
+                "^com\\.apple\\.finder$"
+              ],
+              "type": "frontmost_application_if"
+            },
+            {
+              "expression": "accessibility.focused_ui_element.role_string like 'AXText*'",
+              "type": "expression_unless"
+            },
+            {
+              "name": "finder_visual_mode",
+              "type": "variable_unless",
+              "value": 1
+            }
+          ],
+          "description": "Normal Mode: Press r to rename",
+          "from": {
+            "key_code": "r"
+          },
+          "to": [
+            {
+              "key_code": "return_or_enter"
+            }
+          ],
+          "type": "basic"
+        },
+        {
+          "conditions": [
+            {
+              "bundle_identifiers": [
+                "^com\\.apple\\.finder$"
+              ],
+              "type": "frontmost_application_if"
+            },
+            {
+              "expression": "accessibility.focused_ui_element.role_string like 'AXText*'",
+              "type": "expression_unless"
+            },
+            {
+              "name": "finder_visual_mode",
+              "type": "variable_unless",
+              "value": 1
+            }
+          ],
+          "description": "Normal Mode: Press Esc to clear discontiguous Finder marks",
+          "from": {
+            "key_code": "escape"
+          },
+          "to": [
+            {
+              "key_code": "a",
+              "modifiers": [
+                "command",
+                "shift"
+              ]
+            },
+            {
+              "shell_command": "exec /usr/bin/truncate -s 0 $HOME/.local/state/finder-vim/finder_marks.txt"
+            },
+            {
+              "set_variable": {
+                "name": "finder_motion_count",
+                "value": 0
+              }
+            },
+            {
+              "set_variable": {
+                "name": "finder_motion_count_expiration",
+                "value": 0
+              }
+            },
+            {
+              "set_variable": {
+                "name": "finder_cut_pending",
+                "value": 0
+              }
+            }
+          ],
+          "type": "basic"
+        },
+        {
+          "conditions": [
+            {
+              "bundle_identifiers": [
+                "^com\\.apple\\.finder$"
+              ],
+              "type": "frontmost_application_if"
+            },
+            {
+              "expression": "accessibility.focused_ui_element.role_string like 'AXText*'",
+              "type": "expression_unless"
+            },
+            {
+              "name": "finder_visual_mode",
+              "type": "variable_if",
+              "value": 1
+            }
+          ],
+          "description": "Visual Mode: Extend selection left with h",
+          "from": {
+            "key_code": "h"
+          },
+          "to": [
+            {
+              "key_code": "left_arrow",
+              "modifiers": [
+                "shift"
+              ],
+              "repeat": true
+            }
+          ],
+          "type": "basic"
+        },
+        {
+          "conditions": [
+            {
+              "bundle_identifiers": [
+                "^com\\.apple\\.finder$"
+              ],
+              "type": "frontmost_application_if"
+            },
+            {
+              "expression": "accessibility.focused_ui_element.role_string like 'AXText*'",
+              "type": "expression_unless"
+            },
+            {
+              "name": "finder_visual_mode",
+              "type": "variable_if",
+              "value": 1
+            }
+          ],
+          "description": "Visual Mode: Extend selection down with j",
+          "from": {
+            "key_code": "j"
+          },
+          "to": [
+            {
+              "key_code": "down_arrow",
+              "modifiers": [
+                "shift"
+              ],
+              "repeat": true
+            }
+          ],
+          "type": "basic"
+        },
+        {
+          "conditions": [
+            {
+              "bundle_identifiers": [
+                "^com\\.apple\\.finder$"
+              ],
+              "type": "frontmost_application_if"
+            },
+            {
+              "expression": "accessibility.focused_ui_element.role_string like 'AXText*'",
+              "type": "expression_unless"
+            },
+            {
+              "name": "finder_visual_mode",
+              "type": "variable_if",
+              "value": 1
+            }
+          ],
+          "description": "Visual Mode: Extend selection up with k",
+          "from": {
+            "key_code": "k"
+          },
+          "to": [
+            {
+              "key_code": "up_arrow",
+              "modifiers": [
+                "shift"
+              ],
+              "repeat": true
+            }
+          ],
+          "type": "basic"
+        },
+        {
+          "conditions": [
+            {
+              "bundle_identifiers": [
+                "^com\\.apple\\.finder$"
+              ],
+              "type": "frontmost_application_if"
+            },
+            {
+              "expression": "accessibility.focused_ui_element.role_string like 'AXText*'",
+              "type": "expression_unless"
+            },
+            {
+              "name": "finder_visual_mode",
+              "type": "variable_if",
+              "value": 1
+            }
+          ],
+          "description": "Visual Mode: Extend selection right with l",
+          "from": {
+            "key_code": "l"
+          },
+          "to": [
+            {
+              "key_code": "right_arrow",
+              "modifiers": [
+                "shift"
+              ],
+              "repeat": true
+            }
+          ],
+          "type": "basic"
+        },
+        {
+          "conditions": [
+            {
+              "bundle_identifiers": [
+                "^com\\.apple\\.finder$"
+              ],
+              "type": "frontmost_application_if"
+            },
+            {
+              "expression": "accessibility.focused_ui_element.role_string like 'AXText*'",
+              "type": "expression_unless"
+            },
+            {
+              "name": "finder_visual_mode",
+              "type": "variable_if",
+              "value": 1
+            }
+          ],
+          "description": "Visual Mode: Copy selection with y and return to Normal Mode",
+          "from": {
+            "key_code": "y"
+          },
+          "to": [
+            {
+              "key_code": "c",
+              "modifiers": [
+                "command"
+              ]
+            },
+            {
+              "set_variable": {
+                "name": "finder_cut_pending",
+                "value": 0
+              }
+            },
+            {
+              "set_variable": {
+                "name": "finder_visual_mode",
+                "value": 0
+              }
+            },
+            {
+              "shell_command": "exec /usr/bin/truncate -s 0 $HOME/.local/state/finder-vim/finder_marks.txt"
+            }
+          ],
+          "type": "basic"
+        },
+        {
+          "conditions": [
+            {
+              "bundle_identifiers": [
+                "^com\\.apple\\.finder$"
+              ],
+              "type": "frontmost_application_if"
+            },
+            {
+              "expression": "accessibility.focused_ui_element.role_string like 'AXText*'",
+              "type": "expression_unless"
+            },
+            {
+              "name": "finder_visual_mode",
+              "type": "variable_if",
+              "value": 1
+            }
+          ],
+          "description": "Visual Mode: Mark selection for move with x and return to Normal Mode",
+          "from": {
+            "key_code": "x"
+          },
+          "to": [
+            {
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_action_marked.sh cut-current >/dev/null 2>&1"
+            },
+            {
+              "set_variable": {
+                "name": "finder_cut_pending",
+                "value": 1
+              }
+            },
+            {
+              "set_variable": {
+                "name": "finder_visual_mode",
+                "value": 0
+              }
+            }
+          ],
+          "type": "basic"
+        },
+        {
+          "conditions": [
+            {
+              "bundle_identifiers": [
+                "^com\\.apple\\.finder$"
+              ],
+              "type": "frontmost_application_if"
+            },
+            {
+              "expression": "accessibility.focused_ui_element.role_string like 'AXText*'",
+              "type": "expression_unless"
+            },
+            {
+              "name": "finder_visual_mode",
+              "type": "variable_if",
+              "value": 1
+            }
+          ],
+          "description": "Visual Mode: Move selection to Trash with d and return to Normal Mode",
+          "from": {
+            "key_code": "d"
+          },
+          "to": [
+            {
+              "key_code": "delete_or_backspace",
+              "modifiers": [
+                "command"
+              ]
+            },
+            {
+              "set_variable": {
+                "name": "finder_visual_mode",
+                "value": 0
+              }
+            },
+            {
+              "shell_command": "exec /usr/bin/truncate -s 0 $HOME/.local/state/finder-vim/finder_marks.txt"
+            }
+          ],
+          "type": "basic"
+        },
+        {
+          "conditions": [
+            {
+              "bundle_identifiers": [
+                "^com\\.apple\\.finder$"
+              ],
+              "type": "frontmost_application_if"
+            },
+            {
+              "expression": "accessibility.focused_ui_element.role_string like 'AXText*'",
+              "type": "expression_unless"
+            },
+            {
+              "name": "finder_visual_mode",
+              "type": "variable_if",
+              "value": 1
+            }
+          ],
+          "description": "Visual Mode -> Normal Mode: Press Esc to stop range selection",
+          "from": {
+            "key_code": "escape"
+          },
+          "to": [
+            {
+              "set_variable": {
+                "name": "finder_visual_mode",
+                "value": 0
+              }
+            },
+            {
+              "set_variable": {
+                "name": "finder_motion_count",
+                "value": 0
+              }
+            },
+            {
+              "set_variable": {
+                "name": "finder_motion_count_expiration",
+                "value": 0
+              }
+            }
+          ],
+          "type": "basic"
+        },
+        {
+          "conditions": [
+            {
+              "bundle_identifiers": [
+                "^com\\.apple\\.finder$"
+              ],
+              "type": "frontmost_application_if"
+            },
+            {
+              "expression": "accessibility.focused_ui_element.role_string like 'AXText*'",
+              "type": "expression_unless"
+            },
+            {
+              "name": "finder_visual_mode",
+              "type": "variable_unless",
+              "value": 1
+            }
+          ],
+          "description": "Normal Mode: Toggle discontiguous Finder mark with s",
+          "from": {
+            "key_code": "s"
+          },
+          "to": [
+            {
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_move toggle-mark >/dev/null 2>&1"
+            }
+          ],
+          "type": "basic"
+        },
+        {
+          "conditions": [
+            {
+              "bundle_identifiers": [
+                "^com\\.apple\\.finder$"
+              ],
+              "type": "frontmost_application_if"
+            },
+            {
+              "expression": "accessibility.focused_ui_element.role_string like 'AXText*'",
+              "type": "expression_unless"
+            },
+            {
+              "name": "finder_visual_mode",
+              "type": "variable_unless",
+              "value": 1
+            }
+          ],
+          "description": "Normal Mode: Copy selected or marked Finder items with y",
+          "from": {
+            "key_code": "y"
+          },
+          "to": [
+            {
+              "key_code": "c",
+              "modifiers": [
+                "command"
+              ]
+            },
+            {
+              "set_variable": {
+                "name": "finder_cut_pending",
+                "value": 0
+              }
+            },
+            {
+              "shell_command": "exec /usr/bin/truncate -s 0 $HOME/.local/state/finder-vim/finder_marks.txt"
+            }
+          ],
+          "type": "basic"
+        },
+        {
+          "conditions": [
+            {
+              "bundle_identifiers": [
+                "^com\\.apple\\.finder$"
+              ],
+              "type": "frontmost_application_if"
+            },
+            {
+              "expression": "accessibility.focused_ui_element.role_string like 'AXText*'",
+              "type": "expression_unless"
+            },
+            {
+              "name": "finder_visual_mode",
+              "type": "variable_unless",
+              "value": 1
+            }
+          ],
+          "description": "Normal Mode: Mark selected or marked Finder items for move with x",
+          "from": {
+            "key_code": "x"
+          },
+          "to": [
+            {
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_action_marked.sh cut >/dev/null 2>&1"
+            },
+            {
+              "set_variable": {
+                "name": "finder_cut_pending",
+                "value": 1
+              }
+            }
+          ],
+          "type": "basic"
+        },
+        {
+          "conditions": [
+            {
+              "bundle_identifiers": [
+                "^com\\.apple\\.finder$"
+              ],
+              "type": "frontmost_application_if"
+            },
+            {
+              "expression": "accessibility.focused_ui_element.role_string like 'AXText*'",
+              "type": "expression_unless"
+            },
+            {
+              "name": "finder_visual_mode",
+              "type": "variable_unless",
+              "value": 1
+            }
+          ],
+          "description": "Normal Mode: Move selected or marked Finder items to Trash with d",
+          "from": {
+            "key_code": "d"
+          },
+          "to": [
+            {
+              "key_code": "delete_or_backspace",
+              "modifiers": [
+                "command"
+              ]
+            },
+            {
+              "shell_command": "exec /usr/bin/truncate -s 0 $HOME/.local/state/finder-vim/finder_marks.txt"
+            }
+          ],
+          "type": "basic"
+        },
+        {
+          "conditions": [
+            {
+              "bundle_identifiers": [
+                "^com\\.apple\\.finder$"
+              ],
+              "type": "frontmost_application_if"
+            },
+            {
+              "expression": "accessibility.focused_ui_element.role_string like 'AXText*'",
+              "type": "expression_unless"
+            },
+            {
+              "name": "finder_visual_mode",
+              "type": "variable_unless",
+              "value": 1
+            },
+            {
+              "name": "finder_cut_pending",
+              "type": "variable_if",
+              "value": 1
+            }
+          ],
+          "description": "Normal Mode: Move-paste Finder items with p after x",
+          "from": {
+            "key_code": "p"
+          },
+          "to": [
+            {
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_paste.sh move >/dev/null 2>&1"
+            },
+            {
+              "set_variable": {
+                "name": "finder_cut_pending",
+                "value": 0
+              }
+            }
+          ],
+          "type": "basic"
+        },
+        {
+          "conditions": [
+            {
+              "bundle_identifiers": [
+                "^com\\.apple\\.finder$"
+              ],
+              "type": "frontmost_application_if"
+            },
+            {
+              "expression": "accessibility.focused_ui_element.role_string like 'AXText*'",
+              "type": "expression_unless"
+            },
+            {
+              "name": "finder_visual_mode",
+              "type": "variable_unless",
+              "value": 1
+            },
+            {
+              "name": "finder_cut_pending",
+              "type": "variable_unless",
+              "value": 1
+            }
+          ],
+          "description": "Normal Mode: Paste Finder items with p",
+          "from": {
+            "key_code": "p"
+          },
+          "to": [
+            {
+              "key_code": "v",
+              "modifiers": [
+                "command"
+              ]
+            }
+          ],
+          "type": "basic"
+        },
+        {
+          "conditions": [
+            {
+              "bundle_identifiers": [
+                "^com\\.apple\\.finder$"
+              ],
+              "type": "frontmost_application_if"
+            },
+            {
+              "expression": "accessibility.focused_ui_element.role_string like 'AXText*'",
+              "type": "expression_unless"
+            },
+            {
+              "name": "finder_visual_mode",
+              "type": "variable_unless",
+              "value": 1
+            }
+          ],
+          "description": "Normal Mode: Press / to trigger Cmd+F (Search)",
+          "from": {
+            "key_code": "slash"
+          },
+          "to": [
+            {
+              "key_code": "f",
+              "modifiers": [
+                "command"
+              ]
+            }
+          ],
+          "type": "basic"
+        }
+      ]
+    }
+  ]
+}
