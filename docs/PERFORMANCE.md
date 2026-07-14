@@ -31,6 +31,9 @@ The C burst worker follows these rules:
 - Match AX elements against the cached item array inside the worker process.
 - Keep per-item selection probing only as a compatibility fallback when Finder
   does not expose a selection array.
+- After a horizontal command that can change directories, wait for Finder's
+  container or item set to change and invalidate the cached AX context before
+  processing the next command.
 
 The target common-path cost is:
 

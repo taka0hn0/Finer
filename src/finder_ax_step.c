@@ -138,6 +138,20 @@ static CFArrayRef copy_navigation_items(
     return visible_rows;
 }
 
+static CFIndex raw_navigation_item_count(
+    AXUIElementRef container,
+    navigation_role_t role
+) {
+    CFStringRef attribute = role == navigation_outline
+        ? kAXRowsAttribute
+        : kAXChildrenAttribute;
+    CFArrayRef items = copy_array_attribute(container, attribute);
+    if (!items) return -1;
+    CFIndex count = CFArrayGetCount(items);
+    CFRelease(items);
+    return count;
+}
+
 static bool finder_is_frontmost(pid_t *finder_pid, AXUIElementRef *application) {
     ProcessSerialNumber process_serial_number;
     pid_t pid = 0;
@@ -278,30 +292,36 @@ static void find_best_container(
     CFRelease(children);
 }
 
-static AXUIElementRef copy_navigation_container(
+static AXUIElementRef copy_nearest_navigation_container(
     AXUIElementRef focused,
-    AXUIElementRef application,
     navigation_role_t *role
 ) {
     AXUIElementRef current = (AXUIElementRef)CFRetain(focused);
     for (int depth = 0; depth < 10; ++depth) {
-        if (role_of(current, role)) {
-            // The nearest supported ancestor is already the active Finder
-            // view. Recursively rescanning its descendants makes a cold key
-            // press proportional to the number of displayed files.
-            return current;
-        }
+        if (role_of(current, role)) return current;
 
         CFTypeRef parent = copy_attribute(current, kAXParentAttribute);
         CFRelease(current);
         if (!parent || CFGetTypeID(parent) != AXUIElementGetTypeID()) {
             if (parent) CFRelease(parent);
-            current = NULL;
-            break;
+            return NULL;
         }
         current = (AXUIElementRef)parent;
     }
-    if (current) CFRelease(current);
+    CFRelease(current);
+    return NULL;
+}
+
+static AXUIElementRef copy_navigation_container(
+    AXUIElementRef focused,
+    AXUIElementRef application,
+    navigation_role_t *role
+) {
+    // The nearest supported ancestor is already the active Finder view.
+    // Recursively rescanning its descendants makes a cold key press
+    // proportional to the number of displayed files.
+    AXUIElementRef nearest = copy_nearest_navigation_container(focused, role);
+    if (nearest) return nearest;
 
     CFTypeRef window = copy_attribute(application, kAXFocusedWindowAttribute);
     if (!window || CFGetTypeID(window) != AXUIElementGetTypeID()) {
@@ -705,8 +725,10 @@ static CFIndex move_grid_horizontal(
 static CFIndex move_once(
     const navigation_context_t *context,
     direction_t direction,
-    int lock_fd
+    int lock_fd,
+    bool *navigation_may_change
 ) {
+    if (navigation_may_change) *navigation_may_change = false;
     if (lock_fd >= 0) flock(lock_fd, LOCK_EX);
 
     CFIndex count = CFArrayGetCount(context->items);
@@ -728,6 +750,9 @@ static CFIndex move_once(
 
     if (direction == direction_left || direction == direction_right) {
         bool success = post_key_code(arrow_key_code(direction));
+        if (success && navigation_may_change) {
+            *navigation_may_change = true;
+        }
         if (lock_fd >= 0) flock(lock_fd, LOCK_UN);
         return success ? (current >= 0 ? current + 1 : 1) : 0;
     }
@@ -915,6 +940,78 @@ static bool send_worker_step(direction_t direction) {
     return sent == sizeof(command);
 }
 
+static bool focused_navigation_container_changed(
+    AXUIElementRef previous_container
+) {
+    AXUIElementRef application = NULL;
+    if (!finder_is_frontmost(NULL, &application)) return false;
+
+    CFTypeRef focused = copy_attribute(application, kAXFocusedUIElementAttribute);
+    CFRelease(application);
+    if (!focused || CFGetTypeID(focused) != AXUIElementGetTypeID()) {
+        if (focused) CFRelease(focused);
+        return false;
+    }
+
+    navigation_role_t role;
+    AXUIElementRef current = copy_nearest_navigation_container(
+        (AXUIElementRef)focused,
+        &role
+    );
+    CFRelease(focused);
+    if (!current) return false;
+    bool changed = !CFEqual(current, previous_container);
+    CFRelease(current);
+    return changed;
+}
+
+static void wait_for_navigation_transition(
+    const navigation_context_t *context,
+    CFIndex previous_item_count
+) {
+    // CGEventPost is asynchronous. Serialize the following Vim command behind
+    // Finder's view update so it cannot mutate the previous directory.
+    for (int attempt = 0; attempt < 40; ++attempt) {
+        CFIndex item_count = raw_navigation_item_count(
+            context->container,
+            context->role
+        );
+        if ((previous_item_count >= 0 && item_count != previous_item_count)
+            || focused_navigation_container_changed(context->container)) {
+            return;
+        }
+        usleep(2000);
+    }
+}
+
+static CFIndex move_worker_context(
+    navigation_context_t *context,
+    bool *context_created,
+    direction_t direction,
+    int movement_lock_fd
+) {
+    CFIndex previous_item_count = -1;
+    if (direction == direction_left || direction == direction_right) {
+        previous_item_count = raw_navigation_item_count(
+            context->container,
+            context->role
+        );
+    }
+    bool navigation_may_change = false;
+    CFIndex position = move_once(
+        context,
+        direction,
+        movement_lock_fd,
+        &navigation_may_change
+    );
+    if (navigation_may_change) {
+        wait_for_navigation_transition(context, previous_item_count);
+        navigation_context_release(context);
+        *context_created = false;
+    }
+    return position;
+}
+
 static CFIndex worker_move(
     navigation_context_t *context,
     bool *context_created,
@@ -930,13 +1027,23 @@ static CFIndex worker_move(
         if (!*context_created) return false;
     }
 
-    CFIndex position = move_once(context, direction, movement_lock_fd);
+    CFIndex position = move_worker_context(
+        context,
+        context_created,
+        direction,
+        movement_lock_fd
+    );
     if (position > 0) return position;
 
-    navigation_context_release(context);
+    if (*context_created) navigation_context_release(context);
     *context_created = navigation_context_create(context);
     if (!*context_created) return 0;
-    return move_once(context, direction, movement_lock_fd);
+    return move_worker_context(
+        context,
+        context_created,
+        direction,
+        movement_lock_fd
+    );
 }
 
 static int run_worker(direction_t initial_direction, int worker_lock_fd) {
@@ -1232,7 +1339,7 @@ int main(int argc, char **argv) {
             if (lock_fd >= 0) close(lock_fd);
             return 1;
         }
-        CFIndex position = move_once(&context, direction, -1);
+        CFIndex position = move_once(&context, direction, -1, NULL);
         navigation_context_release(&context);
         if (lock_fd >= 0) {
             flock(lock_fd, LOCK_UN);
