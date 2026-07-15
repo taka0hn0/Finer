@@ -32,5 +32,5 @@ touch \
     "$state_dir/finder_left_hold.txt" \
     "$state_dir/finder_right_hold.txt"
 
-print -- "Finder Vim development snapshot installed."
+print -- "Finer development snapshot installed."
 print -- "Enable its rules in Karabiner-Elements > Complex Modifications."

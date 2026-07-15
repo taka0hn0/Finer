@@ -1,8 +1,8 @@
 {
-  "title": "Finder Vim (development snapshot)",
+  "title": "Finer (development snapshot)",
   "rules": [
     {
-      "description": "Finder Vim Utility Commands",
+      "description": "Finer Utility Commands",
       "manipulators": [
         {
           "conditions": [

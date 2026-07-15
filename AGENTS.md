@@ -21,11 +21,10 @@
 
 - When the user tells you "提案して。", do not edit files unless clearly instructed.
 
-## Finder Vim Project
+## Finer Project
 
-- Before changing Finder Vim rules, helpers, scripts, packaging, or architecture, read `docs/FINDER_VIM_SPEC.md` completely.
+- Before changing Finer rules, helpers, scripts, packaging, or architecture, read `docs/FINDER_VIM_SPEC.md` completely.
 - Treat `docs/FINDER_VIM_SPEC.md` as the source of truth for product requirements and architecture.
 - If an implementation decision changes the specification, update the specification and its decision log in the same change.
 - Do not turn `~/.config/karabiner` into the public source repository. It is the installed dogfood environment.
 - The public source repository should live in a separate working directory and install generated artifacts into this directory.
-

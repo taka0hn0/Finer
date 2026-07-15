@@ -12,6 +12,5 @@ rm -f \
     "$rule_file"
 rmdir "$libexec_dir" 2>/dev/null || true
 
-print -- "Finder Vim executables and the importable rule were removed."
+print -- "Finer executables and the importable rule were removed."
 print -- "User configuration and state were preserved."
-
