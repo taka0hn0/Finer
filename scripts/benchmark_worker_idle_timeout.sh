@@ -120,6 +120,21 @@ open_test_window() {
     window_id="$(FINDER_VIM_CASE_DIR="$case_dir" /usr/bin/osascript "${open_script[@]}")"
 }
 
+reset_test_selection() {
+    typeset -a reset_script=(
+        -e 'set windowId to (system attribute "FINDER_VIM_WINDOW_ID") as integer'
+        -e 'tell application "Finder"'
+        -e 'set testWindow to first Finder window whose id is windowId'
+        -e 'set targetFolder to target of testWindow as alias'
+        -e 'set selection to {file "item-00000.txt" of targetFolder}'
+        -e 'set index of testWindow to 1'
+        -e 'activate'
+        -e 'end tell'
+    )
+    FINDER_VIM_WINDOW_ID="$window_id" /usr/bin/osascript "${reset_script[@]}" \
+        >/dev/null
+}
+
 wait_for_metrics_flush() {
     local expected_rows="$1"
     local rows
@@ -170,9 +185,10 @@ expected_path="$fixture_root/items-10/01-A/item-00002.txt"
 for timeout in "${timeouts[@]}"; do
     for gap in "${gaps[@]}"; do
         label="idle-${timeout}-gap-${gap}"
+        open_test_window
         for ((iteration = 1; iteration <= iterations; ++iteration)); do
-            open_test_window
-            sleep 0.5
+            reset_test_selection
+            sleep 0.2
             activate_test_window
             "$helper" first >/dev/null
             if ! wait_for_selected_path "$initial_path"; then
@@ -229,8 +245,8 @@ for timeout in "${timeouts[@]}"; do
                 }
             ')"
             print -r -- "$timeout"$'\t'"$gap"$'\t'"$iteration"$'\t'"$result"$'\t'"$pair_summary"$'\t'"$final_path" >> "$outcomes_file"
-            close_test_window
         done
+        close_test_window
     done
 done
 
