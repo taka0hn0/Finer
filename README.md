@@ -41,6 +41,36 @@ make check
 
 Build products are written to `.build/`.
 
+## Benchmark fixtures
+
+Generate the 10, 1000, and 10000-item Column View regression fixtures with:
+
+```sh
+make benchmark-fixtures
+```
+
+See [the benchmark procedure](docs/BENCHMARKS.md) before recording or
+publishing performance results.
+
+After installing the current build, run the Column View matrix with:
+
+```sh
+make benchmark-column ITERATIONS=10
+```
+
+Run the direct-navigation matrices for List and Icon views with:
+
+```sh
+make benchmark-list ITERATIONS=10
+make benchmark-icon ITERATIONS=10
+```
+
+Run the Finder functional navigation regressions with:
+
+```sh
+make test-finder-navigation
+```
+
 ## Install the development snapshot
 
 ```sh

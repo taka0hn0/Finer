@@ -21,6 +21,18 @@ must include this dogfood check:
 4. Confirm that the second child inside `A` is focused.
 5. Confirm that the sibling below `A` is never focused.
 
-Repeat in List and Column views, with no deliberate delay and with a directory
-containing many items.
+Repeat in Column View, with no deliberate delay and with a directory containing
+many items.
 
+## Automated Finder navigation baselines
+
+After installing the current helper, run `make benchmark-list`,
+`make benchmark-column`, and `make benchmark-icon`. Each runner creates and
+closes a dedicated Finder window per iteration, verifies the final selected
+path, and rejects incomplete or failed metrics.
+
+Run `make test-finder-navigation` for functional regressions that do not belong
+in the latency matrix. It covers grouped mixed-content List View wrap, a
+one-second held List movement, and Icon View forward/reverse row wrap. The test
+temporarily changes grouping only on its dedicated Finder window and restores
+the original Finder grouping criterion and enabled state before closing it.
