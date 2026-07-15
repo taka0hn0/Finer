@@ -35,6 +35,10 @@ The default empty-file fixtures isolate item-count and AX costs. Run
 `make benchmark-realistic-views` to repeat the matrices with deterministic
 mixed, non-empty local content; see `docs/BENCHMARKS.md` for the distinction.
 
+Run `make benchmark-worker-timeout` after installing the current helper to
+compare the five worker idle candidates across fixed two-tap gaps. The runner
+requires the empty-files fixture and the appended worker-exit metrics field.
+
 Run `make test-finder-navigation` for functional regressions that do not belong
 in the latency matrix. It covers grouped mixed-content List View wrap, a
 one-second held List movement, and Icon View forward/reverse row wrap. The test

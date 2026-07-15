@@ -75,7 +75,7 @@ typedef struct {
     bool cold;
 } metrics_record_t;
 
-static const int worker_idle_timeout_milliseconds = 750;
+static int worker_idle_timeout_milliseconds = 750;
 static const char *program_path;
 static const char *metrics_path;
 static const char *metrics_label;
@@ -1069,12 +1069,38 @@ static bool valid_metrics_label(const char *label) {
     return true;
 }
 
-static void configure_metrics(void) {
+static bool supported_benchmark_idle_timeout(long milliseconds) {
+    return milliseconds == 300
+        || milliseconds == 500
+        || milliseconds == 750
+        || milliseconds == 1000
+        || milliseconds == 1500;
+}
+
+static bool configure_metrics(void) {
     const char *path = getenv("FINDER_VIM_METRICS_FILE");
     metrics_path = path && path[0] != '\0' ? path : NULL;
 
     const char *label = getenv("FINDER_VIM_METRICS_LABEL");
     metrics_label = valid_metrics_label(label) ? label : "-";
+
+    const char *timeout = getenv("FINDER_VIM_BENCHMARK_IDLE_TIMEOUT_MS");
+    if (!metrics_path || !timeout || timeout[0] == '\0') return true;
+
+    char *end = NULL;
+    errno = 0;
+    long milliseconds = strtol(timeout, &end, 10);
+    if (errno != 0 || !end || *end != '\0'
+        || !supported_benchmark_idle_timeout(milliseconds)) {
+        fprintf(
+            stderr,
+            "finder_ax_step: unsupported benchmark idle timeout: %s\n",
+            timeout
+        );
+        return false;
+    }
+    worker_idle_timeout_milliseconds = (int)milliseconds;
+    return true;
 }
 
 static metrics_snapshot_t capture_metrics_snapshot(void) {
@@ -1162,11 +1188,13 @@ static void flush_metrics(void) {
             "dispatch_to_selection_ns\tworker_duration_ns\tuser_cpu_ns\t"
             "system_cpu_ns\tpackage_idle_wakeups\tinterrupt_wakeups\t"
             "resident_bytes\tphysical_footprint_bytes\tax_reads\t"
-            "ax_writes\tcg_events\tresult_position\tdropped_records\n"
+            "ax_writes\tcg_events\tresult_position\tdropped_records\t"
+            "worker_exit_after_command_ns\n"
         );
     }
 
     pid_t pid = getpid();
+    uint64_t flush_started_nanoseconds = monotonic_nanoseconds();
     for (size_t index = 0; index < metrics_record_count; ++index) {
         const metrics_record_t *record = &metrics_records[index];
         dprintf(
@@ -1174,7 +1202,7 @@ static void flush_metrics(void) {
             "%" PRIu64 "\t%s\t%d\t%s\t%c\t%" PRIu64 "\t%" PRIu64
             "\t%" PRIu64 "\t%" PRIu64 "\t%" PRIu64 "\t%" PRIu64
             "\t%" PRIu64 "\t%" PRIu64 "\t%" PRIu64 "\t%" PRIu64
-            "\t%" PRIu64 "\t%ld\t%zu\n",
+            "\t%" PRIu64 "\t%ld\t%zu\t%" PRIu64 "\n",
             record->timestamp_nanoseconds,
             metrics_label,
             pid,
@@ -1198,7 +1226,11 @@ static void flush_metrics(void) {
             record->ax_writes,
             record->cg_events,
             (long)record->result_position,
-            metrics_dropped_records
+            metrics_dropped_records,
+            counter_delta(
+                flush_started_nanoseconds,
+                record->finished_nanoseconds
+            )
         );
     }
 
@@ -1657,7 +1689,7 @@ static bool parse_direction(const char *value, direction_t *direction) {
 
 int main(int argc, char **argv) {
     program_path = argv[0];
-    configure_metrics();
+    if (!configure_metrics()) return 64;
 
     if (argc == 5 && strcmp(argv[1], "worker") == 0) {
         direction_t direction;

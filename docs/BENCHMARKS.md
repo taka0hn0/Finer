@@ -150,6 +150,7 @@ ax_writes
 cg_events
 result_position
 dropped_records
+worker_exit_after_command_ns
 ```
 
 `dispatch_to_selection_ns` starts when the helper client handles the command
@@ -184,6 +185,33 @@ end-to-end measurement requires either physical input with an independent
 timestamp source or a suitably signed virtual-HID test tool. The internal
 worker metrics remain useful, but their stated exclusion of the physical key,
 Karabiner evaluation, and shell launch is mandatory.
+
+## Worker idle timeout matrix
+
+The public idle timeout is not selected by intuition. After installing the
+current helper, compare the five candidates with two taps separated by fixed
+submission gaps:
+
+```sh
+make benchmark-worker-timeout ITERATIONS=10
+```
+
+The default matrix tests 300, 500, 750, 1000, and 1500ms timeouts against 100,
+400, 700, 1100, and 1600ms tap gaps in a ten-item List View. Override the
+matrix with `FINDER_VIM_BENCHMARK_TIMEOUTS` or `FINDER_VIM_BENCHMARK_GAPS` for
+diagnosis. Only the five specified timeout candidates are accepted.
+
+`FINDER_VIM_BENCHMARK_IDLE_TIMEOUT_MS` is honored only while metrics are
+enabled; it is a benchmark control, not a user configuration surface. The
+runner records whether the pair reused one process, command latency and
+resource counters, and the time from each process's final command to worker
+flush. `worker_exit_after_command_ns` is appended after the existing metrics
+columns so older summary tooling retains its field positions.
+
+Choose the default using reuse at realistic tap gaps together with process
+creation, exit delay, footprint, CPU, wakeups, and dogfood feel. A longer
+timeout does not consume CPU while blocked in `poll`, but it retains the
+worker's private memory for longer.
 
 ## List and Icon direct navigation
 

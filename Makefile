@@ -7,7 +7,7 @@ SWIFT_HELPER := $(BUILD_DIR)/finder_ax_move
 ITERATIONS ?= 10
 COUNTS ?= 10 1000 10000
 
-.PHONY: all build check clean install uninstall benchmark-fixtures benchmark-realistic-fixtures benchmark-column benchmark-list benchmark-icon benchmark-views benchmark-column-realistic benchmark-list-realistic benchmark-icon-realistic benchmark-realistic-views test-finder-navigation
+.PHONY: all build check clean install uninstall benchmark-fixtures benchmark-realistic-fixtures benchmark-column benchmark-list benchmark-icon benchmark-views benchmark-column-realistic benchmark-list-realistic benchmark-icon-realistic benchmark-realistic-views benchmark-worker-timeout test-finder-navigation
 
 all: build
 
@@ -83,6 +83,11 @@ benchmark-icon-realistic: benchmark-realistic-fixtures
 		./scripts/benchmark_view_navigation.sh icon "$(ITERATIONS)"
 
 benchmark-realistic-views: benchmark-list-realistic benchmark-column-realistic benchmark-icon-realistic
+
+benchmark-worker-timeout:
+	FINDER_VIM_BENCHMARK_COUNTS=10 \
+		./scripts/prepare_benchmark_fixtures.sh
+	./scripts/benchmark_worker_idle_timeout.sh "$(ITERATIONS)"
 
 test-finder-navigation: benchmark-fixtures
 	./scripts/test_finder_navigation.sh

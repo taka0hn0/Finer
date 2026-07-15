@@ -79,6 +79,12 @@ The final default must be selected by comparing 300, 500, 750, 1000, and 1500ms.
 Measure latency, peak/private memory duration, wakeups, and process creation; do
 not choose solely from perceived responsiveness.
 
+For controlled measurement only, `FINDER_VIM_BENCHMARK_IDLE_TIMEOUT_MS`
+selects one of those five candidates when worker metrics are enabled. Normal
+operation ignores the variable and retains the compiled default. The timeout
+matrix records process reuse across fixed tap gaps and the delay from a
+process's final command until its metrics flush and exit path begins.
+
 ## List View row strategy
 
 Finder can expose thousands of `AXRows` before it has populated every row's
