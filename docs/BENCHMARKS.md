@@ -1,6 +1,6 @@
 # Benchmarks
 
-Finder Vim performance claims must be based on reproducible Finder fixtures
+Finer performance claims must be based on reproducible Finder fixtures
 and recorded environment metadata. This document defines the initial fixture
 layout and result format; it does not claim measured latency yet.
 
@@ -77,7 +77,7 @@ Use a different helper or output directory with `FINDER_VIM_HELPER` and
 Before each measured burst, the runner activates Finder and executes an
 unmeasured synchronous `first` probe. This verifies that the parent Column View
 AX context is ready and leaves `00-start.txt` selected. Therefore `cold` in the
-metrics means a newly spawned Finder Vim worker; it does not mean an unwarmed
+metrics means a newly spawned Finer worker; it does not mean an unwarmed
 Finder process or untouched AX caches. Do not interact with other applications
 while the matrix is running.
 
@@ -85,7 +85,7 @@ while the matrix is running.
 
 Record these values with every raw result file:
 
-- Finder Vim commit;
+- Finer commit;
 - macOS version and build;
 - Finder version;
 - Karabiner-Elements version;
@@ -140,7 +140,7 @@ validation remain separate measurements.
 
 ## End-to-end key timing limitation
 
-Quartz `CGEventPost` is not a valid way to automate Finder Vim's full key path.
+Quartz `CGEventPost` is not a valid way to automate Finer's full key path.
 On the current test host, an injected `j` bypassed Karabiner-Elements and
 reached Finder's native type-selection behavior. The locally installed
 `karabiner_cli` exposes profile, variable, lint, and device-list operations but
@@ -149,7 +149,7 @@ with `IOHIDUserDevice` requires the
 `com.apple.developer.hid.virtual.device` entitlement according to the installed
 macOS SDK.
 
-Do not publish a `CGEventPost`-to-AX value as Finder Vim key latency. A valid
+Do not publish a `CGEventPost`-to-AX value as Finer key latency. A valid
 end-to-end measurement requires either physical input with an independent
 timestamp source or a suitably signed virtual-HID test tool. The internal
 worker metrics remain useful, but their stated exclusion of the physical key,

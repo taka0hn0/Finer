@@ -1,4 +1,4 @@
-# Finder Vim 要件定義・基本設計
+# Finer 要件定義・基本設計
 
 - Status: Draft 0.1
 - Last updated: 2026-07-15
@@ -397,7 +397,6 @@ finder-vim/
 
 ## 15. 未決事項
 
-- 正式なプロダクト名とリポジトリ名
 - launchd socket activationを採用するか
 - 最適なバーストワーカー終了時間
 - Gallery Viewをいつ正式対応するか
@@ -408,6 +407,12 @@ finder-vim/
 未決事項は推測で確定せず、調査・試作・ベンチマーク後にDecision Logへ記録する。
 
 ## 16. Decision Log
+
+### 2026-07-15: 正式なプロダクト名をFinerとする
+
+- Decision: 正式なプロダクト名と公開リポジトリ名を `Finer` とする。READMEなどの対外表記では旧称の「Finder Vim」を使用しない。
+- Reason: Vim風キーバインドだけを前面に出さず、高速・軽量・アイドル時に専用リソースを消費しないFinder用ツールという製品価値を伝えるため。
+- Compatibility: 既存のパス、環境変数、ファイル名に含まれる `finder-vim` / `FINDER_VIM_*` は技術識別子として当面維持し、変更する場合は互換性を保った移行を別途設計する。
 
 ### 2026-07-14: ソースとインストール先を分離する
 

@@ -9,7 +9,7 @@ This repository began as an extraction from a working local
 - `src/finder_ax_move.swift`: AX selection, marks, and clipboard information.
 - `scripts/finder_action_marked.sh`: records copy, cut, and delete targets.
 - `scripts/finder_paste.sh`: copies or moves recorded targets through Finder.
-- `rules/generated/finder-vim.json`: snapshot of the two active Finder Vim
+- `rules/generated/finder-vim.json`: snapshot of the two active Finer
   complex-modification rules, with personal absolute paths removed.
 
 ## Deliberately excluded
@@ -23,4 +23,3 @@ This repository began as an extraction from a working local
 
 The generated rule is a migration baseline, not the final configuration
 system. A configurable rule generator remains a product requirement.
-

@@ -1,6 +1,6 @@
 # Performance architecture
 
-This document defines how Finder Vim stays fast in directories containing many
+This document defines how Finer stays fast in directories containing many
 items without introducing a permanent background process. Product-level
 requirements remain in `FINDER_VIM_SPEC.md`.
 

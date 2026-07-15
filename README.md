@@ -1,4 +1,4 @@
-# Finder Vim
+# Finer
 
 Fast, lightweight keyboard navigation and practical file operations for macOS
 Finder.
@@ -87,7 +87,7 @@ This installs only generated artifacts:
 - Karabiner rule: `~/.config/karabiner/assets/complex_modifications/finder-vim.json`
 
 Then open Karabiner-Elements Settings, choose **Complex Modifications**, add
-the Finder Vim rules, and enable them. The installer does not overwrite the
+the Finer rules, and enable them. The installer does not overwrite the
 user's main `karabiner.json`.
 
 To remove installed artifacts:
