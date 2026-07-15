@@ -7,7 +7,7 @@ SWIFT_HELPER := $(BUILD_DIR)/finder_ax_move
 ITERATIONS ?= 10
 COUNTS ?= 10 1000 10000
 
-.PHONY: all build check clean install uninstall benchmark-fixtures benchmark-column benchmark-list benchmark-icon benchmark-views test-finder-navigation
+.PHONY: all build check clean install uninstall benchmark-fixtures benchmark-realistic-fixtures benchmark-column benchmark-list benchmark-icon benchmark-views benchmark-column-realistic benchmark-list-realistic benchmark-icon-realistic benchmark-realistic-views test-finder-navigation
 
 all: build
 
@@ -42,7 +42,13 @@ uninstall:
 	./scripts/uninstall.sh
 
 benchmark-fixtures:
-	./scripts/prepare_benchmark_fixtures.sh
+	FINDER_VIM_BENCHMARK_COUNTS="$(COUNTS)" \
+		./scripts/prepare_benchmark_fixtures.sh
+
+benchmark-realistic-fixtures:
+	FINDER_VIM_FIXTURE_PROFILE=realistic-mixed \
+	FINDER_VIM_BENCHMARK_COUNTS="$(COUNTS)" \
+		./scripts/prepare_benchmark_fixtures.sh
 
 benchmark-column: benchmark-fixtures
 	FINDER_VIM_BENCHMARK_COUNTS="$(COUNTS)" \
@@ -57,6 +63,26 @@ benchmark-icon: benchmark-fixtures
 		./scripts/benchmark_view_navigation.sh icon "$(ITERATIONS)"
 
 benchmark-views: benchmark-list benchmark-column benchmark-icon
+
+benchmark-column-realistic: benchmark-realistic-fixtures
+	FINDER_VIM_FIXTURE_ROOT="$(CURDIR)/$(BUILD_DIR)/benchmark-fixtures/realistic-mixed" \
+	FINDER_VIM_BENCHMARK_PROFILE=realistic-mixed \
+	FINDER_VIM_BENCHMARK_COUNTS="$(COUNTS)" \
+		./scripts/benchmark_column_jlj.sh "$(ITERATIONS)"
+
+benchmark-list-realistic: benchmark-realistic-fixtures
+	FINDER_VIM_FIXTURE_ROOT="$(CURDIR)/$(BUILD_DIR)/benchmark-fixtures/realistic-mixed" \
+	FINDER_VIM_BENCHMARK_PROFILE=realistic-mixed \
+	FINDER_VIM_BENCHMARK_COUNTS="$(COUNTS)" \
+		./scripts/benchmark_view_navigation.sh list "$(ITERATIONS)"
+
+benchmark-icon-realistic: benchmark-realistic-fixtures
+	FINDER_VIM_FIXTURE_ROOT="$(CURDIR)/$(BUILD_DIR)/benchmark-fixtures/realistic-mixed" \
+	FINDER_VIM_BENCHMARK_PROFILE=realistic-mixed \
+	FINDER_VIM_BENCHMARK_COUNTS="$(COUNTS)" \
+		./scripts/benchmark_view_navigation.sh icon "$(ITERATIONS)"
+
+benchmark-realistic-views: benchmark-list-realistic benchmark-column-realistic benchmark-icon-realistic
 
 test-finder-navigation: benchmark-fixtures
 	./scripts/test_finder_navigation.sh

@@ -5,6 +5,7 @@ repo_root="${0:A:h:h}"
 fixture_root="${FINDER_VIM_FIXTURE_ROOT:-$repo_root/.build/benchmark-fixtures/column-race}"
 result_root="${FINDER_VIM_RESULT_ROOT:-$repo_root/.build/benchmark-results}"
 helper="${FINDER_VIM_HELPER:-$HOME/.local/libexec/finder-vim/finder_ax_step}"
+content_profile="${FINDER_VIM_BENCHMARK_PROFILE:-empty-files}"
 iterations="${1:-10}"
 counts_string="${FINDER_VIM_BENCHMARK_COUNTS:-10 1000 10000}"
 counts=("${(@s: :)counts_string}")
@@ -22,6 +23,13 @@ done
 if [[ ! -x "$helper" ]]; then
     print -u2 -- "Missing executable helper: $helper"
     print -u2 -- "Run make install or set FINDER_VIM_HELPER."
+    exit 1
+fi
+
+profile_marker="$fixture_root/.content-profile"
+if [[ ! -r "$profile_marker" || "$(<"$profile_marker")" != "$content_profile" ]]; then
+    print -u2 -- "Fixture profile does not match $content_profile: $fixture_root"
+    print -u2 -- "Run the matching benchmark fixture target."
     exit 1
 fi
 
@@ -132,9 +140,18 @@ fi
     print -- "hardware_model=$(sysctl -n hw.model)"
     print -- "architecture=$(uname -m)"
     print -- "view=column"
+    print -- "content_profile=$content_profile"
     print -- "iterations=$iterations"
     print -- "helper=$helper"
 } > "$environment_file"
+if [[ -r "$fixture_root/manifest.tsv" ]]; then
+    awk -F '\t' 'NR > 1 {
+        printf "fixture_%s_visible_items=%s\n", $2, $3
+        printf "fixture_%s_files=%s\n", $2, $4
+        printf "fixture_%s_directories=%s\n", $2, $5
+        printf "fixture_%s_logical_bytes=%s\n", $2, $6
+    }' "$fixture_root/manifest.tsv" >> "$environment_file"
+fi
 
 print -r -- $'label\titeration\tresult\tselected_path' > "$outcomes_file"
 sleep 1

@@ -4,7 +4,11 @@ Finer performance claims must be based on reproducible Finder fixtures
 and recorded environment metadata. This document defines the initial fixture
 layout and result format; it does not claim measured latency yet.
 
-## Prepare Column View race fixtures
+## Fixture profiles
+
+The `empty-files` profile isolates the cost of Finder item count and AX layout.
+Its zero-byte files are intentional: it answers whether navigation scales with
+10, 1000, or 10000 visible items without mixing in content decoding.
 
 ```sh
 make benchmark-fixtures
@@ -32,6 +36,26 @@ Each case contains:
 
 The generator is idempotent for an unchanged fixture. It refuses to report
 success when stale extra files make the item count inaccurate.
+
+The separate `realistic-mixed` profile adds non-empty text, JSON, RTF, binary,
+PPM and PNG files, directories, spaces, and Unicode names while preserving a
+deterministic name order. It includes 64 KiB binary files and valid image files
+that let Finder perform type, metadata, and thumbnail work:
+
+```sh
+make benchmark-realistic-fixtures
+```
+
+It is generated under `.build/benchmark-fixtures/realistic-mixed/`. Each
+profile has a marker and `manifest.tsv` containing visible item, file,
+directory, and logical-byte counts. A runner rejects a mismatched profile.
+
+File capacity normally does not make Finer's AX step read the file contents.
+It can still affect observed Finder responsiveness indirectly through metadata,
+Quick Look, thumbnails, filesystem caching, external volumes, or File Provider
+activity. Keep the empty and realistic results separate. The deterministic
+local profile does not represent iCloud hydration or network storage; those
+remain distinct manual test environments.
 
 ## Column View `jlj` regression
 
@@ -73,6 +97,12 @@ and writes three ignored artifacts under `.build/benchmark-results/`:
 
 Use a different helper or output directory with `FINDER_VIM_HELPER` and
 `FINDER_VIM_RESULT_ROOT`.
+
+Run the same Column View regression against mixed non-empty content with:
+
+```sh
+make benchmark-column-realistic ITERATIONS=10
+```
 
 Before each measured burst, the runner activates Finder and executes an
 unmeasured synchronous `first` probe. This verifies that the parent Column View
@@ -174,3 +204,14 @@ These runners measure the files-only, ungrouped-intent baseline. The current
 AppleScript setup records grouping as `not-controlled`, because Finder can
 retain per-folder presentation state that the script does not yet normalize.
 Do not treat these results as grouped List View coverage.
+
+Run the same direct-navigation measurements against the realistic profile with:
+
+```sh
+make benchmark-list-realistic ITERATIONS=10
+make benchmark-icon-realistic ITERATIONS=10
+```
+
+`make benchmark-realistic-views ITERATIONS=10` runs all three realistic
+matrices. Use `COUNTS=10`, `COUNTS=1000`, or a quoted list to limit either
+fixture generation or measurement.

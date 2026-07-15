@@ -31,6 +31,10 @@ After installing the current helper, run `make benchmark-list`,
 closes a dedicated Finder window per iteration, verifies the final selected
 path, and rejects incomplete or failed metrics.
 
+The default empty-file fixtures isolate item-count and AX costs. Run
+`make benchmark-realistic-views` to repeat the matrices with deterministic
+mixed, non-empty local content; see `docs/BENCHMARKS.md` for the distinction.
+
 Run `make test-finder-navigation` for functional regressions that do not belong
 in the latency matrix. It covers grouped mixed-content List View wrap, a
 one-second held List movement, and Icon View forward/reverse row wrap. The test
