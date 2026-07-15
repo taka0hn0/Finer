@@ -159,6 +159,12 @@ if [[ -n "$(git -C "$repo_root" status --porcelain)" ]]; then
     dirty=true
 fi
 finder_version="$(defaults read /System/Library/CoreServices/Finder.app/Contents/Info CFBundleShortVersionString 2>/dev/null || print unknown)"
+karabiner_cli="/Library/Application Support/org.pqrs/Karabiner-Elements/bin/karabiner_cli"
+karabiner_version=unknown
+if [[ -x "$karabiner_cli" ]]; then
+    karabiner_version="$("$karabiner_cli" --version 2>/dev/null || print unknown)"
+fi
+helper_sha256="$(shasum -a 256 "$helper" | awk '{ print $1 }')"
 {
     print -- "run_id=$run_id"
     print -- "commit=$commit"
@@ -166,15 +172,20 @@ finder_version="$(defaults read /System/Library/CoreServices/Finder.app/Contents
     print -- "macos_version=$(sw_vers -productVersion)"
     print -- "macos_build=$(sw_vers -buildVersion)"
     print -- "finder_version=$finder_version"
+    print -- "karabiner_version=$karabiner_version"
     print -- "hardware_model=$(sysctl -n hw.model)"
     print -- "architecture=$(uname -m)"
     print -- "view=list"
+    print -- "sort_order=name"
+    print -- "grouping=not-controlled"
+    print -- "preview_column=not-applicable"
     print -- "content_profile=empty-files"
     print -- "item_count=10"
     print -- "iterations=$iterations"
     print -- "timeouts_ms=$timeouts_string"
     print -- "tap_gaps_ms=$gaps_string"
     print -- "helper=$helper"
+    print -- "helper_sha256=$helper_sha256"
 } > "$environment_file"
 
 print -r -- $'timeout_ms\tgap_ms\titeration\tresult\tprocesses\tcold_records\twarm_records\tavg_process_exit_ms\tselected_path' > "$outcomes_file"

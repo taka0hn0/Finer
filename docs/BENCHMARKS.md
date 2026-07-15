@@ -213,6 +213,10 @@ creation, exit delay, footprint, CPU, wakeups, and dogfood feel. A longer
 timeout does not consume CPU while blocked in `poll`, but it retains the
 worker's private memory for longer.
 
+The decision run used ten repetitions for every candidate/gap pair. All 250
+pairs passed with no dropped metrics or measured wakeups, and selected 750ms as
+the default. See the [summary and sanitized raw data](../benchmarks/results/2026-07-16-worker-idle-timeout/SUMMARY.md).
+
 ## List and Icon direct navigation
 
 The same files-only fixtures provide a first scalability comparison for direct

@@ -65,19 +65,32 @@ cached index if measurements show a material benefit.
 
 ## Burst lifetime
 
-The worker is created on demand and exits after a short period without commands.
-The current dogfood candidate is 750ms. This lets ordinary consecutive taps
-reuse an AX context while still returning to zero dedicated resident processes
-shortly after input stops.
+The worker is created on demand and exits after 750ms without commands. This
+lets ordinary consecutive taps reuse an AX context while returning to zero
+dedicated resident processes shortly after input stops.
 
 Commands arriving after the worker lock is acquired but before its socket is
 bound retry the socket briefly without blocking on the worker's full idle
 lifetime. This keeps the first rapid input burst on one worker and prevents
 startup-time command reordering.
 
-The final default must be selected by comparing 300, 500, 750, 1000, and 1500ms.
-Measure latency, peak/private memory duration, wakeups, and process creation; do
-not choose solely from perceived responsiveness.
+The default was selected by comparing 300, 500, 750, 1000, and 1500ms across
+100, 400, 700, 1100, and 1600ms two-tap gaps, with ten repetitions per pair.
+All 250 pairs passed without dropped metrics or measured wakeups.
+
+| Timeout | Reused gaps | Processes / 50 pairs | Final idle residency | Max footprint |
+| --- | --- | ---: | ---: | ---: |
+| 300ms | 100ms | 90 | 27.116s | 2,589,104 bytes |
+| 500ms | 100, 400ms | 80 | 40.114s | 2,605,488 bytes |
+| 750ms | 100, 400, 700ms | 70 | 52.600s | 2,589,104 bytes |
+| 1000ms | 100, 400, 700ms | 70 | 70.102s | 2,589,104 bytes |
+| 1500ms | 100, 400, 700, 1100ms | 60 | 90.086s | 2,589,104 bytes |
+
+750ms gives the same process count as 1000ms in this matrix with 25% less
+post-command residency. It avoids the extra process creation seen at 500ms for
+a 700ms gap, while 1500ms retains memory much longer for only ten fewer
+processes. The recorded run is under
+`benchmarks/results/2026-07-16-worker-idle-timeout/`.
 
 For controlled measurement only, `FINDER_VIM_BENCHMARK_IDLE_TIMEOUT_MS`
 selects one of those five candidates when worker metrics are enabled. Normal
