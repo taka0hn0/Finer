@@ -1,13 +1,16 @@
 # Finder Vim
 
-Fast, lightweight, and configurable Vim-style navigation for macOS Finder.
+Fast, lightweight keyboard navigation and practical file operations for macOS
+Finder.
 
-> Fast when active. Zero footprint when idle.
+> **Fast when active. Zero footprint when idle.**
+>
+> No dedicated background process, CPU usage, or periodic wakeups while idle.
 
 This repository is an early development extraction of a working personal
-Karabiner-Elements configuration. The current baseline supports Vim-style
-navigation, held-key movement, counts, Visual Mode, discontiguous marks, and
-common Finder file operations.
+Karabiner-Elements configuration. The current baseline supports keyboard-first
+navigation, including familiar `h`/`j`/`k`/`l` motions, held-key movement,
+counts, Visual Mode, discontiguous marks, and common Finder file operations.
 
 ## Status
 
