@@ -397,6 +397,39 @@
               "value": 1
             }
           ],
+          "description": "Normal Mode: Press o to open the selected item",
+          "from": {
+            "key_code": "o"
+          },
+          "to": [
+            {
+              "key_code": "down_arrow",
+              "modifiers": [
+                "command"
+              ],
+              "repeat": false
+            }
+          ],
+          "type": "basic"
+        },
+        {
+          "conditions": [
+            {
+              "bundle_identifiers": [
+                "^com\\.apple\\.finder$"
+              ],
+              "type": "frontmost_application_if"
+            },
+            {
+              "expression": "accessibility.focused_ui_element.role_string like 'AXText*'",
+              "type": "expression_unless"
+            },
+            {
+              "name": "finder_visual_mode",
+              "type": "variable_unless",
+              "value": 1
+            }
+          ],
           "description": "Normal Mode: Press i to show Get Info",
           "from": {
             "key_code": "i"

@@ -28,6 +28,7 @@ $(SWIFT_HELPER): src/finder_ax_move.swift | $(BUILD_DIR)
 
 check: build
 	jq empty rules/generated/finder-vim.json
+	./scripts/test_generated_rule.sh
 	zsh -n scripts/*.sh
 	! rg -n '/Users/[^/]+/' . \
 		--glob '!docs/FINDER_VIM_SPEC.md' \
