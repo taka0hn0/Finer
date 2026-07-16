@@ -480,7 +480,7 @@
       ]
     },
     {
-      "description": "Vim Navigation Logic for Finder",
+      "description": "Finer Navigation",
       "manipulators": [
         {
           "conditions": [

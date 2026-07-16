@@ -217,6 +217,27 @@ The decision run used ten repetitions for every candidate/gap pair. All 250
 pairs passed with no dropped metrics or measured wakeups, and selected 750ms as
 the default. See the [summary and sanitized raw data](../benchmarks/results/2026-07-16-worker-idle-timeout/SUMMARY.md).
 
+## Held navigation throughput
+
+Measure the existing one-second List View hold loop with:
+
+```sh
+make benchmark-hold ITERATIONS=10
+```
+
+The runner uses a 1000-item empty-files fixture, performs the initial `j`, waits
+until the configured 150ms held threshold, then runs the current `hold-repeat`
+path for one second. It records repeat steps per second and the upper-bound time
+from clearing the hold token until the helper returns. Set
+`FINDER_VIM_HOLD_DURATION_MS` or `FINDER_VIM_HELD_THRESHOLD_MS` to diagnose a
+different interval.
+
+This is an internal Finer-path measurement, not a physical-key comparison. It
+includes the repeat helper's AX context creation and steady loop, but excludes
+Karabiner's shell launch before the helper begins. A valid native comparison
+still requires physical key input and an independent timestamp source, as
+described in the end-to-end limitation above.
+
 ## List and Icon direct navigation
 
 The same files-only fixtures provide a first scalability comparison for direct

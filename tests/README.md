@@ -3,6 +3,11 @@
 The initial extraction relies on `make check` for build, JSON, shell syntax,
 and personal-path checks.
 
+Run `make test-install` for isolated packaging integration tests. It uses a
+temporary `HOME` (including a space in the path), never writes to the dogfood
+installation, and verifies repeat install/uninstall, backups, preflight failure,
+file modes, preserved state, and an untouched main `karabiner.json`.
+
 Planned suites are defined in `docs/FINDER_VIM_SPEC.md`:
 
 - unit tests for state and movement calculations;
@@ -38,6 +43,10 @@ mixed, non-empty local content; see `docs/BENCHMARKS.md` for the distinction.
 Run `make benchmark-worker-timeout` after installing the current helper to
 compare the five worker idle candidates across fixed two-tap gaps. The runner
 requires the empty-files fixture and the appended worker-exit metrics field.
+
+Run `make benchmark-hold` to record the current List View repeat throughput and
+the upper-bound return time after the hold token is cleared. This benchmark is
+the baseline for moving held repetition into the existing burst worker.
 
 Run `make test-finder-navigation` for functional regressions that do not belong
 in the latency matrix. It covers grouped mixed-content List View wrap, a

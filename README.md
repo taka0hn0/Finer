@@ -98,6 +98,12 @@ make uninstall
 
 Disable the enabled rules in Karabiner-Elements before uninstalling.
 
+Installation is safe to repeat. If an existing importable Finer rule differs
+from the generated rule, it is backed up under
+`~/.local/state/finder-vim/backups/` before replacement. Installation and
+uninstallation preserve runtime state and never edit the main
+`~/.config/karabiner/karabiner.json`.
+
 ## Repository policy
 
 This repository is the source of truth. The live `~/.config/karabiner`
