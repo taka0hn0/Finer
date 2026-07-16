@@ -1,0 +1,93 @@
+name: Bug report
+description: Report a reproducible problem with Finer
+title: "[Bug]: "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for helping improve Finer. Do not include private file names, paths, clipboard contents, or security-sensitive details. Security reports must follow SECURITY.md.
+
+  - type: checkboxes
+    id: prerequisites
+    attributes:
+      label: Before submitting
+      options:
+        - label: I searched existing Issues and read the troubleshooting guide.
+          required: true
+        - label: I replaced any older enabled Finer rules after installing the current snapshot.
+          required: true
+        - label: I removed private file names, paths, clipboard contents, and unrelated configuration.
+          required: true
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Actual behavior
+      description: What happened?
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      description: What did you expect to happen?
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction steps
+      description: Use synthetic file and folder names.
+      placeholder: |
+        1. Open a synthetic local folder in Column View.
+        2. Select item 5.
+        3. Press v, then 5j.
+        4. Observe ...
+    validations:
+      required: true
+
+  - type: input
+    id: input-sequence
+    attributes:
+      label: Input sequence
+      placeholder: "Example: v 5j gg G"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: finder-view
+    attributes:
+      label: Finder view
+      options:
+        - List
+        - Column
+        - Icon
+        - Desktop
+        - Other or unknown
+    validations:
+      required: true
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      value: |
+        Finer commit or version:
+        macOS version and build:
+        Karabiner-Elements version:
+        Keyboard layout: US / JIS / other
+        Finder UI language:
+        Grouping or sorting:
+        Approximate item count:
+    validations:
+      required: true
+
+  - type: textarea
+    id: additional-context
+    attributes:
+      label: Additional context
+      description: Add sanitized screenshots or logs only when they materially help.
+    validations:
+      required: false

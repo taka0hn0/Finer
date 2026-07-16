@@ -1,0 +1,66 @@
+name: Feature request
+description: Propose a focused improvement to Finer
+title: "[Feature]: "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Finer prioritizes speed, zero dedicated idle footprint, Finder compatibility, and safe file operations. Describe the user problem before the proposed implementation.
+
+  - type: checkboxes
+    id: prerequisites
+    attributes:
+      label: Before submitting
+      options:
+        - label: I searched existing Issues and the current requirements document.
+          required: true
+        - label: This request does not require telemetry or a permanently resident Finer process.
+          required: true
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: User problem
+      description: What workflow is difficult today?
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behavior
+      description: Describe the desired keys, Finder behavior, and safety boundaries.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: scope
+    attributes:
+      label: Primary scope
+      options:
+        - Navigation
+        - Visual Mode or selection
+        - File operations
+        - Installation or update
+        - Configuration
+        - Diagnostics or documentation
+        - Performance or benchmarks
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Include Finder-native shortcuts or existing tools when relevant.
+    validations:
+      required: false
+
+  - type: textarea
+    id: performance
+    attributes:
+      label: Performance and resource considerations
+      description: Could this affect latency, AX calls, memory residency, wakeups, or process creation?
+    validations:
+      required: false

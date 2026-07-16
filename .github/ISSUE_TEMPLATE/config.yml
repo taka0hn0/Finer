@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Troubleshooting
+    url: https://github.com/taka0hn0/Finer/blob/main/docs/TROUBLESHOOTING.md
+    about: Check installation, permissions, rule updates, and known behavior before filing a bug.
+  - name: Security report
+    url: https://github.com/taka0hn0/Finer/blob/main/SECURITY.md
+    about: Follow the private reporting process for security-sensitive problems.
