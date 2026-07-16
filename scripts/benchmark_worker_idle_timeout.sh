@@ -33,6 +33,7 @@ if [[ ! -x "$helper" ]]; then
     print -u2 -- "Run make install or set FINDER_VIM_HELPER."
     exit 1
 fi
+"$repo_root/scripts/require_benchmark_metrics.sh" "$helper"
 if [[ ! -f "$fixture_root/items-10/01-A/item-00000.txt" \
     || ! -f "$fixture_root/items-10/01-A/item-00002.txt" ]]; then
     print -u2 -- "Missing empty-files fixture: $fixture_root/items-10/01-A"

@@ -130,6 +130,10 @@ Record these values with every raw result file:
 Set `FINDER_VIM_METRICS_FILE` to enable worker instrumentation. The automated
 runner sets it for all three commands in each burst. Without this environment
 variable the worker does not collect counters or write metrics.
+Metrics-dependent runners verify that the selected helper contains this
+instrumentation before creating or activating a Finder window. A helper built
+without metrics support fails immediately and can still be measured with the
+separate held-navigation runner.
 
 ```text
 timestamp_ns
@@ -228,15 +232,96 @@ make benchmark-hold ITERATIONS=10
 The runner uses a 1000-item empty-files fixture, performs the initial `j`, waits
 until the configured 150ms held threshold, then runs the current `hold-repeat`
 path for one second. It records repeat steps per second and the upper-bound time
-from clearing the hold token until the helper returns. Set
+from clearing the hold token until the helper returns. Repeat throughput is
+derived from the actual final Finder path, not the helper's internal AX row
+position: Finder may expose non-file rows that do not have a one-to-one index in
+the fixture. The runner records both positions and their offset for diagnosis.
+It also records Finder selection immediately after return and after 25, 50, and
+100ms. Any post-return selection drift is a failed iteration. Set
 `FINDER_VIM_HOLD_DURATION_MS` or `FINDER_VIM_HELD_THRESHOLD_MS` to diagnose a
 different interval.
+
+Run the same hold path against the 1000-item realistic mixed fixture with:
+
+```sh
+make benchmark-hold-realistic ITERATIONS=10
+```
+
+Before leaving the machine to a visible Finder run, validate the helper, fixture
+profile, item count, and deterministic name order without opening Finder:
+
+```sh
+make benchmark-hold-preflight
+make benchmark-hold-realistic-preflight
+```
+
+These preflight targets never create result files or Finder windows.
 
 This is an internal Finer-path measurement, not a physical-key comparison. It
 includes the repeat helper's AX context creation and steady loop, but excludes
 Karabiner's shell launch before the helper begins. A valid native comparison
 still requires physical key input and an independent timestamp source, as
 described in the end-to-end limitation above.
+
+## Rapid `h/j/k/l` tap bursts
+
+Long holds and repeated taps exercise different paths. A tap starts a new helper
+client and sends one `hold-start` command to the reusable 750ms worker. Run the
+100ms tap scenarios against the empty or realistic 1000-item fixture with:
+
+```sh
+make benchmark-taps ITERATIONS=10
+make benchmark-taps-realistic ITERATIONS=10
+```
+
+The default matrix runs three fixed sequences:
+
+- List View: ten `j` taps followed by three `k` taps;
+- Icon View: ten `l` taps followed by three `h` taps;
+- Column View: three `j l j h k` hierarchy cycles followed by `j`.
+
+Each command is submitted against an absolute schedule, 100ms apart by default.
+The runner records client enqueue duration, submission lateness, command status,
+and final Finder selection. Override the interval with
+`FINDER_VIM_TAP_INTERVAL_MS`; accepted values are 20–1000ms.
+
+Validate both profiles without opening Finder or creating result files with:
+
+```sh
+make benchmark-taps-preflight
+make benchmark-taps-realistic-preflight
+```
+
+`make check` also exercises the absolute scheduler at 50, 100, and 150ms with a
+stub helper, verifies command-failure accounting and summary percentiles, and
+confirms that preflight does not create a result directory. This headless test
+does not launch or activate Finder.
+
+Build a reproducible baseline/candidate pair without installing either helper:
+
+```sh
+make benchmark-comparison-helpers \
+  BASELINE_REF=793a82c \
+  CANDIDATE_REF=HEAD
+```
+
+The helpers are written to `.build/benchmark-helpers/baseline/` and
+`.build/benchmark-helpers/candidate/`. Each directory includes an
+`environment.txt` manifest with the requested ref, resolved commit or worktree
+source, compiler, source SHA-256, and helper SHA-256. Pass either helper path as
+`FINDER_VIM_HELPER` to a preflight or visible benchmark; building these files
+does not change the installed dogfood helper.
+
+The recorded 2026-07-16 baseline/candidate run, including sanitized raw data and
+the correction for non-file AX rows in held-navigation position reporting, is
+under
+[`benchmarks/results/2026-07-16-navigation-ab/`](../benchmarks/results/2026-07-16-navigation-ab/SUMMARY.md).
+
+This runner invokes the same helper command used by the generated Karabiner rule,
+but it excludes physical input and Karabiner evaluation. Client enqueue duration
+is not Finder selection latency, and final-path correctness cannot prove that
+every intermediate frame was smooth. Observe the visible selection during the
+run before making a product claim.
 
 ## List and Icon direct navigation
 

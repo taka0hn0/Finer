@@ -1,0 +1,31 @@
+scenario	iteration	result	expected_path	final_path
+list_jk	1	pass	$REPO/.build/benchmark-fixtures/realistic-mixed/items-1000/01-A/item-00007 document.rtf	$REPO/.build/benchmark-fixtures/realistic-mixed/items-1000/01-A/item-00007 document.rtf
+list_jk	2	pass	$REPO/.build/benchmark-fixtures/realistic-mixed/items-1000/01-A/item-00007 document.rtf	$REPO/.build/benchmark-fixtures/realistic-mixed/items-1000/01-A/item-00007 document.rtf
+list_jk	3	pass	$REPO/.build/benchmark-fixtures/realistic-mixed/items-1000/01-A/item-00007 document.rtf	$REPO/.build/benchmark-fixtures/realistic-mixed/items-1000/01-A/item-00007 document.rtf
+list_jk	4	pass	$REPO/.build/benchmark-fixtures/realistic-mixed/items-1000/01-A/item-00007 document.rtf	$REPO/.build/benchmark-fixtures/realistic-mixed/items-1000/01-A/item-00007 document.rtf
+list_jk	5	pass	$REPO/.build/benchmark-fixtures/realistic-mixed/items-1000/01-A/item-00007 document.rtf	$REPO/.build/benchmark-fixtures/realistic-mixed/items-1000/01-A/item-00007 document.rtf
+list_jk	6	pass	$REPO/.build/benchmark-fixtures/realistic-mixed/items-1000/01-A/item-00007 document.rtf	$REPO/.build/benchmark-fixtures/realistic-mixed/items-1000/01-A/item-00007 document.rtf
+list_jk	7	pass	$REPO/.build/benchmark-fixtures/realistic-mixed/items-1000/01-A/item-00007 document.rtf	$REPO/.build/benchmark-fixtures/realistic-mixed/items-1000/01-A/item-00007 document.rtf
+list_jk	8	pass	$REPO/.build/benchmark-fixtures/realistic-mixed/items-1000/01-A/item-00007 document.rtf	$REPO/.build/benchmark-fixtures/realistic-mixed/items-1000/01-A/item-00007 document.rtf
+list_jk	9	pass	$REPO/.build/benchmark-fixtures/realistic-mixed/items-1000/01-A/item-00007 document.rtf	$REPO/.build/benchmark-fixtures/realistic-mixed/items-1000/01-A/item-00007 document.rtf
+list_jk	10	pass	$REPO/.build/benchmark-fixtures/realistic-mixed/items-1000/01-A/item-00007 document.rtf	$REPO/.build/benchmark-fixtures/realistic-mixed/items-1000/01-A/item-00007 document.rtf
+icon_hl	1	pass	$REPO/.build/benchmark-fixtures/realistic-mixed/items-1000/01-A/item-00007 document.rtf	$REPO/.build/benchmark-fixtures/realistic-mixed/items-1000/01-A/item-00007 document.rtf
+icon_hl	2	pass	$REPO/.build/benchmark-fixtures/realistic-mixed/items-1000/01-A/item-00007 document.rtf	$REPO/.build/benchmark-fixtures/realistic-mixed/items-1000/01-A/item-00007 document.rtf
+icon_hl	3	pass	$REPO/.build/benchmark-fixtures/realistic-mixed/items-1000/01-A/item-00007 document.rtf	$REPO/.build/benchmark-fixtures/realistic-mixed/items-1000/01-A/item-00007 document.rtf
+icon_hl	4	pass	$REPO/.build/benchmark-fixtures/realistic-mixed/items-1000/01-A/item-00007 document.rtf	$REPO/.build/benchmark-fixtures/realistic-mixed/items-1000/01-A/item-00007 document.rtf
+icon_hl	5	pass	$REPO/.build/benchmark-fixtures/realistic-mixed/items-1000/01-A/item-00007 document.rtf	$REPO/.build/benchmark-fixtures/realistic-mixed/items-1000/01-A/item-00007 document.rtf
+icon_hl	6	pass	$REPO/.build/benchmark-fixtures/realistic-mixed/items-1000/01-A/item-00007 document.rtf	$REPO/.build/benchmark-fixtures/realistic-mixed/items-1000/01-A/item-00007 document.rtf
+icon_hl	7	pass	$REPO/.build/benchmark-fixtures/realistic-mixed/items-1000/01-A/item-00007 document.rtf	$REPO/.build/benchmark-fixtures/realistic-mixed/items-1000/01-A/item-00007 document.rtf
+icon_hl	8	pass	$REPO/.build/benchmark-fixtures/realistic-mixed/items-1000/01-A/item-00007 document.rtf	$REPO/.build/benchmark-fixtures/realistic-mixed/items-1000/01-A/item-00007 document.rtf
+icon_hl	9	pass	$REPO/.build/benchmark-fixtures/realistic-mixed/items-1000/01-A/item-00007 document.rtf	$REPO/.build/benchmark-fixtures/realistic-mixed/items-1000/01-A/item-00007 document.rtf
+icon_hl	10	pass	$REPO/.build/benchmark-fixtures/realistic-mixed/items-1000/01-A/item-00007 document.rtf	$REPO/.build/benchmark-fixtures/realistic-mixed/items-1000/01-A/item-00007 document.rtf
+column_hjkl	1	pass	$REPO/.build/benchmark-fixtures/realistic-mixed/items-1000/01-A	$REPO/.build/benchmark-fixtures/realistic-mixed/items-1000/01-A
+column_hjkl	2	pass	$REPO/.build/benchmark-fixtures/realistic-mixed/items-1000/01-A	$REPO/.build/benchmark-fixtures/realistic-mixed/items-1000/01-A
+column_hjkl	3	pass	$REPO/.build/benchmark-fixtures/realistic-mixed/items-1000/01-A	$REPO/.build/benchmark-fixtures/realistic-mixed/items-1000/01-A
+column_hjkl	4	pass	$REPO/.build/benchmark-fixtures/realistic-mixed/items-1000/01-A	$REPO/.build/benchmark-fixtures/realistic-mixed/items-1000/01-A
+column_hjkl	5	pass	$REPO/.build/benchmark-fixtures/realistic-mixed/items-1000/01-A	$REPO/.build/benchmark-fixtures/realistic-mixed/items-1000/01-A
+column_hjkl	6	pass	$REPO/.build/benchmark-fixtures/realistic-mixed/items-1000/01-A	$REPO/.build/benchmark-fixtures/realistic-mixed/items-1000/01-A
+column_hjkl	7	pass	$REPO/.build/benchmark-fixtures/realistic-mixed/items-1000/01-A	$REPO/.build/benchmark-fixtures/realistic-mixed/items-1000/01-A
+column_hjkl	8	pass	$REPO/.build/benchmark-fixtures/realistic-mixed/items-1000/01-A	$REPO/.build/benchmark-fixtures/realistic-mixed/items-1000/01-A
+column_hjkl	9	pass	$REPO/.build/benchmark-fixtures/realistic-mixed/items-1000/01-A	$REPO/.build/benchmark-fixtures/realistic-mixed/items-1000/01-A
+column_hjkl	10	pass	$REPO/.build/benchmark-fixtures/realistic-mixed/items-1000/01-A	$REPO/.build/benchmark-fixtures/realistic-mixed/items-1000/01-A

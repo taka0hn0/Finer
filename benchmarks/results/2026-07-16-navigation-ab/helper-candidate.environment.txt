@@ -1,0 +1,13 @@
+label=candidate
+requested_ref=HEAD
+source_kind=git
+resolved_commit=b55ab8612c4d719e9e048fc81534378f410a4d01
+source_blob=d6a80b7b22710cad81140a801386fe28bc305ffb
+source_path=src/finder_ax_step.c
+source_sha256=e61eb37653708d5aa3291261547a0c3ce353178c9705165902ef6d2885a2fa3a
+helper_sha256=1ce09d0c81467281b699df95cd8cac4307f11ad247df4fe5fa600b7eecf25b4f
+architecture=arm64
+compiler=/Library/Developer/CommandLineTools/usr/bin/clang
+compiler_version=Apple clang version 21.0.0 (clang-2100.1.1.101)
+compile_flags=-std=c11 -O2 -Wall -Wextra -Werror
+frameworks=ApplicationServices Carbon

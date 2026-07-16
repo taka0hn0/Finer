@@ -40,6 +40,7 @@ if [[ ! -x "$helper" ]]; then
     print -u2 -- "Run make install or set FINDER_VIM_HELPER."
     exit 1
 fi
+"$repo_root/scripts/require_benchmark_metrics.sh" "$helper"
 
 profile_marker="$fixture_root/.content-profile"
 if [[ ! -r "$profile_marker" || "$(<"$profile_marker")" != "$content_profile" ]]; then

@@ -6,8 +6,10 @@ C_HELPER := $(BUILD_DIR)/finder_ax_step
 SWIFT_HELPER := $(BUILD_DIR)/finder_ax_move
 ITERATIONS ?= 10
 COUNTS ?= 10 1000 10000
+BASELINE_REF ?= 793a82c
+CANDIDATE_REF ?= HEAD
 
-.PHONY: all build check clean install uninstall test-install benchmark-fixtures benchmark-realistic-fixtures benchmark-column benchmark-list benchmark-icon benchmark-views benchmark-column-realistic benchmark-list-realistic benchmark-icon-realistic benchmark-realistic-views benchmark-worker-timeout benchmark-hold test-finder-navigation
+.PHONY: all build check clean install uninstall test-install benchmark-comparison-helpers benchmark-fixtures benchmark-realistic-fixtures benchmark-column benchmark-list benchmark-icon benchmark-views benchmark-column-realistic benchmark-list-realistic benchmark-icon-realistic benchmark-realistic-views benchmark-worker-timeout benchmark-hold benchmark-hold-realistic benchmark-hold-preflight benchmark-hold-realistic-preflight benchmark-taps benchmark-taps-realistic benchmark-taps-preflight benchmark-taps-realistic-preflight test-finder-navigation
 
 all: build
 
@@ -29,6 +31,7 @@ $(SWIFT_HELPER): src/finder_ax_move.swift | $(BUILD_DIR)
 check: build
 	jq empty rules/generated/finder-vim.json
 	./scripts/test_generated_rule.sh
+	./scripts/test_tap_burst_headless.sh
 	zsh -n scripts/*.sh
 	! rg -n '/Users/[^/]+/' . \
 		--glob '!docs/FINDER_VIM_SPEC.md' \
@@ -44,6 +47,10 @@ uninstall:
 
 test-install: build
 	./scripts/test_installation.sh
+
+benchmark-comparison-helpers:
+	./scripts/build_comparison_helper.sh "$(BASELINE_REF)" baseline
+	./scripts/build_comparison_helper.sh "$(CANDIDATE_REF)" candidate
 
 benchmark-fixtures:
 	FINDER_VIM_BENCHMARK_COUNTS="$(COUNTS)" \
@@ -97,6 +104,45 @@ benchmark-hold:
 	FINDER_VIM_BENCHMARK_COUNTS=1000 \
 		./scripts/prepare_benchmark_fixtures.sh
 	./scripts/benchmark_hold_navigation.sh "$(ITERATIONS)"
+
+benchmark-hold-realistic: benchmark-realistic-fixtures
+	FINDER_VIM_FIXTURE_ROOT="$(CURDIR)/$(BUILD_DIR)/benchmark-fixtures/realistic-mixed" \
+	FINDER_VIM_BENCHMARK_PROFILE=realistic-mixed \
+		./scripts/benchmark_hold_navigation.sh "$(ITERATIONS)"
+
+benchmark-hold-preflight:
+	FINDER_VIM_BENCHMARK_COUNTS=1000 \
+		./scripts/prepare_benchmark_fixtures.sh
+	FINDER_VIM_BENCHMARK_PREFLIGHT=1 \
+		./scripts/benchmark_hold_navigation.sh "$(ITERATIONS)"
+
+benchmark-hold-realistic-preflight: benchmark-realistic-fixtures
+	FINDER_VIM_FIXTURE_ROOT="$(CURDIR)/$(BUILD_DIR)/benchmark-fixtures/realistic-mixed" \
+	FINDER_VIM_BENCHMARK_PROFILE=realistic-mixed \
+	FINDER_VIM_BENCHMARK_PREFLIGHT=1 \
+		./scripts/benchmark_hold_navigation.sh "$(ITERATIONS)"
+
+benchmark-taps:
+	FINDER_VIM_BENCHMARK_COUNTS=1000 \
+		./scripts/prepare_benchmark_fixtures.sh
+	./scripts/benchmark_tap_burst.sh "$(ITERATIONS)"
+
+benchmark-taps-realistic: benchmark-realistic-fixtures
+	FINDER_VIM_FIXTURE_ROOT="$(CURDIR)/$(BUILD_DIR)/benchmark-fixtures/realistic-mixed" \
+	FINDER_VIM_BENCHMARK_PROFILE=realistic-mixed \
+		./scripts/benchmark_tap_burst.sh "$(ITERATIONS)"
+
+benchmark-taps-preflight:
+	FINDER_VIM_BENCHMARK_COUNTS=1000 \
+		./scripts/prepare_benchmark_fixtures.sh
+	FINDER_VIM_BENCHMARK_PREFLIGHT=1 \
+		./scripts/benchmark_tap_burst.sh "$(ITERATIONS)"
+
+benchmark-taps-realistic-preflight: benchmark-realistic-fixtures
+	FINDER_VIM_FIXTURE_ROOT="$(CURDIR)/$(BUILD_DIR)/benchmark-fixtures/realistic-mixed" \
+	FINDER_VIM_BENCHMARK_PROFILE=realistic-mixed \
+	FINDER_VIM_BENCHMARK_PREFLIGHT=1 \
+		./scripts/benchmark_tap_burst.sh "$(ITERATIONS)"
 
 test-finder-navigation: benchmark-fixtures
 	./scripts/test_finder_navigation.sh

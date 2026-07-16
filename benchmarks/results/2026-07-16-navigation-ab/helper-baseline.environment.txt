@@ -1,0 +1,13 @@
+label=baseline
+requested_ref=793a82c
+source_kind=git
+resolved_commit=793a82cdafffb5a4a71051a9370c8a0cbda436d0
+source_blob=26956c17c2d0001577fc021e1ef618f00be7a53f
+source_path=src/finder_ax_step.c
+source_sha256=acb50335915593a08dc5effd8a9a17085da615f53310bece6f0cda01431be0d2
+helper_sha256=ec0fe41c382490f4cfe496bab2a5fdb1be8932c563f7ec0ccb2a11c7b38016ae
+architecture=arm64
+compiler=/Library/Developer/CommandLineTools/usr/bin/clang
+compiler_version=Apple clang version 21.0.0 (clang-2100.1.1.101)
+compile_flags=-std=c11 -O2 -Wall -Wextra -Werror
+frameworks=ApplicationServices Carbon
