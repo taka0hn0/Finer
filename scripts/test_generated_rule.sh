@@ -30,6 +30,39 @@ def finder_normal_conditions:
         and .value == 1
     )] | length == 1);
 
+def finder_visual_conditions:
+    ([.conditions[] | select(
+        .type == "frontmost_application_if"
+        and .bundle_identifiers == ["^com\\.apple\\.finder$"]
+    )] | length == 1)
+    and ([.conditions[] | select(
+        .type == "expression_unless"
+        and .expression == $text_expression
+    )] | length == 1)
+    and ([.conditions[] | select(
+        .type == "variable_if"
+        and .name == "finder_visual_mode"
+        and .value == 1
+    )] | length == 1);
+
+def exact_visual_count_commands($direction):
+    ([.to[] | select(.shell_command? != null) | {
+        shell_command,
+        conditions
+    }]) == ([range(1; 100) as $count | {
+        shell_command: ("exec $HOME/.local/libexec/finder-vim/finder_ax_move visual-\($direction) \($count) >/dev/null 2>&1"),
+        conditions: [{
+            expression: ("finder_motion_count == \($count)"),
+            type: "expression_if"
+        }]
+    }]);
+
+def clears_motion_count:
+    .to[-2:] == [
+        {"set_variable":{"name":"finder_motion_count","value":0}},
+        {"set_variable":{"name":"finder_motion_count_expiration","value":0}}
+    ];
+
 [
     ([
         .rules[]
@@ -48,7 +81,11 @@ def finder_normal_conditions:
         | .manipulators[]
         | select(
             .description == "Normal Mode -> Visual Mode: Press v to start range selection"
-            and .to[0] == {"shell_command":$visual_start_command}
+            and .from == {"key_code":"v"}
+            and .to == [
+                {"shell_command":$visual_start_command},
+                {"set_variable":{"name":"finder_visual_mode","value":1}}
+            ]
             and finder_normal_conditions
         )
     ] | length == 1),
@@ -57,18 +94,25 @@ def finder_normal_conditions:
         | select(.description == "Finer Navigation")
         | .manipulators[]
         | select(
-            (.description == "Visual Mode: Extend selection down by Finder motion count"
-                or .description == "Visual Mode: Extend selection up by Finder motion count")
-            and ([.conditions[] | select(
-                .name == "finder_visual_mode"
-                and .type == "variable_if"
-                and .value == 1
-            )] | length == 1)
-            and ([.to[] | select(.shell_command? != null)] | length == 99)
-            and ([.to[] | select(.shell_command? != null) | .shell_command]
-                | all(contains("finder_ax_move visual-")))
+            .description == "Visual Mode: Extend selection down by Finder motion count"
+            and .from == {"key_code":"j"}
+            and finder_visual_conditions
+            and exact_visual_count_commands("down")
+            and clears_motion_count
         )
-    ] | length == 2),
+    ] | length == 1),
+    ([
+        .rules[]
+        | select(.description == "Finer Navigation")
+        | .manipulators[]
+        | select(
+            .description == "Visual Mode: Extend selection up by Finder motion count"
+            and .from == {"key_code":"k"}
+            and finder_visual_conditions
+            and exact_visual_count_commands("up")
+            and clears_motion_count
+        )
+    ] | length == 1),
     ([
         .rules[]
         | select(.description == "Finer Navigation")
@@ -102,16 +146,85 @@ def finder_normal_conditions:
         | .manipulators[]
         | select(
             (.description == "Visual Mode: Press gg to extend selection to first or Grid column top"
-                and .to[0].shell_command == "exec $HOME/.local/libexec/finder-vim/finder_ax_move visual-first >/dev/null 2>&1")
+                and .from == {"key_code":"g"}
+                and .to == [
+                    {"shell_command":"exec $HOME/.local/libexec/finder-vim/finder_ax_move visual-first >/dev/null 2>&1"},
+                    {"set_variable":{"name":"finder_g_prefix","value":0}}
+                ]
+                and ([.conditions[] | select(
+                    .name == "finder_g_prefix"
+                    and .type == "variable_if"
+                    and .value == 1
+                )] | length == 1))
             or (.description == "Visual Mode: Press G to extend selection to last or Grid column bottom"
-                and .to[0].shell_command == "exec $HOME/.local/libexec/finder-vim/finder_ax_move visual-last >/dev/null 2>&1")
+                and .from == {
+                    "key_code":"g",
+                    "modifiers":{"mandatory":["shift"],"optional":["caps_lock"]}
+                }
+                and .to == [
+                    {"shell_command":"exec $HOME/.local/libexec/finder-vim/finder_ax_move visual-last >/dev/null 2>&1"}
+                ])
         )
-        | select([.conditions[] | select(
-            .name == "finder_visual_mode"
-            and .type == "variable_if"
-            and .value == 1
-        )] | length == 1)
+        | select(finder_visual_conditions)
     ] | length == 2),
+    ([
+        .rules[]
+        | select(.description == "Finer Utility Commands")
+        | .manipulators[]
+        | select(
+            .description == "Normal/Visual Mode: Start gg sequence"
+            and .from == {"key_code":"g"}
+            and .to == [{"set_variable":{"name":"finder_g_prefix","value":1}}]
+            and ([.conditions[] | select(.name == "finder_visual_mode")] | length == 0)
+        )
+    ] | length == 1),
+    ([
+        .rules[]
+        | select(.description == "Finer Navigation")
+        | .manipulators[]
+        | select(
+            .description == "Visual Mode -> Normal Mode: Press Esc to stop range selection"
+            and .from == {"key_code":"escape"}
+            and .to == [
+                {"set_variable":{"name":"finder_visual_mode","value":0}},
+                {"set_variable":{"name":"finder_motion_count","value":0}},
+                {"set_variable":{"name":"finder_motion_count_expiration","value":0}},
+                {"shell_command":"exec /usr/bin/truncate -s 0 $HOME/.local/state/finder-vim/finder_visual_anchor.txt"}
+            ]
+            and finder_visual_conditions
+        )
+    ] | length == 1),
+    ([
+        .rules[]
+        | select(.description == "Finer Navigation")
+        | .manipulators[]
+        | select(
+            (.description == "Visual Mode: Copy selection with y and return to Normal Mode"
+                or .description == "Visual Mode: Move selection to Trash with d and return to Normal Mode")
+            and ([.to[] | select(.shell_command? == $clear_visual_state_command)] | length == 1)
+            and ([.to[] | select(
+                .set_variable?.name == "finder_visual_mode"
+                and .set_variable.value == 0
+            )] | length == 1)
+            and finder_visual_conditions
+        )
+    ] | length == 2),
+    ([
+        .rules[]
+        | select(.description == "Finer Navigation")
+        | .manipulators[]
+        | select(
+            .description == "Visual Mode: Mark selection for move with x and return to Normal Mode"
+            and ([.to[] | select(
+                .shell_command? == "$HOME/.local/libexec/finder-vim/finder_action_marked.sh cut-current >/dev/null 2>&1; exec /usr/bin/truncate -s 0 $HOME/.local/state/finder-vim/finder_visual_anchor.txt"
+            )] | length == 1)
+            and ([.to[] | select(
+                .set_variable?.name == "finder_visual_mode"
+                and .set_variable.value == 0
+            )] | length == 1)
+            and finder_visual_conditions
+        )
+    ] | length == 1),
     ([
         .rules[]
         | select(.description == "Finer Utility Commands")
