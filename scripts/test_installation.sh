@@ -46,6 +46,8 @@ cp "$main_config" "$expected_main"
 print -r -- '{"title":"pre-existing-importable-rule"}' > "$rule_file"
 cp "$rule_file" "$expected_original_rule"
 print -r -- 'preserve marks' > "$state_dir/finder_marks.txt"
+print -r -- 'preserve anchor' > "$state_dir/finder_navigation_anchor.txt"
+print -r -- 'preserve visual anchor' > "$state_dir/finder_visual_anchor.txt"
 print -r -- 'preserve copy' > "$state_dir/finder_copy.txt"
 print -r -- 'preserve cut' > "$state_dir/finder_cut.txt"
 
@@ -66,6 +68,8 @@ cmp -s "$repo_root/rules/generated/finder-vim.json" "$rule_file" \
     || fail "installed rule differs from source"
 cmp -s "$main_config" "$expected_main" || fail "main karabiner.json changed"
 assert_content "$state_dir/finder_marks.txt" 'preserve marks'
+assert_content "$state_dir/finder_navigation_anchor.txt" 'preserve anchor'
+assert_content "$state_dir/finder_visual_anchor.txt" 'preserve visual anchor'
 assert_content "$state_dir/finder_copy.txt" 'preserve copy'
 assert_content "$state_dir/finder_cut.txt" 'preserve cut'
 for direction in down up left right; do
@@ -104,6 +108,8 @@ done
 [[ ! -e "$rule_file" ]] || fail "rule remains after uninstall"
 cmp -s "$main_config" "$expected_main" || fail "main karabiner.json changed"
 assert_content "$state_dir/finder_marks.txt" 'preserve marks'
+assert_content "$state_dir/finder_navigation_anchor.txt" 'preserve anchor'
+assert_content "$state_dir/finder_visual_anchor.txt" 'preserve visual anchor'
 assert_content "$state_dir/finder_copy.txt" 'preserve copy'
 assert_content "$state_dir/finder_cut.txt" 'preserve cut'
 

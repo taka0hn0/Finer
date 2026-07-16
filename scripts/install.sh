@@ -26,6 +26,8 @@ typeset -a destinations=(
 typeset -a modes=(0755 0755 0755 0755 0644)
 typeset -a state_names=(
     finder_marks.txt
+    finder_navigation_anchor.txt
+    finder_visual_anchor.txt
     finder_copy.txt
     finder_cut.txt
     finder_down_hold.txt

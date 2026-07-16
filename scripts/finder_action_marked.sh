@@ -2,10 +2,12 @@
 
 action="$1"
 state_file="${KARABINER_FINDER_MARKS_FILE:-$HOME/.local/state/finder-vim/finder_marks.txt}"
+anchor_file="${KARABINER_FINDER_ANCHOR_FILE:-$HOME/.local/state/finder-vim/finder_navigation_anchor.txt}"
 copy_file="${KARABINER_FINDER_COPY_FILE:-$HOME/.local/state/finder-vim/finder_copy.txt}"
 cut_file="${KARABINER_FINDER_CUT_FILE:-$HOME/.local/state/finder-vim/finder_cut.txt}"
 mkdir -p "$(dirname "$state_file")"
-touch "$state_file" "$copy_file" "$cut_file"
+mkdir -p "$(dirname "$anchor_file")"
+touch "$state_file" "$anchor_file" "$copy_file" "$cut_file"
 
 case "$action" in
     copy|delete|cut|copy-current|delete-current|cut-current)
@@ -74,6 +76,7 @@ case "$action" in
         write_paths "$cut_file"
         : > "$copy_file"
         : > "$state_file"
+        : > "$anchor_file"
         ;;
     delete|delete-current)
         if [ "${#paths[@]}" -eq 0 ]; then
@@ -97,5 +100,6 @@ on run argv
 end run
 APPLESCRIPT
         : > "$state_file"
+        : > "$anchor_file"
         ;;
 esac

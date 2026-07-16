@@ -16,7 +16,7 @@ private enum MoveError: Error, CustomStringConvertible {
     var description: String {
         switch self {
         case .invalidArguments:
-            return "Usage: finder_ax_move <down|up> <1...99> | <down-wrap|up-wrap|first|last|toggle-mark|copy-absolute|copy-directory|copy-filename|copy-stem> | <hold-start|hold-repeat> <down|up>"
+            return "Usage: finder_ax_move <down|up|visual-down|visual-up> <1...99> | <down-wrap|up-wrap|first|last|visual-start|visual-first|visual-last|toggle-mark|copy-absolute|copy-directory|copy-filename|copy-stem> | <hold-start|hold-repeat> <down|up>"
         case .finderIsNotFrontmost:
             return "Finder is not frontmost"
         case .accessibilityUnavailable:
@@ -53,6 +53,9 @@ private enum CopyMode: String {
 
 private enum Command {
     case move(Direction, Int, wrapping: Bool)
+    case visualStart
+    case visualMove(Direction, Int)
+    case visualEdge(Direction)
     case holdStart(Direction)
     case holdRepeat(Direction)
     case toggleMark
@@ -123,7 +126,7 @@ private func descendantNavigationContainers(
 
     let role = stringAttribute(element, kAXRoleAttribute) ?? ""
     var containers: [(AXUIElement, String)] = []
-    if role == kAXOutlineRole || role == kAXListRole {
+    if role == kAXOutlineRole || role == kAXListRole || role == kAXGridRole {
         containers.append((element, role))
     }
     for child in elements(element, kAXChildrenAttribute) {
@@ -140,7 +143,7 @@ private func navigationContainer(
 
     for _ in 0..<10 {
         let role = stringAttribute(current, kAXRoleAttribute) ?? ""
-        if role == kAXOutlineRole || role == kAXListRole {
+        if role == kAXOutlineRole || role == kAXListRole || role == kAXGridRole {
             return (current, role)
         }
 
@@ -184,7 +187,10 @@ private func navigationItems(_ container: AXUIElement, role: String) throws -> [
         return rows
     }
 
-    let items = elements(container, kAXChildrenAttribute)
+    let directChildren = elements(container, kAXChildrenAttribute)
+    let items = stringAttribute(container, kAXSubroleAttribute) == "AXCollectionList"
+        ? directChildren.flatMap { elements($0, kAXChildrenAttribute) }
+        : directChildren
     guard !items.isEmpty else { throw MoveError.emptyContainer }
     return items
 }
@@ -206,6 +212,165 @@ private func marksFileURL() -> URL {
     }
     return FileManager.default.homeDirectoryForCurrentUser
         .appendingPathComponent(".local/state/finder-vim/finder_marks.txt")
+}
+
+private struct NavigationAnchorRecord {
+    let indexHint: Int
+    let itemURL: String
+}
+
+private struct VisualAnchorRecord {
+    let indexHint: Int
+    let itemPath: String
+}
+
+private func navigationAnchorFileURL() -> URL {
+    if let overridePath = ProcessInfo.processInfo.environment["KARABINER_FINDER_ANCHOR_FILE"] {
+        return URL(fileURLWithPath: overridePath)
+    }
+    return FileManager.default.homeDirectoryForCurrentUser
+        .appendingPathComponent(".local/state/finder-vim/finder_navigation_anchor.txt")
+}
+
+private func visualAnchorFileURL() -> URL {
+    if let overridePath = ProcessInfo.processInfo.environment["KARABINER_FINDER_VISUAL_ANCHOR_FILE"] {
+        return URL(fileURLWithPath: overridePath)
+    }
+    return FileManager.default.homeDirectoryForCurrentUser
+        .appendingPathComponent(".local/state/finder-vim/finder_visual_anchor.txt")
+}
+
+private func navigationItemURLString(_ item: AXUIElement) -> String? {
+    urlAttribute(item)?.absoluteString
+}
+
+private func navigationItemIndex(
+    containing element: AXUIElement,
+    in items: [AXUIElement]
+) -> Int? {
+    var current = element
+    for _ in 0..<8 {
+        if let index = items.firstIndex(where: { CFEqual($0, current) }) {
+            return index
+        }
+        guard let parentValue = try? attribute(current, kAXParentAttribute),
+              CFGetTypeID(parentValue) == AXUIElementGetTypeID() else {
+            return nil
+        }
+        current = parentValue as! AXUIElement
+    }
+    return nil
+}
+
+private func parseNavigationAnchor(_ contents: String) -> NavigationAnchorRecord? {
+    let fields = contents.split(
+        separator: "\t",
+        maxSplits: 2,
+        omittingEmptySubsequences: false
+    )
+    guard fields.count == 3,
+          fields[0] == "1",
+          let indexHint = Int(fields[1]) else { return nil }
+
+    let itemURL = String(fields[2]).trimmingCharacters(in: .newlines)
+    guard !itemURL.isEmpty else { return nil }
+    return NavigationAnchorRecord(indexHint: indexHint, itemURL: itemURL)
+}
+
+private func takeNavigationAnchor(in items: [AXUIElement]) -> Int? {
+    let stateURL = navigationAnchorFileURL()
+    let claimedURL = stateURL.deletingLastPathComponent().appendingPathComponent(
+        ".finder_navigation_anchor.consuming.\(ProcessInfo.processInfo.processIdentifier).\(UUID().uuidString)"
+    )
+    do {
+        try FileManager.default.moveItem(at: stateURL, to: claimedURL)
+    } catch {
+        return nil
+    }
+    defer { try? FileManager.default.removeItem(at: claimedURL) }
+
+    guard let values = try? claimedURL.resourceValues(
+        forKeys: [.isRegularFileKey, .isSymbolicLinkKey]
+    ), values.isRegularFile == true, values.isSymbolicLink != true else {
+        return nil
+    }
+    guard let contents = try? String(contentsOf: claimedURL, encoding: .utf8),
+          let record = parseNavigationAnchor(contents) else { return nil }
+
+    if items.indices.contains(record.indexHint),
+       navigationItemURLString(items[record.indexHint]) == record.itemURL {
+        return record.indexHint
+    }
+    return items.firstIndex {
+        navigationItemURLString($0) == record.itemURL
+    }
+}
+
+private func writeNavigationAnchor(indexHint: Int, itemURL: URL) throws {
+    let stateURL = navigationAnchorFileURL()
+    do {
+        try FileManager.default.createDirectory(
+            at: stateURL.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        let contents = "1\t\(indexHint)\t\(itemURL.absoluteString)\n"
+        try contents.write(to: stateURL, atomically: true, encoding: .utf8)
+    } catch {
+        throw MoveError.stateFile(error.localizedDescription)
+    }
+}
+
+private func parseVisualAnchor(_ contents: String) -> VisualAnchorRecord? {
+    let fields = contents.split(
+        separator: "\t",
+        maxSplits: 2,
+        omittingEmptySubsequences: false
+    )
+    guard fields.count == 3,
+          fields[0] == "1",
+          let indexHint = Int(fields[1]) else { return nil }
+
+    let itemPath = String(fields[2]).trimmingCharacters(in: .newlines)
+    guard !itemPath.isEmpty else { return nil }
+    return VisualAnchorRecord(indexHint: indexHint, itemPath: itemPath)
+}
+
+private func visualItemPath(_ item: AXUIElement) -> String? {
+    urlAttribute(item)?.standardizedFileURL.path
+}
+
+private func readVisualAnchor(in items: [AXUIElement]) -> Int? {
+    let stateURL = visualAnchorFileURL()
+    guard let values = try? stateURL.resourceValues(
+        forKeys: [.isRegularFileKey, .isSymbolicLinkKey]
+    ), values.isRegularFile == true, values.isSymbolicLink != true else {
+        return nil
+    }
+    guard let contents = try? String(contentsOf: stateURL, encoding: .utf8),
+          let record = parseVisualAnchor(contents) else { return nil }
+
+    if items.indices.contains(record.indexHint),
+       visualItemPath(items[record.indexHint]) == record.itemPath {
+        return record.indexHint
+    }
+    return items.firstIndex { visualItemPath($0) == record.itemPath }
+}
+
+private func writeVisualAnchor(indexHint: Int, item: AXUIElement) throws {
+    guard let itemPath = visualItemPath(item) else {
+        throw MoveError.missingSelectionURL
+    }
+    let stateURL = visualAnchorFileURL()
+    do {
+        try FileManager.default.createDirectory(
+            at: stateURL.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        let contents = "1\t\(indexHint)\t\(itemPath)\n"
+        try contents.write(to: stateURL, atomically: true, encoding: .utf8)
+    } catch {
+        throw MoveError.stateFile(error.localizedDescription)
+    }
 }
 
 private func holdTokenURL(for direction: Direction) -> URL {
@@ -257,7 +422,7 @@ private func setSelection(
     role: String,
     allItems: [AXUIElement]
 ) throws {
-    if role == kAXListRole {
+    if role == kAXListRole || role == kAXGridRole {
         try setAttribute(container, kAXSelectedChildrenAttribute, selection as CFArray)
         _ = AXUIElementSetAttributeValue(container, kAXFocusedAttribute as CFString, kCFBooleanTrue)
         return
@@ -280,7 +445,12 @@ private func setSelection(
 private func toggleCurrentMark(_ container: AXUIElement, role: String) throws -> Int {
     let items = try navigationItems(container, role: role)
     let selected = selectedItems(container, role: role, items: items)
-    guard let currentURL = selected.last.flatMap({ urlAttribute($0) }) else {
+    let previousAnchorIndex = takeNavigationAnchor(in: items)
+    let currentItem = previousAnchorIndex.flatMap { items.indices.contains($0) ? items[$0] : nil }
+        ?? selected.last
+    guard let currentItem,
+          let currentIndex = navigationItemIndex(containing: currentItem, in: items),
+          let currentURL = urlAttribute(currentItem) else {
         throw MoveError.missingSelectionURL
     }
 
@@ -300,6 +470,7 @@ private func toggleCurrentMark(_ container: AXUIElement, role: String) throws ->
         return markedSet.contains(url.standardizedFileURL.path)
     }
     try setSelection(markedItems, in: container, role: role, allItems: items)
+    try writeNavigationAnchor(indexHint: currentIndex, itemURL: currentURL)
     return markedItems.count
 }
 
@@ -361,15 +532,146 @@ private func targetIndex(
     }
 }
 
+private func visualEndpointIndex(
+    anchorIndex: Int,
+    selected: [AXUIElement],
+    items: [AXUIElement]
+) -> Int {
+    let selectedIndices = selected.compactMap {
+        navigationItemIndex(containing: $0, in: items)
+    }
+    guard !selectedIndices.isEmpty else { return anchorIndex }
+
+    let first = selectedIndices.min() ?? anchorIndex
+    let last = selectedIndices.max() ?? anchorIndex
+    if first == anchorIndex { return last }
+    if last == anchorIndex { return first }
+    if selectedIndices.contains(anchorIndex) {
+        return abs(first - anchorIndex) > abs(last - anchorIndex) ? first : last
+    }
+    return selectedIndices.last ?? anchorIndex
+}
+
+private func isGridContainer(_ container: AXUIElement, role: String) -> Bool {
+    role == kAXGridRole
+        || stringAttribute(container, kAXSubroleAttribute) == "AXCollectionList"
+}
+
+private func visualEdgeIndex(
+    container: AXUIElement,
+    role: String,
+    items: [AXUIElement],
+    endpointIndex: Int,
+    last: Bool
+) -> Int {
+    guard isGridContainer(container, role: role),
+          items.indices.contains(endpointIndex),
+          let endpointPosition = pointAttribute(items[endpointIndex], kAXPositionAttribute) else {
+        return last ? items.count - 1 : 0
+    }
+
+    var targetIndex = endpointIndex
+    var targetY = endpointPosition.y
+    for (index, item) in items.enumerated() {
+        guard let position = pointAttribute(item, kAXPositionAttribute),
+              abs(position.x - endpointPosition.x) <= 8 else { continue }
+        if (last && position.y > targetY) || (!last && position.y < targetY) {
+            targetIndex = index
+            targetY = position.y
+        }
+    }
+    return targetIndex
+}
+
+private func startVisualSelection(
+    container: AXUIElement,
+    role: String,
+    items: [AXUIElement]
+) throws -> Int {
+    let selected = selectedItems(container, role: role, items: items)
+    guard let currentItem = selected.last,
+          let currentIndex = navigationItemIndex(containing: currentItem, in: items) else {
+        throw MoveError.missingSelectionURL
+    }
+    try writeVisualAnchor(indexHint: currentIndex, item: items[currentIndex])
+    return currentIndex + 1
+}
+
+private func extendVisualSelection(
+    container: AXUIElement,
+    role: String,
+    items: [AXUIElement],
+    direction: Direction,
+    count: Int
+) throws -> Int? {
+    guard let anchorIndex = readVisualAnchor(in: items) else { return nil }
+    let selected = selectedItems(container, role: role, items: items)
+    let endpointIndex = visualEndpointIndex(
+        anchorIndex: anchorIndex,
+        selected: selected,
+        items: items
+    )
+
+    let destinationIndex: Int
+    switch direction {
+    case .down, .up:
+        destinationIndex = targetIndex(
+            currentIndex: endpointIndex,
+            itemCount: items.count,
+            direction: direction,
+            count: count,
+            wrapping: false
+        )
+    case .first, .last:
+        destinationIndex = visualEdgeIndex(
+            container: container,
+            role: role,
+            items: items,
+            endpointIndex: endpointIndex,
+            last: direction == .last
+        )
+    }
+
+    let lowerBound = min(anchorIndex, destinationIndex)
+    let upperBound = max(anchorIndex, destinationIndex)
+    let selection = Array(items[lowerBound...upperBound])
+    try setSelection(selection, in: container, role: role, allItems: items)
+    return destinationIndex + 1
+}
+
+private func extendVisualSelectionAfterPendingStart(
+    container: AXUIElement,
+    role: String,
+    items: [AXUIElement],
+    direction: Direction,
+    count: Int
+) throws -> Int {
+    for attempt in 0..<20 {
+        if let position = try extendVisualSelection(
+            container: container,
+            role: role,
+            items: items,
+            direction: direction,
+            count: count
+        ) {
+            return position
+        }
+        if attempt < 19 { Thread.sleep(forTimeInterval: 0.001) }
+    }
+    throw MoveError.stateFile("Visual selection anchor is unavailable")
+}
+
 private func moveInOutline(
     _ outline: AXUIElement,
     direction: Direction,
     count: Int,
-    wrapping: Bool = false
+    wrapping: Bool = false,
+    useNavigationAnchor: Bool = true
 ) throws -> Int {
     let rows = try navigationItems(outline, role: kAXOutlineRole)
 
-    let currentIndex = rows.firstIndex { boolAttribute($0, kAXSelectedAttribute) }
+    let currentIndex = (useNavigationAnchor ? takeNavigationAnchor(in: rows) : nil)
+        ?? rows.firstIndex { boolAttribute($0, kAXSelectedAttribute) }
     let destinationIndex = targetIndex(
         currentIndex: currentIndex,
         itemCount: rows.count,
@@ -391,14 +693,16 @@ private func moveInList(
     _ list: AXUIElement,
     direction: Direction,
     count: Int,
-    wrapping: Bool = false
+    wrapping: Bool = false,
+    useNavigationAnchor: Bool = true
 ) throws -> Int {
     let items = try navigationItems(list, role: kAXListRole)
 
     let selectedItems = elements(list, kAXSelectedChildrenAttribute)
-    let currentIndex = selectedItems.first.flatMap { selectedItem in
-        items.firstIndex { CFEqual($0, selectedItem) }
-    }
+    let currentIndex = (useNavigationAnchor ? takeNavigationAnchor(in: items) : nil)
+        ?? selectedItems.first.flatMap { selectedItem in
+            items.firstIndex { CFEqual($0, selectedItem) }
+        }
     let destinationIndex = targetIndex(
         currentIndex: currentIndex,
         itemCount: items.count,
@@ -416,7 +720,21 @@ private func moveInList(
 private func run() throws -> Int {
     let arguments = Array(CommandLine.arguments.dropFirst())
     let command: Command
-    if arguments.count == 1, arguments[0] == "toggle-mark" {
+    if arguments.count == 2,
+       arguments[0] == "visual-down" || arguments[0] == "visual-up",
+       let requestedCount = Int(arguments[1]),
+       (1...99).contains(requestedCount) {
+        command = .visualMove(
+            arguments[0] == "visual-down" ? .down : .up,
+            requestedCount
+        )
+    } else if arguments.count == 1, arguments[0] == "visual-start" {
+        command = .visualStart
+    } else if arguments.count == 1, arguments[0] == "visual-first" {
+        command = .visualEdge(.first)
+    } else if arguments.count == 1, arguments[0] == "visual-last" {
+        command = .visualEdge(.last)
+    } else if arguments.count == 1, arguments[0] == "toggle-mark" {
         command = .toggleMark
     } else if arguments.count == 1, let mode = CopyMode(rawValue: arguments[0]) {
         command = .copy(mode)
@@ -467,26 +785,56 @@ private func run() throws -> Int {
     let focusedElement = try attribute(finderElement, kAXFocusedUIElementAttribute) as! AXUIElement
     let (container, role) = try navigationContainer(from: focusedElement, in: finderElement)
 
+    var shouldUseNavigationAnchor = true
     func move(_ direction: Direction, count: Int, wrapping: Bool) throws -> Int {
+        let useNavigationAnchor = shouldUseNavigationAnchor
+        shouldUseNavigationAnchor = false
         if role == kAXOutlineRole {
             return try moveInOutline(
                 container,
                 direction: direction,
                 count: count,
-                wrapping: wrapping
+                wrapping: wrapping,
+                useNavigationAnchor: useNavigationAnchor
             )
         }
         return try moveInList(
             container,
             direction: direction,
             count: count,
-            wrapping: wrapping
+            wrapping: wrapping,
+            useNavigationAnchor: useNavigationAnchor
         )
     }
 
     switch command {
     case let .move(direction, count, wrapping):
         return try move(direction, count: count, wrapping: wrapping)
+    case .visualStart:
+        let items = try navigationItems(container, role: role)
+        return try startVisualSelection(
+            container: container,
+            role: role,
+            items: items
+        )
+    case let .visualMove(direction, count):
+        let items = try navigationItems(container, role: role)
+        return try extendVisualSelectionAfterPendingStart(
+            container: container,
+            role: role,
+            items: items,
+            direction: direction,
+            count: count
+        )
+    case let .visualEdge(direction):
+        let items = try navigationItems(container, role: role)
+        return try extendVisualSelectionAfterPendingStart(
+            container: container,
+            role: role,
+            items: items,
+            direction: direction,
+            count: 0
+        )
     case let .holdStart(direction):
         let position = try move(direction, count: 1, wrapping: true)
         try startHold(for: direction)

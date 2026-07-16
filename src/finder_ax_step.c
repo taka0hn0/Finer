@@ -19,6 +19,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/resource.h>
+#include <sys/wait.h>
 #include <time.h>
 #include <unistd.h>
 
@@ -474,6 +475,260 @@ static AXUIElementRef copy_navigation_item_ancestor(
     return NULL;
 }
 
+static CFStringRef copy_navigation_item_url_string(
+    AXUIElementRef element,
+    int depth
+) {
+    CFTypeRef value = copy_attribute(element, kAXURLAttribute);
+    if (value) {
+        CFStringRef result = NULL;
+        if (CFGetTypeID(value) == CFURLGetTypeID()) {
+            CFURLRef absolute = CFURLCopyAbsoluteURL((CFURLRef)value);
+            if (absolute) {
+                result = CFStringCreateCopy(
+                    kCFAllocatorDefault,
+                    CFURLGetString(absolute)
+                );
+                CFRelease(absolute);
+            }
+        } else if (CFGetTypeID(value) == CFStringGetTypeID()) {
+            result = CFStringCreateCopy(
+                kCFAllocatorDefault,
+                (CFStringRef)value
+            );
+        }
+        CFRelease(value);
+        if (result) return result;
+    }
+
+    if (depth >= 3) return NULL;
+    CFArrayRef children = copy_array_attribute(element, kAXChildrenAttribute);
+    if (!children) return NULL;
+    CFStringRef result = NULL;
+    CFIndex count = CFArrayGetCount(children);
+    for (CFIndex index = 0; index < count && !result; ++index) {
+        result = copy_navigation_item_url_string(
+            (AXUIElementRef)CFArrayGetValueAtIndex(children, index),
+            depth + 1
+        );
+    }
+    CFRelease(children);
+    return result;
+}
+
+static bool parse_navigation_anchor_record(
+    char *record,
+    CFIndex *index_hint,
+    CFStringRef *item_url
+) {
+    char *first_separator = strchr(record, '\t');
+    if (!first_separator || first_separator == record
+        || strncmp(record, "1", (size_t)(first_separator - record)) != 0) {
+        return false;
+    }
+
+    char *index_text = first_separator + 1;
+    char *second_separator = strchr(index_text, '\t');
+    if (!second_separator || second_separator == index_text) return false;
+    *second_separator = '\0';
+
+    char *end = NULL;
+    errno = 0;
+    long parsed_index = strtol(index_text, &end, 10);
+    if (errno != 0 || !end || *end != '\0' || parsed_index < 0) return false;
+
+    char *url_text = second_separator + 1;
+    size_t url_length = strlen(url_text);
+    while (url_length > 0
+            && (url_text[url_length - 1] == '\n'
+                || url_text[url_length - 1] == '\r')) {
+        url_text[--url_length] = '\0';
+    }
+    if (url_length == 0) return false;
+
+    CFStringRef parsed_url = CFStringCreateWithCString(
+        kCFAllocatorDefault,
+        url_text,
+        kCFStringEncodingUTF8
+    );
+    if (!parsed_url) return false;
+    *index_hint = (CFIndex)parsed_index;
+    *item_url = parsed_url;
+    return true;
+}
+
+static bool navigation_item_matches_url(
+    AXUIElementRef item,
+    CFStringRef expected_url
+) {
+    CFStringRef item_url = copy_navigation_item_url_string(item, 0);
+    if (!item_url) return false;
+
+    bool matches = CFEqual(item_url, expected_url);
+    if (!matches) {
+        CFURLRef item_reference = CFURLCreateWithString(
+            kCFAllocatorDefault,
+            item_url,
+            NULL
+        );
+        CFURLRef expected_reference = CFURLCreateWithString(
+            kCFAllocatorDefault,
+            expected_url,
+            NULL
+        );
+        CFURLRef item_path_url = item_reference
+            ? CFURLCreateFilePathURL(kCFAllocatorDefault, item_reference, NULL)
+            : NULL;
+        CFURLRef expected_path_url = expected_reference
+            ? CFURLCreateFilePathURL(kCFAllocatorDefault, expected_reference, NULL)
+            : NULL;
+        CFStringRef item_path = item_path_url
+            ? CFURLCopyFileSystemPath(item_path_url, kCFURLPOSIXPathStyle)
+            : NULL;
+        CFStringRef expected_path = expected_path_url
+            ? CFURLCopyFileSystemPath(expected_path_url, kCFURLPOSIXPathStyle)
+            : NULL;
+        matches = item_path && expected_path && CFEqual(item_path, expected_path);
+
+        if (item_path) CFRelease(item_path);
+        if (expected_path) CFRelease(expected_path);
+        if (item_path_url) CFRelease(item_path_url);
+        if (expected_path_url) CFRelease(expected_path_url);
+        if (item_reference) CFRelease(item_reference);
+        if (expected_reference) CFRelease(expected_reference);
+    }
+    if (item_url) CFRelease(item_url);
+    return matches;
+}
+
+static CFIndex navigation_item_index(
+    const navigation_context_t *context,
+    AXUIElementRef item
+) {
+    CFIndex count = CFArrayGetCount(context->items);
+    CFIndex index = CFArrayGetFirstIndexOfValue(
+        context->items,
+        CFRangeMake(0, count),
+        item
+    );
+    if (index != kCFNotFound || context->role == navigation_outline) {
+        return index;
+    }
+
+    AXUIElementRef ancestor = copy_navigation_item_ancestor(
+        item,
+        context->items
+    );
+    if (!ancestor) return kCFNotFound;
+    index = CFArrayGetFirstIndexOfValue(
+        context->items,
+        CFRangeMake(0, count),
+        ancestor
+    );
+    CFRelease(ancestor);
+    return index;
+}
+
+static CFIndex find_navigation_anchor_index(
+    const navigation_context_t *context,
+    CFIndex index_hint,
+    CFStringRef item_url
+) {
+    CFIndex count = CFArrayGetCount(context->items);
+    if (index_hint >= 0 && index_hint < count) {
+        AXUIElementRef hinted_item = (AXUIElementRef)CFArrayGetValueAtIndex(
+            context->items,
+            index_hint
+        );
+        if (navigation_item_matches_url(hinted_item, item_url)) {
+            return index_hint;
+        }
+    }
+
+    CFStringRef selected_attribute = context->role == navigation_outline
+        ? kAXSelectedRowsAttribute
+        : kAXSelectedChildrenAttribute;
+    CFArrayRef selected = copy_array_attribute(
+        context->container,
+        selected_attribute
+    );
+    if (selected) {
+        CFIndex selected_count = CFArrayGetCount(selected);
+        for (CFIndex selected_index = 0;
+                selected_index < selected_count;
+                ++selected_index) {
+            AXUIElementRef selected_item = (AXUIElementRef)CFArrayGetValueAtIndex(
+                selected,
+                selected_index
+            );
+            if (!navigation_item_matches_url(selected_item, item_url)) continue;
+            CFIndex index = navigation_item_index(context, selected_item);
+            CFRelease(selected);
+            return index;
+        }
+        CFRelease(selected);
+    }
+
+    // The anchor can refer to an item that `s` just unmarked. This fallback is
+    // intentionally limited to the one movement immediately following `s`.
+    for (CFIndex index = 0; index < count; ++index) {
+        AXUIElementRef item = (AXUIElementRef)CFArrayGetValueAtIndex(
+            context->items,
+            index
+        );
+        if (navigation_item_matches_url(item, item_url)) return index;
+    }
+    return kCFNotFound;
+}
+
+static CFIndex take_navigation_anchor(const navigation_context_t *context) {
+    char path[PATH_MAX];
+    const char *override = getenv("KARABINER_FINDER_ANCHOR_FILE");
+    if (override && override[0] != '\0') {
+        snprintf(path, sizeof(path), "%s", override);
+    } else {
+        state_path(path, sizeof(path), "finder_navigation_anchor.txt");
+    }
+
+    char claimed_path[PATH_MAX];
+    int claimed_length = snprintf(
+        claimed_path,
+        sizeof(claimed_path),
+        "%s.consuming.%ld",
+        path,
+        (long)getpid()
+    );
+    if (claimed_length < 0 || (size_t)claimed_length >= sizeof(claimed_path)) {
+        return -1;
+    }
+    if (rename(path, claimed_path) != 0) return -1;
+
+    int descriptor = open(claimed_path, O_RDONLY | O_NOFOLLOW);
+    if (descriptor < 0) {
+        unlink(claimed_path);
+        return -1;
+    }
+    char record[PATH_MAX * 4];
+    ssize_t length = read(descriptor, record, sizeof(record) - 1);
+    close(descriptor);
+    unlink(claimed_path);
+    if (length <= 0 || (size_t)length >= sizeof(record)) return -1;
+    record[length] = '\0';
+
+    CFIndex index_hint = -1;
+    CFStringRef item_url = NULL;
+    if (!parse_navigation_anchor_record(record, &index_hint, &item_url)) {
+        return -1;
+    }
+    CFIndex index = find_navigation_anchor_index(
+        context,
+        index_hint,
+        item_url
+    );
+    CFRelease(item_url);
+    return index == kCFNotFound ? -1 : index;
+}
+
 static CFIndex current_index(const navigation_context_t *context) {
     CFIndex item_count = CFArrayGetCount(context->items);
     CFStringRef selected_attribute = context->role == navigation_outline
@@ -569,6 +824,196 @@ static bool select_index(const navigation_context_t *context, CFIndex index) {
     return error == kAXErrorSuccess;
 }
 
+static bool clear_selection(navigation_context_t *context) {
+    CFStringRef selected_attribute = context->role == navigation_outline
+        ? kAXSelectedRowsAttribute
+        : kAXSelectedChildrenAttribute;
+    CFArrayRef empty_selection = CFArrayCreate(
+        kCFAllocatorDefault,
+        NULL,
+        0,
+        &kCFTypeArrayCallBacks
+    );
+    AXError error = set_attribute(
+        context->container,
+        selected_attribute,
+        empty_selection
+    );
+    CFRelease(empty_selection);
+
+    if (error != kAXErrorSuccess && context->role == navigation_outline) {
+        bool fallback_succeeded = true;
+        CFIndex count = CFArrayGetCount(context->items);
+        for (CFIndex index = 0; index < count; ++index) {
+            AXUIElementRef item = (AXUIElementRef)CFArrayGetValueAtIndex(
+                context->items,
+                index
+            );
+            if (!bool_attribute(item, kAXSelectedAttribute)) continue;
+            if (set_attribute(
+                    item,
+                    kAXSelectedAttribute,
+                    kCFBooleanFalse
+                ) != kAXErrorSuccess) {
+                fallback_succeeded = false;
+            }
+        }
+        if (fallback_succeeded) error = kAXErrorSuccess;
+    }
+
+    if (error == kAXErrorSuccess) {
+        context->predicted_index = -1;
+        set_attribute(
+            context->container,
+            kAXFocusedAttribute,
+            kCFBooleanTrue
+        );
+    }
+    return error == kAXErrorSuccess;
+}
+
+static bool clear_selection_array_attribute(
+    AXUIElementRef element,
+    CFStringRef attribute
+) {
+    CFArrayRef selected = copy_array_attribute(element, attribute);
+    if (!selected) return false;
+
+    CFArrayRef empty_selection = CFArrayCreate(
+        kCFAllocatorDefault,
+        NULL,
+        0,
+        &kCFTypeArrayCallBacks
+    );
+    AXError error = set_attribute(element, attribute, empty_selection);
+    CFRelease(empty_selection);
+    if (error == kAXErrorSuccess) {
+        CFRelease(selected);
+        return true;
+    }
+
+    bool cleared = CFArrayGetCount(selected) > 0;
+    CFIndex count = CFArrayGetCount(selected);
+    for (CFIndex index = 0; index < count; ++index) {
+        AXUIElementRef item = (AXUIElementRef)CFArrayGetValueAtIndex(
+            selected,
+            index
+        );
+        if (set_attribute(
+                item,
+                kAXSelectedAttribute,
+                kCFBooleanFalse
+            ) != kAXErrorSuccess) {
+            cleared = false;
+        }
+    }
+    CFRelease(selected);
+    return cleared;
+}
+
+static void clear_selected_descendants(
+    AXUIElementRef element,
+    int depth,
+    bool *found,
+    bool *failed
+) {
+    if (bool_attribute(element, kAXSelectedAttribute)) {
+        *found = true;
+        if (set_attribute(
+                element,
+                kAXSelectedAttribute,
+                kCFBooleanFalse
+            ) != kAXErrorSuccess) {
+            *failed = true;
+        }
+    }
+    if (depth >= 4) return;
+
+    CFArrayRef children = copy_array_attribute(element, kAXChildrenAttribute);
+    if (!children) return;
+    CFIndex count = CFArrayGetCount(children);
+    for (CFIndex index = 0; index < count; ++index) {
+        clear_selected_descendants(
+            (AXUIElementRef)CFArrayGetValueAtIndex(children, index),
+            depth + 1,
+            found,
+            failed
+        );
+    }
+    CFRelease(children);
+}
+
+static bool clear_focused_selection_fallback(void) {
+    AXUIElementRef application = NULL;
+    if (!finder_is_frontmost(NULL, &application)) return false;
+
+    AXUIElementRef system_wide = AXUIElementCreateSystemWide();
+    CFTypeRef focused_value = copy_attribute(
+        system_wide,
+        kAXFocusedUIElementAttribute
+    );
+    CFRelease(system_wide);
+    if (!focused_value
+        || CFGetTypeID(focused_value) != AXUIElementGetTypeID()) {
+        if (focused_value) CFRelease(focused_value);
+        focused_value = copy_attribute(
+            application,
+            kAXFocusedUIElementAttribute
+        );
+    }
+    CFRelease(application);
+    if (!focused_value
+        || CFGetTypeID(focused_value) != AXUIElementGetTypeID()) {
+        if (focused_value) CFRelease(focused_value);
+        return false;
+    }
+
+    AXUIElementRef focused = (AXUIElementRef)focused_value;
+    AXUIElementRef current = (AXUIElementRef)CFRetain(focused);
+    bool cleared = false;
+    for (int depth = 0; depth < 10; ++depth) {
+        if (clear_selection_array_attribute(
+                current,
+                kAXSelectedRowsAttribute
+            )) {
+            cleared = true;
+        }
+        if (clear_selection_array_attribute(
+                current,
+                kAXSelectedChildrenAttribute
+            )) {
+            cleared = true;
+        }
+        if (bool_attribute(current, kAXSelectedAttribute)
+            && set_attribute(
+                current,
+                kAXSelectedAttribute,
+                kCFBooleanFalse
+            ) == kAXErrorSuccess) {
+            cleared = true;
+        }
+
+        CFTypeRef parent = copy_attribute(current, kAXParentAttribute);
+        CFRelease(current);
+        if (!parent || CFGetTypeID(parent) != AXUIElementGetTypeID()) {
+            if (parent) CFRelease(parent);
+            current = NULL;
+            break;
+        }
+        current = (AXUIElementRef)parent;
+    }
+    if (current) CFRelease(current);
+
+    if (!cleared) {
+        bool found = false;
+        bool failed = false;
+        clear_selected_descendants(focused, 0, &found, &failed);
+        cleared = found && !failed;
+    }
+    CFRelease(focused);
+    return cleared;
+}
+
 static int open_movement_lock(void) {
     char path[PATH_MAX];
     state_path(path, sizeof(path), "finder_ax_step.lock");
@@ -627,6 +1072,115 @@ static bool post_key_code(CGKeyCode key_code) {
     CFRelease(key_down);
     CFRelease(key_up);
     return true;
+}
+
+static bool menu_item_has_deselect_shortcut(AXUIElementRef element) {
+    CFTypeRef role = copy_attribute(element, kAXRoleAttribute);
+    bool menu_item = role
+        && CFGetTypeID(role) == CFStringGetTypeID()
+        && CFEqual(role, kAXMenuItemRole);
+    if (role) CFRelease(role);
+    if (!menu_item) return false;
+
+    CFTypeRef command_character = copy_attribute(
+        element,
+        kAXMenuItemCmdCharAttribute
+    );
+    bool command_is_a = command_character
+        && CFGetTypeID(command_character) == CFStringGetTypeID()
+        && CFStringCompare(
+            (CFStringRef)command_character,
+            CFSTR("A"),
+            kCFCompareCaseInsensitive
+        ) == kCFCompareEqualTo;
+    if (command_character) CFRelease(command_character);
+
+    if (!command_is_a) {
+        CFTypeRef virtual_key = copy_attribute(
+            element,
+            kAXMenuItemCmdVirtualKeyAttribute
+        );
+        int32_t key_code = -1;
+        command_is_a = virtual_key
+            && CFGetTypeID(virtual_key) == CFNumberGetTypeID()
+            && CFNumberGetValue(
+                (CFNumberRef)virtual_key,
+                kCFNumberSInt32Type,
+                &key_code
+            )
+            && key_code == kVK_ANSI_A;
+        if (virtual_key) CFRelease(virtual_key);
+    }
+    if (!command_is_a) return false;
+
+    CFTypeRef modifier_value = copy_attribute(
+        element,
+        kAXMenuItemCmdModifiersAttribute
+    );
+    int32_t modifiers = 0;
+    bool has_modifiers = modifier_value
+        && CFGetTypeID(modifier_value) == CFNumberGetTypeID()
+        && CFNumberGetValue(
+            (CFNumberRef)modifier_value,
+            kCFNumberSInt32Type,
+            &modifiers
+        );
+    if (modifier_value) CFRelease(modifier_value);
+    if (!has_modifiers) return false;
+
+    return (modifiers & kAXMenuItemModifierOption) != 0
+        && (modifiers & (
+            kAXMenuItemModifierShift
+            | kAXMenuItemModifierControl
+            | kAXMenuItemModifierNoCommand
+        )) == 0;
+}
+
+static AXUIElementRef copy_deselect_menu_item(
+    AXUIElementRef element,
+    int depth
+) {
+    if (menu_item_has_deselect_shortcut(element)) {
+        return (AXUIElementRef)CFRetain(element);
+    }
+    if (depth >= 5) return NULL;
+
+    CFArrayRef children = copy_array_attribute(element, kAXChildrenAttribute);
+    if (!children) return NULL;
+    AXUIElementRef result = NULL;
+    CFIndex count = CFArrayGetCount(children);
+    for (CFIndex index = 0; index < count && !result; ++index) {
+        result = copy_deselect_menu_item(
+            (AXUIElementRef)CFArrayGetValueAtIndex(children, index),
+            depth + 1
+        );
+    }
+    CFRelease(children);
+    return result;
+}
+
+static bool perform_finder_deselect_menu_action(void) {
+    AXUIElementRef application = NULL;
+    if (!finder_is_frontmost(NULL, &application)) return false;
+
+    CFTypeRef menu_bar_value = copy_attribute(application, kAXMenuBarAttribute);
+    CFRelease(application);
+    if (!menu_bar_value
+        || CFGetTypeID(menu_bar_value) != AXUIElementGetTypeID()) {
+        if (menu_bar_value) CFRelease(menu_bar_value);
+        return false;
+    }
+
+    AXUIElementRef menu_item = copy_deselect_menu_item(
+        (AXUIElementRef)menu_bar_value,
+        0
+    );
+    CFRelease(menu_bar_value);
+    if (!menu_item) return false;
+    if (metrics_path) ++metrics_ax_writes;
+    AXError error = AXUIElementPerformAction(menu_item, kAXPressAction);
+    CFRelease(menu_item);
+    return error == kAXErrorSuccess;
 }
 
 static CGKeyCode arrow_key_code(direction_t direction) {
@@ -825,13 +1379,21 @@ static CFIndex move_once(
     navigation_context_t *context,
     direction_t direction,
     int lock_fd,
-    bool *navigation_may_change
+    bool *navigation_may_change,
+    bool use_navigation_anchor
 ) {
     if (navigation_may_change) *navigation_may_change = false;
     if (lock_fd >= 0) flock(lock_fd, LOCK_EX);
 
     CFIndex count = CFArrayGetCount(context->items);
-    CFIndex current = context->role == navigation_grid
+    CFIndex anchor = use_navigation_anchor
+        ? take_navigation_anchor(context)
+        : -1;
+    if (anchor >= 0 && !select_index(context, anchor)) anchor = -1;
+    if (anchor >= 0) context->predicted_index = -1;
+    CFIndex current = anchor >= 0
+        ? anchor
+        : context->role == navigation_grid
             && context->predicted_index >= 0
         ? context->predicted_index
         : current_index(context);
@@ -1122,8 +1684,8 @@ static uint64_t counter_delta(uint64_t end, uint64_t start) {
     return end >= start ? end - start : 0;
 }
 
-static void record_metrics(
-    direction_t direction,
+static void record_command_metrics(
+    char command,
     bool cold,
     uint64_t submitted_nanoseconds,
     const metrics_snapshot_t *start,
@@ -1146,7 +1708,7 @@ static void record_metrics(
     record->ax_writes = counter_delta(end->ax_writes, start->ax_writes);
     record->cg_events = counter_delta(end->cg_events, start->cg_events);
     record->result_position = result_position;
-    record->command = direction_command(direction);
+    record->command = command;
     record->cold = cold;
 
     if (start->usage_available && end->usage_available) {
@@ -1248,8 +1810,8 @@ static bool direction_from_command(char command, direction_t *direction) {
     }
 }
 
-static bool send_worker_step(
-    direction_t direction,
+static bool send_worker_command(
+    char command_value,
     uint64_t submitted_nanoseconds
 ) {
     struct sockaddr_un address;
@@ -1261,7 +1823,7 @@ static bool send_worker_step(
     worker_command_t command;
     memset(&command, 0, sizeof(command));
     command.submitted_nanoseconds = submitted_nanoseconds;
-    command.command = direction_command(direction);
+    command.command = command_value;
     ssize_t sent = sendto(
         descriptor,
         &command,
@@ -1272,6 +1834,78 @@ static bool send_worker_step(
     );
     close(descriptor);
     return sent == sizeof(command);
+}
+
+static bool run_toggle_mark_helper(void) {
+    char helper_path[PATH_MAX];
+    const char *override = getenv("FINDER_VIM_SWIFT_HELPER");
+    if (override && override[0] != '\0') {
+        if (snprintf(helper_path, sizeof(helper_path), "%s", override)
+                >= (int)sizeof(helper_path)) {
+            return false;
+        }
+    } else {
+        const char *separator = strrchr(program_path, '/');
+        if (!separator) return false;
+        size_t directory_length = (size_t)(separator - program_path);
+        const char helper_name[] = "/finder_ax_move";
+        if (directory_length + sizeof(helper_name) > sizeof(helper_path)) {
+            return false;
+        }
+        memcpy(helper_path, program_path, directory_length);
+        memcpy(
+            helper_path + directory_length,
+            helper_name,
+            sizeof(helper_name)
+        );
+    }
+
+    posix_spawn_file_actions_t file_actions;
+    posix_spawn_file_actions_init(&file_actions);
+    posix_spawn_file_actions_addopen(
+        &file_actions,
+        STDIN_FILENO,
+        "/dev/null",
+        O_RDONLY,
+        0
+    );
+    posix_spawn_file_actions_addopen(
+        &file_actions,
+        STDOUT_FILENO,
+        "/dev/null",
+        O_WRONLY,
+        0
+    );
+    posix_spawn_file_actions_addopen(
+        &file_actions,
+        STDERR_FILENO,
+        "/dev/null",
+        O_WRONLY,
+        0
+    );
+
+    char *arguments[] = {
+        helper_path,
+        "toggle-mark",
+        NULL,
+    };
+    pid_t child;
+    int spawn_error = posix_spawn(
+        &child,
+        helper_path,
+        &file_actions,
+        NULL,
+        arguments,
+        environ
+    );
+    posix_spawn_file_actions_destroy(&file_actions);
+    if (spawn_error != 0) return false;
+
+    int status = 0;
+    while (waitpid(child, &status, 0) < 0) {
+        if (errno != EINTR) return false;
+    }
+    return WIFEXITED(status) && WEXITSTATUS(status) == 0;
 }
 
 static bool focused_navigation_container_changed(
@@ -1333,7 +1967,8 @@ static CFIndex move_worker_context(
     navigation_context_t *context,
     bool *context_created,
     direction_t direction,
-    int movement_lock_fd
+    int movement_lock_fd,
+    bool use_navigation_anchor
 ) {
     CFIndex previous_item_count = -1;
     if (direction == direction_left || direction == direction_right) {
@@ -1347,7 +1982,8 @@ static CFIndex move_worker_context(
         context,
         direction,
         movement_lock_fd,
-        &navigation_may_change
+        &navigation_may_change,
+        use_navigation_anchor
     );
     if (context->role == navigation_grid) {
         context->predicted_index = position > 0
@@ -1367,7 +2003,8 @@ static CFIndex worker_move(
     navigation_context_t *context,
     bool *context_created,
     direction_t direction,
-    int movement_lock_fd
+    int movement_lock_fd,
+    bool use_navigation_anchor
 ) {
     if (*context_created && current_index(context) < 0) {
         navigation_context_release(context);
@@ -1382,7 +2019,8 @@ static CFIndex worker_move(
         context,
         context_created,
         direction,
-        movement_lock_fd
+        movement_lock_fd,
+        use_navigation_anchor
     );
     if (position > 0) return position;
 
@@ -1393,12 +2031,88 @@ static CFIndex worker_move(
         context,
         context_created,
         direction,
-        movement_lock_fd
+        movement_lock_fd,
+        false
     );
 }
 
+static CFIndex execute_worker_command(
+    navigation_context_t *context,
+    bool *context_created,
+    char command,
+    int movement_lock_fd,
+    bool cold,
+    uint64_t submitted_nanoseconds
+) {
+    if (command == 'e') {
+        metrics_snapshot_t start;
+        if (metrics_path) start = capture_metrics_snapshot();
+        if (movement_lock_fd >= 0) flock(movement_lock_fd, LOCK_EX);
+        bool success = clear_focused_selection_fallback();
+        if (!success && !*context_created) {
+            *context_created = navigation_context_create(context);
+        }
+        if (!success && *context_created) {
+            success = clear_selection(context);
+        }
+        if (*context_created) {
+            navigation_context_release(context);
+            *context_created = false;
+        }
+        if (movement_lock_fd >= 0) flock(movement_lock_fd, LOCK_UN);
+        if (metrics_path) {
+            metrics_snapshot_t end = capture_metrics_snapshot();
+            record_command_metrics(
+                command,
+                cold,
+                submitted_nanoseconds,
+                &start,
+                &end,
+                success ? 1 : 0
+            );
+        }
+        return success ? 1 : 0;
+    }
+
+    if (command == 's') {
+        if (movement_lock_fd >= 0) flock(movement_lock_fd, LOCK_EX);
+        if (*context_created) {
+            navigation_context_release(context);
+            *context_created = false;
+        }
+        bool success = run_toggle_mark_helper();
+        if (movement_lock_fd >= 0) flock(movement_lock_fd, LOCK_UN);
+        return success ? 1 : 0;
+    }
+
+    direction_t direction;
+    if (!direction_from_command(command, &direction)) return 0;
+
+    metrics_snapshot_t start;
+    if (metrics_path) start = capture_metrics_snapshot();
+    CFIndex position = worker_move(
+        context,
+        context_created,
+        direction,
+        movement_lock_fd,
+        true
+    );
+    if (metrics_path) {
+        metrics_snapshot_t end = capture_metrics_snapshot();
+        record_command_metrics(
+            command,
+            cold,
+            submitted_nanoseconds,
+            &start,
+            &end,
+            position
+        );
+    }
+    return position;
+}
+
 static int run_worker(
-    direction_t initial_direction,
+    char initial_command,
     int worker_lock_fd,
     uint64_t initial_submitted_nanoseconds
 ) {
@@ -1427,29 +2141,18 @@ static int run_worker(
     bool context_created = false;
     int movement_lock_fd = open_movement_lock();
 
-    CFIndex initial_position = 0;
-    if (AXIsProcessTrusted()) {
-        metrics_snapshot_t start;
-        if (metrics_path) start = capture_metrics_snapshot();
-        initial_position = worker_move(
+    CFIndex initial_result = 0;
+    if (AXIsProcessTrusted() && finder_is_frontmost(NULL, NULL)) {
+        initial_result = execute_worker_command(
             &context,
             &context_created,
-            initial_direction,
-            movement_lock_fd
+            initial_command,
+            movement_lock_fd,
+            true,
+            initial_submitted_nanoseconds
         );
-        if (metrics_path) {
-            metrics_snapshot_t end = capture_metrics_snapshot();
-            record_metrics(
-                initial_direction,
-                true,
-                initial_submitted_nanoseconds,
-                &start,
-                &end,
-                initial_position
-            );
-        }
     }
-    if (initial_position == 0) {
+    if (initial_result == 0) {
         if (movement_lock_fd >= 0) close(movement_lock_fd);
         if (context_created) navigation_context_release(&context);
         close(socket_fd);
@@ -1473,29 +2176,16 @@ static int run_worker(
         worker_command_t command;
         ssize_t received = recv(socket_fd, &command, sizeof(command), 0);
         if (received != sizeof(command)) continue;
-        direction_t direction;
-        if (!direction_from_command(command.command, &direction)) continue;
         if (!finder_is_frontmost(NULL, NULL)) break;
-        metrics_snapshot_t start;
-        if (metrics_path) start = capture_metrics_snapshot();
-        CFIndex position = worker_move(
-                &context,
-                &context_created,
-                direction,
-                movement_lock_fd
-            );
-        if (metrics_path) {
-            metrics_snapshot_t end = capture_metrics_snapshot();
-            record_metrics(
-                direction,
-                false,
-                command.submitted_nanoseconds,
-                &start,
-                &end,
-                position
-            );
-        }
-        if (position == 0) {
+        CFIndex result = execute_worker_command(
+            &context,
+            &context_created,
+            command.command,
+            movement_lock_fd,
+            false,
+            command.submitted_nanoseconds
+        );
+        if (result == 0) {
             break;
         }
     }
@@ -1512,9 +2202,9 @@ static int run_worker(
     return 0;
 }
 
-static bool enqueue_worker_step(direction_t direction) {
+static bool enqueue_worker_command(char command, const char *command_name) {
     uint64_t submitted_nanoseconds = monotonic_nanoseconds();
-    if (send_worker_step(direction, submitted_nanoseconds)) return true;
+    if (send_worker_command(command, submitted_nanoseconds)) return true;
 
     int worker_lock_fd = open_worker_lock();
     if (worker_lock_fd < 0) return false;
@@ -1529,7 +2219,7 @@ static bool enqueue_worker_step(direction_t direction) {
             close(worker_lock_fd);
             return false;
         }
-        if (send_worker_step(direction, submitted_nanoseconds)) {
+        if (send_worker_command(command, submitted_nanoseconds)) {
             close(worker_lock_fd);
             return true;
         }
@@ -1540,7 +2230,7 @@ static bool enqueue_worker_step(direction_t direction) {
         return false;
     }
 
-    if (send_worker_step(direction, submitted_nanoseconds)) {
+    if (send_worker_command(command, submitted_nanoseconds)) {
         flock(worker_lock_fd, LOCK_UN);
         close(worker_lock_fd);
         return true;
@@ -1558,7 +2248,7 @@ static bool enqueue_worker_step(direction_t direction) {
     char *worker_arguments[] = {
         (char *)program_path,
         "worker",
-        (char *)direction_name(direction),
+        (char *)command_name,
         lock_descriptor,
         submitted_time,
         NULL,
@@ -1608,6 +2298,21 @@ static bool enqueue_worker_step(direction_t direction) {
     return true;
 }
 
+static bool enqueue_worker_step(direction_t direction) {
+    return enqueue_worker_command(
+        direction_command(direction),
+        direction_name(direction)
+    );
+}
+
+static bool enqueue_toggle_mark(void) {
+    return enqueue_worker_command('s', "toggle-mark");
+}
+
+static bool enqueue_clear_selection(void) {
+    return enqueue_worker_command('e', "clear-selection");
+}
+
 static int run_hold_start(direction_t direction) {
     bool enqueued = enqueue_worker_step(direction);
     bool token_written = write_hold_token(direction);
@@ -1641,6 +2346,7 @@ static int run_hold_repeat(direction_t direction) {
     CFIndex last_position = 0;
     double deadline = monotonic_seconds() + 30.0;
     unsigned iteration = 0;
+    bool use_navigation_anchor = true;
     while (monotonic_seconds() < deadline) {
         char current_token[64];
         ssize_t current_length = read_token(token_fd, current_token, sizeof(current_token));
@@ -1654,8 +2360,10 @@ static int run_hold_repeat(direction_t direction) {
             &context,
             &context_created,
             direction,
-            lock_fd
+            lock_fd,
+            use_navigation_anchor
         );
+        use_navigation_anchor = false;
         if (last_position == 0) break;
         usleep(5000);
     }
@@ -1692,8 +2400,17 @@ int main(int argc, char **argv) {
     if (!configure_metrics()) return 64;
 
     if (argc == 5 && strcmp(argv[1], "worker") == 0) {
+        char worker_command;
         direction_t direction;
-        if (!parse_direction(argv[2], &direction)) return 64;
+        if (strcmp(argv[2], "clear-selection") == 0) {
+            worker_command = 'e';
+        } else if (strcmp(argv[2], "toggle-mark") == 0) {
+            worker_command = 's';
+        } else if (parse_direction(argv[2], &direction)) {
+            worker_command = direction_command(direction);
+        } else {
+            return 64;
+        }
         char *end = NULL;
         long worker_lock_fd = strtol(argv[3], &end, 10);
         if (!end || *end != '\0' || worker_lock_fd < 0 || worker_lock_fd > INT_MAX) {
@@ -1703,10 +2420,20 @@ int main(int argc, char **argv) {
         unsigned long long submitted_nanoseconds = strtoull(argv[4], &end, 10);
         if (!end || *end != '\0' || submitted_nanoseconds == 0) return 64;
         return run_worker(
-            direction,
+            worker_command,
             (int)worker_lock_fd,
             submitted_nanoseconds
         );
+    }
+
+    if (argc == 2 && strcmp(argv[1], "toggle-mark") == 0) {
+        return enqueue_toggle_mark() ? 0 : 1;
+    }
+
+    if (argc == 2 && strcmp(argv[1], "clear-selection") == 0) {
+        return perform_finder_deselect_menu_action() || enqueue_clear_selection()
+            ? 0
+            : 1;
     }
 
     if (argc == 2 && (strcmp(argv[1], "first") == 0
@@ -1761,7 +2488,7 @@ int main(int argc, char **argv) {
             if (lock_fd >= 0) close(lock_fd);
             return 1;
         }
-        CFIndex position = move_once(&context, direction, -1, NULL);
+        CFIndex position = move_once(&context, direction, -1, NULL, true);
         navigation_context_release(&context);
         if (lock_fd >= 0) {
             flock(lock_fd, LOCK_UN);
@@ -1787,7 +2514,7 @@ int main(int argc, char **argv) {
 
     fprintf(
         stderr,
-        "Usage: finder_ax_step <first|last|down-wrap|up-wrap|left-wrap|right-wrap> | "
+        "Usage: finder_ax_step <clear-selection|toggle-mark|first|last|down-wrap|up-wrap|left-wrap|right-wrap> | "
         "<hold-start|hold-repeat> <down|up|left|right>\n"
     );
     return 64;

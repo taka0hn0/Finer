@@ -2,10 +2,12 @@
 
 mode="$1"
 state_file="${KARABINER_FINDER_MARKS_FILE:-$HOME/.local/state/finder-vim/finder_marks.txt}"
+anchor_file="${KARABINER_FINDER_ANCHOR_FILE:-$HOME/.local/state/finder-vim/finder_navigation_anchor.txt}"
 copy_file="${KARABINER_FINDER_COPY_FILE:-$HOME/.local/state/finder-vim/finder_copy.txt}"
 cut_file="${KARABINER_FINDER_CUT_FILE:-$HOME/.local/state/finder-vim/finder_cut.txt}"
 mkdir -p "$(dirname "$state_file")"
-touch "$copy_file" "$cut_file"
+mkdir -p "$(dirname "$anchor_file")"
+touch "$anchor_file" "$copy_file" "$cut_file"
 
 case "$mode" in
     copy)
@@ -66,6 +68,7 @@ fi
 
 if [ "$mode" = "move" ]; then
     : > "$state_file"
+    : > "$anchor_file"
     : > "$copy_file"
     : > "$cut_file"
 fi
