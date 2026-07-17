@@ -54,10 +54,14 @@ they change the visible Finder window and selection. Read
 - Use `Finer` as the product name. Existing `finder-vim` paths and
   `FINDER_VIM_*` environment variables are compatibility identifiers.
 
+Edit Karabiner rule objects under `rules/source/`, run `make rules`, and commit
+the matching `rules/generated/finder-vim.json` snapshot. `make check-rules`
+fails if the source modules and generated importable rule differ.
+
 ## Changing navigation or selection
 
 Changes to `src/finder_ax_step.c`, `src/finder_ax_move.swift`, or
-`rules/generated/finder-vim.json` should include the narrowest relevant
+`rules/source/*.json` should include the narrowest relevant
 regression test. At minimum, verify:
 
 ```sh

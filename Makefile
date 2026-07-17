@@ -11,11 +11,18 @@ BASELINE_REF ?= 793a82c
 CANDIDATE_REF ?= HEAD
 VERSION ?=
 
-.PHONY: all build check clean install uninstall test-install dist test-dist benchmark-comparison-helpers benchmark-fixtures benchmark-realistic-fixtures benchmark-column benchmark-list benchmark-icon benchmark-views benchmark-column-realistic benchmark-list-realistic benchmark-icon-realistic benchmark-realistic-views benchmark-worker-timeout benchmark-hold benchmark-hold-realistic benchmark-hold-preflight benchmark-hold-realistic-preflight benchmark-taps benchmark-taps-realistic benchmark-taps-preflight benchmark-taps-realistic-preflight benchmark-visual-helper benchmark-column-visual benchmark-column-visual-realistic test-visual-latency-analyzer test-finder-navigation
+.PHONY: all build rules check-rules check clean install uninstall test-install dist test-dist benchmark-comparison-helpers benchmark-fixtures benchmark-realistic-fixtures benchmark-column benchmark-list benchmark-icon benchmark-views benchmark-column-realistic benchmark-list-realistic benchmark-icon-realistic benchmark-realistic-views benchmark-worker-timeout benchmark-hold benchmark-hold-realistic benchmark-hold-preflight benchmark-hold-realistic-preflight benchmark-taps benchmark-taps-realistic benchmark-taps-preflight benchmark-taps-realistic-preflight benchmark-visual-helper benchmark-column-visual benchmark-column-visual-realistic test-visual-latency-analyzer test-finder-navigation
 
 all: build
 
 build: $(C_HELPER) $(SWIFT_HELPER)
+
+rules:
+	./scripts/generate_rules.sh
+
+check-rules:
+	./scripts/generate_rules.sh --check
+	./scripts/test_rule_generation.sh
 
 $(BUILD_DIR):
 	mkdir -p $(BUILD_DIR) $(MODULE_CACHE)
@@ -35,7 +42,7 @@ $(VISUAL_CAPTURE_HELPER): tools/finer_visual_capture.m | $(BUILD_DIR)
 		-framework AppKit -framework ApplicationServices \
 		$< -o $@
 
-check: build
+check: build check-rules
 	jq empty rules/generated/finder-vim.json
 	./scripts/test_generated_rule.sh
 	./scripts/test_mark_state.sh

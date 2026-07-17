@@ -419,6 +419,12 @@ finder-vim/
 
 ## 16. Decision Log
 
+### 2026-07-17: Karabiner配布JSONは機能別source moduleから決定的に生成する
+
+- Decision: `Finer Utility Commands`と`Finer Navigation`を独立した`rules/source/*.json`のrule objectとして正本にし、固定順で`Finer (development snapshot)`へ結合した`rules/generated/finder-vim.json`をimportable snapshotとして追跡する。通常の`make check`は再生成結果とのbyte-for-byte一致と隔離した生成・stale検出・symlink拒否を検証する。
+- Reason: 5000行を超える配布JSONだけを直接編集する状態から、機能単位の正本と生成物を分離し、source変更後の生成忘れやdogfood環境からの逆流をCIで検出するため。既存JSONを2つのrule objectへ機械的に分割して再結合した結果、生成前後のSHA-256 `87455f79b8f035ac1b77112fb892312f2db66ed426648e82de35d67ff27407a6`が一致することを初期移行条件とする。
+- Constraint: この段階は現行キーマップを変更せず、ユーザー向け設定ファイル形式や任意キーバインドのschemaを確定しない。`FR-CONFIG-001`から`003`のユーザー設定生成は別変更で設計し、install先は引き続き検証済みのgenerated snapshotだけを受け取る。
+
 ### 2026-07-17: 初期配布物はコミット由来の再現可能なソースアーカイブとする
 
 - Decision: pre-alphaの配布物は、指定したGitコミットを`git archive`で単一の`Finer-<version>/`ルートへ書き出し、mtimeを追加しない`gzip -n`で圧縮したソースアーカイブと、隣接するSHA-256ファイルとする。同じコミットとversionから2回生成したアーカイブがbyte-for-byteで一致すること、パスが単一ルート外へ出ないこと、展開後の`make check`と隔離install/uninstallが成功することを自動検証する。

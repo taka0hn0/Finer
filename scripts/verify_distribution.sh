@@ -68,7 +68,8 @@ COPYFILE_DISABLE=1 tar -xzf "$archive" -C "$temp_root"
 source_root="$temp_root/$archive_root"
 for required in Makefile README.md LICENSE scripts/install.sh scripts/uninstall.sh \
     scripts/build_distribution.sh scripts/verify_distribution.sh \
-    scripts/test_distribution.sh rules/generated/finder-vim.json \
+    scripts/test_distribution.sh rules/source/finer-utility-commands.json \
+    rules/source/finer-navigation.json rules/generated/finder-vim.json \
     src/finder_ax_step.c src/finder_ax_move.swift; do
     if [[ ! -f "$source_root/$required" ]]; then
         fail "missing required source file: $required"

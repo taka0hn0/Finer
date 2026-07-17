@@ -3,6 +3,11 @@
 The initial extraction relies on `make check` for build, JSON, shell syntax,
 and personal-path checks.
 
+`make check-rules` reconstructs the tracked importable Karabiner JSON from the
+separate Navigation and Utility Commands source modules, requires byte-for-byte
+snapshot equality, rejects invalid module descriptions and symlinked output,
+and verifies deterministic regeneration in an isolated directory.
+
 Run `make test-install` for isolated packaging integration tests. It uses a
 temporary `HOME` (including a space in the path), never writes to the dogfood
 installation, and verifies repeat install/uninstall, backups, preflight failure,

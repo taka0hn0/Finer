@@ -28,6 +28,8 @@ The project is currently pre-alpha and has not published a tagged release.
   tests.
 - Reproducible commit-based source archives with adjacent SHA-256 files and
   extracted-artifact build/install verification.
+- Separate source modules for the Navigation and Utility Commands Karabiner
+  rules, with deterministic generation and CI drift detection.
 
 ### Changed
 

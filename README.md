@@ -56,6 +56,14 @@ make check
 
 Build products are written to `.build/`.
 
+Karabiner rule sources live under `rules/source/`. After editing them, regenerate
+the tracked importable snapshot and verify that it is current with:
+
+```sh
+make rules
+make check-rules
+```
+
 ## Benchmark fixtures
 
 Generate the 10, 1000, and 10000-item Column View regression fixtures with:
