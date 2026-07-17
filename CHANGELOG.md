@@ -26,6 +26,8 @@ The project is currently pre-alpha and has not published a tagged release.
   Finer context work.
 - macOS CI for builds, headless regressions, and isolated install/uninstall
   tests.
+- Reproducible commit-based source archives with adjacent SHA-256 files and
+  extracted-artifact build/install verification.
 
 ### Changed
 

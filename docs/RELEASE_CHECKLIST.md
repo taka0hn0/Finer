@@ -9,6 +9,8 @@ complete.
 - [ ] `main` is synchronized with the intended release commit.
 - [ ] `make check` passes on the release commit.
 - [ ] `make test-install` passes on the release commit.
+- [ ] `make test-dist` reproduces and verifies the source archive from the
+      release commit.
 - [ ] GitHub Actions passes.
 - [ ] `git diff --check` passes.
 - [ ] No private paths, file names, clipboard data, logs, or runtime state are
@@ -72,6 +74,8 @@ Follow [BENCHMARKS.md](BENCHMARKS.md) for the exact procedures.
 - [ ] SECURITY lists the supported release series.
 - [ ] Release notes identify breaking changes and migrations.
 - [ ] Build artifacts include checksums.
+- [ ] The source archive checksum matches a freshly rebuilt artifact from the
+      same commit and version.
 - [ ] The release clearly states supported macOS and Karabiner versions.
 - [ ] The release clearly states whether it is alpha, beta, or stable.
 

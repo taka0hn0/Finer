@@ -9,8 +9,9 @@ ITERATIONS ?= 10
 COUNTS ?= 10 1000 10000
 BASELINE_REF ?= 793a82c
 CANDIDATE_REF ?= HEAD
+VERSION ?=
 
-.PHONY: all build check clean install uninstall test-install benchmark-comparison-helpers benchmark-fixtures benchmark-realistic-fixtures benchmark-column benchmark-list benchmark-icon benchmark-views benchmark-column-realistic benchmark-list-realistic benchmark-icon-realistic benchmark-realistic-views benchmark-worker-timeout benchmark-hold benchmark-hold-realistic benchmark-hold-preflight benchmark-hold-realistic-preflight benchmark-taps benchmark-taps-realistic benchmark-taps-preflight benchmark-taps-realistic-preflight benchmark-visual-helper benchmark-column-visual benchmark-column-visual-realistic test-visual-latency-analyzer test-finder-navigation
+.PHONY: all build check clean install uninstall test-install dist test-dist benchmark-comparison-helpers benchmark-fixtures benchmark-realistic-fixtures benchmark-column benchmark-list benchmark-icon benchmark-views benchmark-column-realistic benchmark-list-realistic benchmark-icon-realistic benchmark-realistic-views benchmark-worker-timeout benchmark-hold benchmark-hold-realistic benchmark-hold-preflight benchmark-hold-realistic-preflight benchmark-taps benchmark-taps-realistic benchmark-taps-preflight benchmark-taps-realistic-preflight benchmark-visual-helper benchmark-column-visual benchmark-column-visual-realistic test-visual-latency-analyzer test-finder-navigation
 
 all: build
 
@@ -55,6 +56,12 @@ uninstall:
 
 test-install: build
 	./scripts/test_installation.sh
+
+dist:
+	./scripts/build_distribution.sh "$(VERSION)"
+
+test-dist:
+	./scripts/test_distribution.sh
 
 benchmark-comparison-helpers:
 	./scripts/build_comparison_helper.sh "$(BASELINE_REF)" baseline

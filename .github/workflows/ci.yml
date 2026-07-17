@@ -28,3 +28,6 @@ jobs:
 
       - name: Test isolated install and uninstall
         run: make test-install
+
+      - name: Build and verify reproducible source distribution
+        run: make test-dist

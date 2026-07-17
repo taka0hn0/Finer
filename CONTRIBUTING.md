@@ -95,7 +95,8 @@ Before requesting review:
 ```sh
 make check
 make test-install
+make test-dist
 git diff --check
 ```
 
-The CI workflow runs the first two commands on a GitHub-hosted macOS runner.
+The CI workflow runs the first three commands on a GitHub-hosted macOS runner.

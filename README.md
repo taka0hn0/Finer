@@ -126,6 +126,24 @@ from the generated rule, it is backed up under
 uninstallation preserve runtime state and never edit the main
 `~/.config/karabiner/karabiner.json`.
 
+## Build a source distribution
+
+Create a deterministic source archive and adjacent SHA-256 file from the
+current committed `HEAD` with:
+
+```sh
+make dist
+make test-dist
+```
+
+Pass an explicit release identifier with `VERSION=0.1.0-alpha.1`. The archive
+contains committed source only; tracked modifications must be committed before
+packaging. `make test-dist` builds the same archive twice, checks byte-for-byte
+reproducibility, verifies the checksum and safe archive paths, then runs
+`make check` and the isolated install/uninstall suite from the extracted copy.
+This pre-alpha artifact is built locally from source and is not a signed or
+notarized binary package.
+
 ## Known limitations
 
 - Only Finder is supported. Open/Save dialogs and Gallery View are outside the
