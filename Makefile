@@ -33,6 +33,7 @@ check: build
 	./scripts/test_generated_rule.sh
 	./scripts/test_mark_state.sh
 	./scripts/test_tap_burst_headless.sh
+	./scripts/test_column_phase_summary.sh
 	zsh -n scripts/*.sh
 	! rg -n '/Users/[^/]+/' . \
 		--glob '!docs/FINDER_VIM_SPEC.md' \

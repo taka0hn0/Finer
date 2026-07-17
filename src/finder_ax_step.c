@@ -57,6 +57,29 @@ typedef struct {
     bool usage_available;
 } metrics_snapshot_t;
 
+typedef enum {
+    column_transition_none = 0,
+    column_transition_item_count = 1,
+    column_transition_focused_container = 2,
+    column_transition_timeout = 3,
+} column_transition_reason_t;
+
+typedef struct {
+    uint64_t context_validation_nanoseconds;
+    uint64_t context_creation_nanoseconds;
+    uint64_t previous_item_count_nanoseconds;
+    uint64_t movement_nanoseconds;
+    uint64_t event_post_nanoseconds;
+    uint64_t transition_total_nanoseconds;
+    uint64_t transition_item_count_nanoseconds;
+    uint64_t transition_focus_nanoseconds;
+    uint64_t transition_candidate_items_nanoseconds;
+    uint64_t transition_candidate_selection_nanoseconds;
+    uint64_t transition_sleep_nanoseconds;
+    uint64_t transition_attempts;
+    column_transition_reason_t transition_reason;
+} column_phase_metrics_t;
+
 typedef struct {
     uint64_t timestamp_nanoseconds;
     uint64_t submitted_nanoseconds;
@@ -71,15 +94,18 @@ typedef struct {
     uint64_t ax_reads;
     uint64_t ax_writes;
     uint64_t cg_events;
+    column_phase_metrics_t column_phases;
     CFIndex result_position;
     char command;
     bool cold;
+    bool column_phase_metrics_enabled;
 } metrics_record_t;
 
 static int worker_idle_timeout_milliseconds = 750;
 static const char *program_path;
 static const char *metrics_path;
 static const char *metrics_label;
+static bool column_phase_metrics_enabled;
 static uint64_t metrics_ax_reads;
 static uint64_t metrics_ax_writes;
 static uint64_t metrics_cg_events;
@@ -87,6 +113,9 @@ static metrics_record_t metrics_records[4096];
 static size_t metrics_record_count;
 static size_t metrics_dropped_records;
 extern char **environ;
+
+static uint64_t monotonic_nanoseconds(void);
+static uint64_t counter_delta(uint64_t end, uint64_t start);
 
 static const char *home_directory(void) {
     const char *home = getenv("HOME");
@@ -1375,12 +1404,28 @@ static CFIndex move_grid_horizontal(
     return target + 1;
 }
 
+static bool post_column_navigation_key(
+    CGKeyCode key_code,
+    column_phase_metrics_t *column_phases
+) {
+    if (!column_phases) return post_key_code(key_code);
+
+    uint64_t started_nanoseconds = monotonic_nanoseconds();
+    bool success = post_key_code(key_code);
+    column_phases->event_post_nanoseconds += counter_delta(
+        monotonic_nanoseconds(),
+        started_nanoseconds
+    );
+    return success;
+}
+
 static CFIndex move_once(
     navigation_context_t *context,
     direction_t direction,
     int lock_fd,
     bool *navigation_may_change,
-    bool use_navigation_anchor
+    bool use_navigation_anchor,
+    column_phase_metrics_t *column_phases
 ) {
     if (navigation_may_change) *navigation_may_change = false;
     if (lock_fd >= 0) flock(lock_fd, LOCK_EX);
@@ -1419,13 +1464,19 @@ static CFIndex move_once(
     if (uses_descendant_selection(context, current)) {
         CFIndex position;
         if (direction == direction_left || direction == direction_right) {
-            bool success = post_key_code(arrow_key_code(direction));
+            bool success = post_column_navigation_key(
+                arrow_key_code(direction),
+                column_phases
+            );
             if (success && navigation_may_change) {
                 *navigation_may_change = true;
             }
             position = success ? (current >= 0 ? current + 1 : 1) : 0;
         } else {
-            bool success = post_key_code(arrow_key_code(direction));
+            bool success = post_column_navigation_key(
+                arrow_key_code(direction),
+                column_phases
+            );
             CFIndex destination = success
                 ? wait_for_selection_change(context, current)
                 : -1;
@@ -1436,7 +1487,10 @@ static CFIndex move_once(
     }
 
     if (direction == direction_left || direction == direction_right) {
-        bool success = post_key_code(arrow_key_code(direction));
+        bool success = post_column_navigation_key(
+            arrow_key_code(direction),
+            column_phases
+        );
         if (success && navigation_may_change) {
             *navigation_may_change = true;
         }
@@ -1646,6 +1700,11 @@ static bool configure_metrics(void) {
     const char *label = getenv("FINDER_VIM_METRICS_LABEL");
     metrics_label = valid_metrics_label(label) ? label : "-";
 
+    const char *column_phases = getenv("FINDER_VIM_COLUMN_PHASE_METRICS");
+    column_phase_metrics_enabled = metrics_path
+        && column_phases
+        && strcmp(column_phases, "1") == 0;
+
     const char *timeout = getenv("FINDER_VIM_BENCHMARK_IDLE_TIMEOUT_MS");
     if (!metrics_path || !timeout || timeout[0] == '\0') return true;
 
@@ -1690,7 +1749,8 @@ static void record_command_metrics(
     uint64_t submitted_nanoseconds,
     const metrics_snapshot_t *start,
     const metrics_snapshot_t *end,
-    CFIndex result_position
+    CFIndex result_position,
+    const column_phase_metrics_t *column_phases
 ) {
     if (!metrics_path) return;
     if (metrics_record_count >= sizeof(metrics_records) / sizeof(metrics_records[0])) {
@@ -1707,6 +1767,10 @@ static void record_command_metrics(
     record->ax_reads = counter_delta(end->ax_reads, start->ax_reads);
     record->ax_writes = counter_delta(end->ax_writes, start->ax_writes);
     record->cg_events = counter_delta(end->cg_events, start->cg_events);
+    if (column_phases) {
+        record->column_phases = *column_phases;
+        record->column_phase_metrics_enabled = true;
+    }
     record->result_position = result_position;
     record->command = command;
     record->cold = cold;
@@ -1751,7 +1815,15 @@ static void flush_metrics(void) {
             "system_cpu_ns\tpackage_idle_wakeups\tinterrupt_wakeups\t"
             "resident_bytes\tphysical_footprint_bytes\tax_reads\t"
             "ax_writes\tcg_events\tresult_position\tdropped_records\t"
-            "worker_exit_after_command_ns\n"
+            "worker_exit_after_command_ns\tcolumn_phase_metrics_enabled\t"
+            "column_context_validation_ns\tcolumn_context_creation_ns\t"
+            "column_previous_item_count_ns\tcolumn_movement_ns\t"
+            "column_event_post_ns\tcolumn_transition_total_ns\t"
+            "column_transition_item_count_ns\tcolumn_transition_focus_ns\t"
+            "column_transition_candidate_items_ns\t"
+            "column_transition_candidate_selection_ns\t"
+            "column_transition_sleep_ns\tcolumn_transition_attempts\t"
+            "column_transition_reason\n"
         );
     }
 
@@ -1764,7 +1836,11 @@ static void flush_metrics(void) {
             "%" PRIu64 "\t%s\t%d\t%s\t%c\t%" PRIu64 "\t%" PRIu64
             "\t%" PRIu64 "\t%" PRIu64 "\t%" PRIu64 "\t%" PRIu64
             "\t%" PRIu64 "\t%" PRIu64 "\t%" PRIu64 "\t%" PRIu64
-            "\t%" PRIu64 "\t%ld\t%zu\t%" PRIu64 "\n",
+            "\t%" PRIu64 "\t%ld\t%zu\t%" PRIu64 "\t%d"
+            "\t%" PRIu64 "\t%" PRIu64 "\t%" PRIu64 "\t%" PRIu64
+            "\t%" PRIu64 "\t%" PRIu64 "\t%" PRIu64 "\t%" PRIu64
+            "\t%" PRIu64 "\t%" PRIu64 "\t%" PRIu64 "\t%" PRIu64
+            "\t%d\n",
             record->timestamp_nanoseconds,
             metrics_label,
             pid,
@@ -1792,7 +1868,21 @@ static void flush_metrics(void) {
             counter_delta(
                 flush_started_nanoseconds,
                 record->finished_nanoseconds
-            )
+            ),
+            record->column_phase_metrics_enabled ? 1 : 0,
+            record->column_phases.context_validation_nanoseconds,
+            record->column_phases.context_creation_nanoseconds,
+            record->column_phases.previous_item_count_nanoseconds,
+            record->column_phases.movement_nanoseconds,
+            record->column_phases.event_post_nanoseconds,
+            record->column_phases.transition_total_nanoseconds,
+            record->column_phases.transition_item_count_nanoseconds,
+            record->column_phases.transition_focus_nanoseconds,
+            record->column_phases.transition_candidate_items_nanoseconds,
+            record->column_phases.transition_candidate_selection_nanoseconds,
+            record->column_phases.transition_sleep_nanoseconds,
+            record->column_phases.transition_attempts,
+            record->column_phases.transition_reason
         );
     }
 
@@ -1909,15 +1999,33 @@ static bool run_toggle_mark_helper(void) {
 }
 
 static bool focused_navigation_container_changed(
-    AXUIElementRef previous_container
+    AXUIElementRef previous_container,
+    column_phase_metrics_t *column_phases
 ) {
+    uint64_t focus_started_nanoseconds = column_phases
+        ? monotonic_nanoseconds()
+        : 0;
     AXUIElementRef application = NULL;
-    if (!finder_is_frontmost(NULL, &application)) return false;
+    if (!finder_is_frontmost(NULL, &application)) {
+        if (column_phases) {
+            column_phases->transition_focus_nanoseconds += counter_delta(
+                monotonic_nanoseconds(),
+                focus_started_nanoseconds
+            );
+        }
+        return false;
+    }
 
     CFTypeRef focused = copy_attribute(application, kAXFocusedUIElementAttribute);
     CFRelease(application);
     if (!focused || CFGetTypeID(focused) != AXUIElementGetTypeID()) {
         if (focused) CFRelease(focused);
+        if (column_phases) {
+            column_phases->transition_focus_nanoseconds += counter_delta(
+                monotonic_nanoseconds(),
+                focus_started_nanoseconds
+            );
+        }
         return false;
     }
 
@@ -1927,17 +2035,45 @@ static bool focused_navigation_container_changed(
         &role
     );
     CFRelease(focused);
+    if (column_phases) {
+        column_phases->transition_focus_nanoseconds += counter_delta(
+            monotonic_nanoseconds(),
+            focus_started_nanoseconds
+        );
+    }
     if (!current) return false;
     bool changed = !CFEqual(current, previous_container);
     if (changed) {
+        uint64_t items_started_nanoseconds = column_phases
+            ? monotonic_nanoseconds()
+            : 0;
         CFArrayRef items = copy_navigation_items(current, role);
+        if (column_phases) {
+            column_phases->transition_candidate_items_nanoseconds += counter_delta(
+                monotonic_nanoseconds(),
+                items_started_nanoseconds
+            );
+        }
         navigation_context_t candidate = {
             .container = current,
             .items = items,
             .role = role,
         };
-        changed = items && CFArrayGetCount(items) > 0
-            && current_index(&candidate) >= 0;
+        if (items && CFArrayGetCount(items) > 0) {
+            uint64_t selection_started_nanoseconds = column_phases
+                ? monotonic_nanoseconds()
+                : 0;
+            changed = current_index(&candidate) >= 0;
+            if (column_phases) {
+                column_phases
+                    ->transition_candidate_selection_nanoseconds += counter_delta(
+                        monotonic_nanoseconds(),
+                        selection_started_nanoseconds
+                    );
+            }
+        } else {
+            changed = false;
+        }
         if (items) CFRelease(items);
     }
     CFRelease(current);
@@ -1946,20 +2082,67 @@ static bool focused_navigation_container_changed(
 
 static void wait_for_navigation_transition(
     const navigation_context_t *context,
-    CFIndex previous_item_count
+    CFIndex previous_item_count,
+    column_phase_metrics_t *column_phases
 ) {
     // CGEventPost is asynchronous. Serialize the following Vim command behind
     // Finder's view update so it cannot mutate the previous directory.
+    uint64_t transition_started_nanoseconds = column_phases
+        ? monotonic_nanoseconds()
+        : 0;
+    bool transitioned = false;
     for (int attempt = 0; attempt < 40; ++attempt) {
+        if (column_phases) ++column_phases->transition_attempts;
+        uint64_t item_count_started_nanoseconds = column_phases
+            ? monotonic_nanoseconds()
+            : 0;
         CFIndex item_count = raw_navigation_item_count(
             context->container,
             context->role
         );
-        if ((previous_item_count >= 0 && item_count != previous_item_count)
-            || focused_navigation_container_changed(context->container)) {
-            return;
+        if (column_phases) {
+            column_phases->transition_item_count_nanoseconds += counter_delta(
+                monotonic_nanoseconds(),
+                item_count_started_nanoseconds
+            );
         }
+        if (previous_item_count >= 0 && item_count != previous_item_count) {
+            if (column_phases) {
+                column_phases->transition_reason = column_transition_item_count;
+            }
+            transitioned = true;
+            break;
+        }
+        if (focused_navigation_container_changed(
+                context->container,
+                column_phases
+            )) {
+            if (column_phases) {
+                column_phases->transition_reason =
+                    column_transition_focused_container;
+            }
+            transitioned = true;
+            break;
+        }
+        uint64_t sleep_started_nanoseconds = column_phases
+            ? monotonic_nanoseconds()
+            : 0;
         usleep(2000);
+        if (column_phases) {
+            column_phases->transition_sleep_nanoseconds += counter_delta(
+                monotonic_nanoseconds(),
+                sleep_started_nanoseconds
+            );
+        }
+    }
+    if (column_phases) {
+        if (!transitioned) {
+            column_phases->transition_reason = column_transition_timeout;
+        }
+        column_phases->transition_total_nanoseconds += counter_delta(
+            monotonic_nanoseconds(),
+            transition_started_nanoseconds
+        );
     }
 }
 
@@ -1968,23 +2151,43 @@ static CFIndex move_worker_context(
     bool *context_created,
     direction_t direction,
     int movement_lock_fd,
-    bool use_navigation_anchor
+    bool use_navigation_anchor,
+    column_phase_metrics_t *column_phases
 ) {
     CFIndex previous_item_count = -1;
     if (direction == direction_left || direction == direction_right) {
+        uint64_t item_count_started_nanoseconds = column_phases
+            ? monotonic_nanoseconds()
+            : 0;
         previous_item_count = raw_navigation_item_count(
             context->container,
             context->role
         );
+        if (column_phases) {
+            column_phases->previous_item_count_nanoseconds += counter_delta(
+                monotonic_nanoseconds(),
+                item_count_started_nanoseconds
+            );
+        }
     }
     bool navigation_may_change = false;
+    uint64_t movement_started_nanoseconds = column_phases
+        ? monotonic_nanoseconds()
+        : 0;
     CFIndex position = move_once(
         context,
         direction,
         movement_lock_fd,
         &navigation_may_change,
-        use_navigation_anchor
+        use_navigation_anchor,
+        column_phases
     );
+    if (column_phases) {
+        column_phases->movement_nanoseconds += counter_delta(
+            monotonic_nanoseconds(),
+            movement_started_nanoseconds
+        );
+    }
     if (context->role == navigation_grid) {
         context->predicted_index = position > 0
                 && (direction == direction_left || direction == direction_right)
@@ -1992,7 +2195,11 @@ static CFIndex move_worker_context(
             : -1;
     }
     if (navigation_may_change) {
-        wait_for_navigation_transition(context, previous_item_count);
+        wait_for_navigation_transition(
+            context,
+            previous_item_count,
+            column_phases
+        );
         navigation_context_release(context);
         *context_created = false;
     }
@@ -2004,14 +2211,37 @@ static CFIndex worker_move(
     bool *context_created,
     direction_t direction,
     int movement_lock_fd,
-    bool use_navigation_anchor
+    bool use_navigation_anchor,
+    column_phase_metrics_t *column_phases
 ) {
-    if (*context_created && current_index(context) < 0) {
+    CFIndex validated_index = 0;
+    if (*context_created) {
+        uint64_t validation_started_nanoseconds = column_phases
+            ? monotonic_nanoseconds()
+            : 0;
+        validated_index = current_index(context);
+        if (column_phases) {
+            column_phases->context_validation_nanoseconds += counter_delta(
+                monotonic_nanoseconds(),
+                validation_started_nanoseconds
+            );
+        }
+    }
+    if (*context_created && validated_index < 0) {
         navigation_context_release(context);
         *context_created = false;
     }
     if (!*context_created) {
+        uint64_t creation_started_nanoseconds = column_phases
+            ? monotonic_nanoseconds()
+            : 0;
         *context_created = navigation_context_create(context);
+        if (column_phases) {
+            column_phases->context_creation_nanoseconds += counter_delta(
+                monotonic_nanoseconds(),
+                creation_started_nanoseconds
+            );
+        }
         if (!*context_created) return false;
     }
 
@@ -2020,19 +2250,30 @@ static CFIndex worker_move(
         context_created,
         direction,
         movement_lock_fd,
-        use_navigation_anchor
+        use_navigation_anchor,
+        column_phases
     );
     if (position > 0) return position;
 
     if (*context_created) navigation_context_release(context);
+    uint64_t creation_started_nanoseconds = column_phases
+        ? monotonic_nanoseconds()
+        : 0;
     *context_created = navigation_context_create(context);
+    if (column_phases) {
+        column_phases->context_creation_nanoseconds += counter_delta(
+            monotonic_nanoseconds(),
+            creation_started_nanoseconds
+        );
+    }
     if (!*context_created) return 0;
     return move_worker_context(
         context,
         context_created,
         direction,
         movement_lock_fd,
-        false
+        false,
+        column_phases
     );
 }
 
@@ -2068,7 +2309,8 @@ static CFIndex execute_worker_command(
                 submitted_nanoseconds,
                 &start,
                 &end,
-                success ? 1 : 0
+                success ? 1 : 0,
+                NULL
             );
         }
         return success ? 1 : 0;
@@ -2090,12 +2332,19 @@ static CFIndex execute_worker_command(
 
     metrics_snapshot_t start;
     if (metrics_path) start = capture_metrics_snapshot();
+    column_phase_metrics_t column_phases;
+    column_phase_metrics_t *active_column_phases = NULL;
+    if (column_phase_metrics_enabled) {
+        memset(&column_phases, 0, sizeof(column_phases));
+        active_column_phases = &column_phases;
+    }
     CFIndex position = worker_move(
         context,
         context_created,
         direction,
         movement_lock_fd,
-        true
+        true,
+        active_column_phases
     );
     if (metrics_path) {
         metrics_snapshot_t end = capture_metrics_snapshot();
@@ -2105,7 +2354,8 @@ static CFIndex execute_worker_command(
             submitted_nanoseconds,
             &start,
             &end,
-            position
+            position,
+            active_column_phases
         );
     }
     return position;
@@ -2361,7 +2611,8 @@ static int run_hold_repeat(direction_t direction) {
             &context_created,
             direction,
             lock_fd,
-            use_navigation_anchor
+            use_navigation_anchor,
+            NULL
         );
         use_navigation_anchor = false;
         if (last_position == 0) break;
@@ -2488,7 +2739,14 @@ int main(int argc, char **argv) {
             if (lock_fd >= 0) close(lock_fd);
             return 1;
         }
-        CFIndex position = move_once(&context, direction, -1, NULL, true);
+        CFIndex position = move_once(
+            &context,
+            direction,
+            -1,
+            NULL,
+            true,
+            NULL
+        );
         navigation_context_release(&context);
         if (lock_fd >= 0) {
             flock(lock_fd, LOCK_UN);

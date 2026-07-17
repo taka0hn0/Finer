@@ -104,6 +104,18 @@ Run the same Column View regression against mixed non-empty content with:
 make benchmark-column-realistic ITERATIONS=10
 ```
 
+To diagnose Column hierarchy latency by phase without changing normal runtime
+instrumentation, enable the additional opt-in counters:
+
+```sh
+FINDER_VIM_COLUMN_PHASE_METRICS=1 \
+  make benchmark-column-realistic COUNTS="1000 10000" ITERATIONS=10
+```
+
+The Column runner then prints both the ordinary worker summary and
+`summarize_column_phase_metrics.sh` output. The extra timing calls are made only
+when both the normal metrics file and the Column phase flag are enabled.
+
 Before each measured burst, the runner activates Finder and executes an
 unmeasured synchronous `first` probe. This verifies that the parent Column View
 AX context is ready and leaves `00-start.txt` selected. Therefore `cold` in the
@@ -155,6 +167,20 @@ cg_events
 result_position
 dropped_records
 worker_exit_after_command_ns
+column_phase_metrics_enabled
+column_context_validation_ns
+column_context_creation_ns
+column_previous_item_count_ns
+column_movement_ns
+column_event_post_ns
+column_transition_total_ns
+column_transition_item_count_ns
+column_transition_focus_ns
+column_transition_candidate_items_ns
+column_transition_candidate_selection_ns
+column_transition_sleep_ns
+column_transition_attempts
+column_transition_reason
 ```
 
 `dispatch_to_selection_ns` starts when the helper client handles the command
@@ -168,6 +194,11 @@ maximum, CPU, wakeups, AX calls, footprint, unique PIDs, failures, and dropped
 records. Each automated runner waits for that flush before starting the next
 iteration; this also guarantees that every iteration measures a new cold
 worker rather than reusing the previous iteration's idle worker.
+
+The appended Column fields keep the original first 19 columns stable.
+`column_transition_reason` is `0` for no transition, `1` for an item-count
+change, `2` for a ready focused container, and `3` for timeout. Rows collected
+without the phase flag contain zeroes in these appended fields.
 
 Preserve raw iterations before publishing aggregate values. Physical-key
 latency, key-up-to-stop latency, and independent Instruments or `powermetrics`

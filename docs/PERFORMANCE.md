@@ -138,6 +138,18 @@ Column hierarchy movement showed substantial p95 outliers and remains the next
 performance investigation. The run bypassed physical input and Karabiner
 evaluation and is not an end-to-end latency measurement.
 
+The focused [Column phase diagnosis](../benchmarks/results/2026-07-17-column-phases/SUMMARY.md)
+then split realistic 1,000- and 10,000-item `j l j` runs into event posting,
+transition probes, candidate-item acquisition, and context rebuilding. All 40
+final outcomes across the retained and temporary variants passed. In the
+retained path, warm `l` transition p95 was 162.731ms at 1,000 items and
+191.142ms at 10,000 items. Removing the old-container item-count probe did not
+consistently improve it: the wait moved to the focused-container AX probe,
+whose p95 became 148.525ms and 147.432ms. This identifies Finder's asynchronous
+Column-to-AX publication boundary, not local item scanning, as the dominant
+phase on this host. The existing readiness synchronization remains in place to
+protect rapid `jlj` correctness.
+
 ## Benchmark instrumentation
 
 Setting `FINDER_VIM_METRICS_FILE` enables per-command measurement inside the
@@ -150,3 +162,7 @@ Records remain in memory until worker exit. Normal operation without the
 environment variable does not increment counters or write metric files.
 Internal dispatch latency excludes the physical key-to-helper-launch path and
 must not be presented as full keyboard latency.
+
+`FINDER_VIM_COLUMN_PHASE_METRICS=1` adds detailed Column timing only when the
+normal metrics file is also enabled. It remains a benchmark control rather than
+a user-facing performance option.

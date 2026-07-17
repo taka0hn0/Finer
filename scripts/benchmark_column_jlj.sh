@@ -144,6 +144,7 @@ fi
     print -- "content_profile=$content_profile"
     print -- "iterations=$iterations"
     print -- "helper=$helper"
+    print -- "column_phase_metrics=${FINDER_VIM_COLUMN_PHASE_METRICS:-0}"
 } > "$environment_file"
 if [[ -r "$fixture_root/manifest.tsv" ]]; then
     awk -F '\t' 'NR > 1 {
@@ -210,6 +211,9 @@ print -- "Metrics: $metrics_file"
 print -- "Outcomes: $outcomes_file"
 print -- "Environment: $environment_file"
 "$repo_root/scripts/summarize_benchmark_metrics.sh" "$metrics_file"
+if [[ "${FINDER_VIM_COLUMN_PHASE_METRICS:-0}" == 1 ]]; then
+    "$repo_root/scripts/summarize_column_phase_metrics.sh" "$metrics_file"
+fi
 
 awk -F '\t' -v iterations="$iterations" -v requested_counts="$counts_string" '
 NR == 1 { next }

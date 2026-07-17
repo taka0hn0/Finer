@@ -21,6 +21,8 @@ The project is currently pre-alpha and has not published a tagged release.
   benchmark results.
 - A complete Finder-window matrix for empty and realistic mixed content across
   List, Column, and Icon views, including held and 100ms tap scenarios.
+- Opt-in Column hierarchy phase metrics and sanitized diagnostic results that
+  separate Finder transition waiting from Finer context work.
 - macOS CI for builds, headless regressions, and isolated install/uninstall
   tests.
 

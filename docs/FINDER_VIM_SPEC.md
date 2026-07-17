@@ -419,6 +419,12 @@ finder-vim/
 
 ## 16. Decision Log
 
+### 2026-07-17: Column階層移動はFinderのAX公開待ちを維持し、フェーズ計測を明示時だけ追加する
+
+- Decision: Columnの`h/l`後は既存どおり、Finderの新しい列で項目配列と選択項目を解決できるまで後続コマンドを同期する。通常のメトリクスに加えて`FINDER_VIM_COLUMN_PHASE_METRICS=1`を指定した時だけ、コンテキスト検証・再作成、イベント送信、列遷移、項目配列、選択確定を別々に記録する。通常利用時はフェーズ時刻を取得しない。
+- Evidence: realistic-mixedの1000項目と10000項目で各10反復の`j l j`を測定し、現行待機と一時的なfocused-container-only待機はいずれも20/20成功した。現行のwarm `l` transition p95は162.731msと191.142msだった。古い列のitem-count照会を省くとその照会は0msになったが、focused-container照会p95が148.525msと147.432msへ移り、worker p95も1000項目で186.524msから190.916ms、10000項目で230.935msから221.168msとなって一貫した改善にならなかった。この候補は戻し、匿名化したraw dataを`benchmarks/results/2026-07-17-column-phases/`へ保存する。
+- Constraint: この結果はFinderが列をAXへ公開する境界で最初のpost-event AX問い合わせがブロックすることと整合するが、Finder内部の実装を直接観測したものではない。固定delayや待機削除で内部数値だけを短縮せず、`jlj`の最終選択を優先する。物理キー、Karabiner評価、Finderのフレーム描画は測定対象外である。
+
 ### 2026-07-17: 主要表示形式は現行経路を維持し、Column階層移動を次の性能調査対象にする
 
 - Decision: ListとIconは現行の表示形式別common pathを維持する。Columnの階層移動は最終選択の正しさを維持したまま、Finderの列生成待ちと外れ値を分離する次の性能調査対象とする。ファイル容量だけを性能代表値にせず、empty-filesとrealistic-mixedを分けて継続測定する。
