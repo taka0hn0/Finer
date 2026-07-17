@@ -419,6 +419,12 @@ finder-vim/
 
 ## 16. Decision Log
 
+### 2026-07-17: 主要表示形式は現行経路を維持し、Column階層移動を次の性能調査対象にする
+
+- Decision: ListとIconは現行の表示形式別common pathを維持する。Columnの階層移動は最終選択の正しさを維持したまま、Finderの列生成待ちと外れ値を分離する次の性能調査対象とする。ファイル容量だけを性能代表値にせず、empty-filesとrealistic-mixedを分けて継続測定する。
+- Evidence: macOS 26.5.2 / Finder 26.4で、2 profile、List・Column・Icon、10・1000・10000項目の表示マトリクス180反復、長押し20反復、100msタップ60反復の計260反復がすべて成功した。Listのwarm worker p95は全条件で17.275ms以下、Iconは0.480ms以下だった。realistic-mixed Columnは最終選択に失敗しなかったが、1000項目のdispatch p95が最大713.074ms、10000項目の`l` worker p95が482.061msとなった。匿名化したraw dataを`benchmarks/results/2026-07-17-finder-matrix/`へ保存する。
+- Constraint: このrunはFinderの実ウィンドウと最終選択を使うが、物理キー、Karabiner評価、Finderの各フレーム描画時間を含まない。Listのgroupingも制御していないため、ネイティブ同等のend-to-end latencyやgrouped List View対応の根拠には使用しない。
+
 ### 2026-07-17: Visual Modeの数値移動と`gg/G`は固定始点からAX範囲選択する
 
 - Decision: `v`を押した時点の項目パスと位置ヒントを専用の一時アンカーへ原子的に保存する。単純な`h/j/k/l`はFinder標準の`Shift+Arrow`を維持する。数値付き`j/k`はNormal Modeと同じ1〜99のカウント入力を受け取り、現在の連続選択と固定始点から現在端を判定して、移動先までを1回のAX範囲選択で更新する。Visual Modeの`gg/G`も固定始点からList・Columnの先頭/末尾、Iconの現在列上端/下端までを範囲選択する。

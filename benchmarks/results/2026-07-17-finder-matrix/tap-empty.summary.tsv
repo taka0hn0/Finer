@@ -1,0 +1,4 @@
+scenario	samples	client_enqueue_p50_ms	client_enqueue_p95_ms	client_enqueue_max_ms	submit_lateness_p50_ms	submit_lateness_p95_ms	submit_lateness_max_ms	client_failures
+list_jk	130	11.797	13.349	16.000	8.846	9.470	9.855	0
+icon_hl	130	10.457	14.771	16.926	8.630	9.436	9.872	0
+column_hjkl	160	9.138	10.977	13.981	7.836	9.326	10.094	0

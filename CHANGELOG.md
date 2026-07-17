@@ -19,6 +19,8 @@ The project is currently pre-alpha and has not published a tagged release.
   replaced importable rule.
 - Reproducible 10, 1,000, and 10,000-item benchmark fixtures and sanitized
   benchmark results.
+- A complete Finder-window matrix for empty and realistic mixed content across
+  List, Column, and Icon views, including held and 100ms tap scenarios.
 - macOS CI for builds, headless regressions, and isolated install/uninstall
   tests.
 

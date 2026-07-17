@@ -67,6 +67,11 @@ make benchmark-fixtures
 See [the benchmark procedure](docs/BENCHMARKS.md) before recording or
 publishing performance results.
 
+The latest complete Finder-window matrix is the
+[2026-07-17 run](benchmarks/results/2026-07-17-finder-matrix/SUMMARY.md), which
+covers both fixture profiles across List, Column, and Icon at 10, 1,000, and
+10,000 items, plus held and 100ms tap scenarios.
+
 After installing the current build, run the Column View matrix with:
 
 ```sh

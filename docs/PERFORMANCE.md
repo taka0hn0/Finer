@@ -130,6 +130,14 @@ only, folders only, mixed content, and grouped List View. For each case record:
 Raw results and the exact macOS, Finder, Karabiner, hardware, and view settings
 must accompany any published performance claim.
 
+The [2026-07-17 Finder matrix](../benchmarks/results/2026-07-17-finder-matrix/SUMMARY.md)
+records both fixture profiles across List, Column, and Icon at 10, 1,000, and
+10,000 items, plus held and 100ms tap scenarios. All final outcomes passed.
+List and Icon worker timing remained stable at 10,000 items, but realistic
+Column hierarchy movement showed substantial p95 outliers and remains the next
+performance investigation. The run bypassed physical input and Karabiner
+evaluation and is not an end-to-end latency measurement.
+
 ## Benchmark instrumentation
 
 Setting `FINDER_VIM_METRICS_FILE` enables per-command measurement inside the

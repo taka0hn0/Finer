@@ -353,3 +353,17 @@ make benchmark-icon-realistic ITERATIONS=10
 `make benchmark-realistic-views ITERATIONS=10` runs all three realistic
 matrices. Use `COUNTS=10`, `COUNTS=1000`, or a quoted list to limit either
 fixture generation or measurement.
+
+## Recorded 2026-07-17 Finder matrix
+
+The current full run covers empty-files and realistic-mixed profiles across
+List, Column, and Icon at 10, 1,000, and 10,000 items. It also records
+one-second held List movement and 100ms List, Icon, and Column tap scenarios.
+All 260 final-outcome iterations passed.
+
+The run confirmed stable List and Icon worker paths at 10,000 items, while
+realistic Column hierarchy movement retained p95 outliers that require focused
+follow-up. See the [summary and sanitized raw data](../benchmarks/results/2026-07-17-finder-matrix/SUMMARY.md).
+
+This run opened visible Finder windows but still bypassed physical input and
+Karabiner evaluation. It is not end-to-end key latency.
