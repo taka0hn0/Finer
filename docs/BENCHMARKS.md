@@ -204,6 +204,55 @@ Preserve raw iterations before publishing aggregate values. Physical-key
 latency, key-up-to-stop latency, and independent Instruments or `powermetrics`
 validation remain separate measurements.
 
+## Column screen-visible latency
+
+Internal AX completion and visible Finder rendering have different boundaries.
+After installing the current helper, run the fixed-window visual matrix with:
+
+```sh
+make benchmark-column-visual COUNTS="1000 10000" ITERATIONS=10
+make benchmark-column-visual-realistic COUNTS="1000 10000" ITERATIONS=10
+```
+
+The visual runner requires `ffmpeg` and `ffprobe`, builds a benchmark-only
+Objective-C capture helper, and creates a new fixed-size Column View window for
+every repetition. It prepares `01-A`, waits for the normal burst worker to exit,
+then records only that Finder rectangle. A small nonactivating marker inside the
+rectangle changes from red to green immediately before the capture helper
+spawns `finder_ax_step hold-start right`.
+
+`analyze_visual_latency.py` uses each decoded frame's PTS. It keeps the last red
+frame as the baseline, locates the first green frame, excludes the padded marker
+rectangle, and reports the first later frame with a large controlled pixel
+change. The runner separately requires the final path to be
+`01-A/item-00000.txt` and records the normal worker metrics from the same
+command. Videos, per-video JSON, samples, metrics, and environment metadata stay
+under ignored `.build/benchmark-results/column-visual-*` directories. Review a
+sample video before publishing results so an unrelated cursor or window change
+cannot be mistaken for Finder's response.
+
+Each sample row also includes the same command's worker state,
+`dispatch_ms`, `worker_duration_ms`, and `visual_minus_dispatch_ms`. Interpret
+the last field at the capture refresh resolution: a difference smaller than one
+nominal frame does not establish that AX completion and visible presentation
+occurred in a particular order.
+
+Validate the PTS and change detector without opening Finder with:
+
+```sh
+make test-visual-latency-analyzer
+```
+
+That test generates a 60fps synthetic recording whose marker changes at 0.5s
+and whose non-marker response changes at 0.7s, then requires a 200ms result.
+
+The marker is displayed before `posix_spawn`, so the measured delta is a
+conservative marker-to-visible value with approximately one frame of capture
+and compositor quantization. It includes helper launch after the marker but
+does not include the physical key, Karabiner evaluation, or the beginning of
+its shell command. Keep the end-to-end limitation below attached to every
+interpretation.
+
 ## End-to-end key timing limitation
 
 Quartz `CGEventPost` is not a valid way to automate Finer's full key path.

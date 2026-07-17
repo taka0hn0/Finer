@@ -48,6 +48,12 @@ Run `make benchmark-hold` to record the current List View repeat throughput and
 the upper-bound return time after the hold token is cleared. This benchmark is
 the baseline for moving held repetition into the existing burst worker.
 
+Run `make test-visual-latency-analyzer` for the headless 60fps synthetic-video
+check of the red/green marker and PTS-based response detector. The visible
+Column benchmark itself is `make benchmark-column-visual` or
+`make benchmark-column-visual-realistic`; it records only a dedicated fixed
+Finder rectangle and still excludes physical input and Karabiner evaluation.
+
 Run `make test-finder-navigation` for functional regressions that do not belong
 in the latency matrix. It covers grouped mixed-content List View wrap, a
 one-second held List movement, and Icon View forward/reverse row wrap. The test

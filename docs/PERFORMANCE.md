@@ -159,6 +159,30 @@ changed from 190.435ms to 192.365ms at 1,000 items and from 206.139ms to
 The candidate was therefore reverted: fewer active AX calls are useful only if
 they do not trade away responsiveness or add unjustified lifecycle complexity.
 
+## Screen-visible timing
+
+Worker timing ends when Finer has confirmed Finder's AX selection. It does not
+say exactly when the selection highlight became visible. The separate Column
+visual benchmark records a fixed rectangle containing only its dedicated
+Finder window and a small nonactivating color marker. The marker changes from
+red to green immediately before the existing helper is spawned. Analysis uses
+the recording's presentation timestamps (PTS), not `frame_number / 60`, because
+macOS screen recordings may omit unchanged frames.
+
+The reported value starts on the first green frame and ends on the first frame
+whose non-marker pixels exceed the controlled change threshold. The selected
+path and the worker metrics from the same `right` command must also pass. The
+marker is updated before helper launch, so the result is a conservative
+marker-to-visible bound with approximately one capture-frame quantization. It
+includes helper process launch and Finder rendering after the marker, but it
+still excludes physical input and Karabiner evaluation. Each visual sample also
+records the same command's dispatch and worker durations plus
+`visual_minus_dispatch_ms`; this separates a visible-rendering gap from time
+already accounted for by Finer's internal completion boundary.
+
+The marker, capture process, and analyzer are benchmark-only tools. They are
+never installed and do not change Finer's zero-residency runtime architecture.
+
 ## Benchmark instrumentation
 
 Setting `FINDER_VIM_METRICS_FILE` enables per-command measurement inside the

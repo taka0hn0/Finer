@@ -4,12 +4,13 @@ BUILD_DIR := .build
 MODULE_CACHE := $(BUILD_DIR)/swift-module-cache
 C_HELPER := $(BUILD_DIR)/finder_ax_step
 SWIFT_HELPER := $(BUILD_DIR)/finder_ax_move
+VISUAL_CAPTURE_HELPER := $(BUILD_DIR)/finer_visual_capture
 ITERATIONS ?= 10
 COUNTS ?= 10 1000 10000
 BASELINE_REF ?= 793a82c
 CANDIDATE_REF ?= HEAD
 
-.PHONY: all build check clean install uninstall test-install benchmark-comparison-helpers benchmark-fixtures benchmark-realistic-fixtures benchmark-column benchmark-list benchmark-icon benchmark-views benchmark-column-realistic benchmark-list-realistic benchmark-icon-realistic benchmark-realistic-views benchmark-worker-timeout benchmark-hold benchmark-hold-realistic benchmark-hold-preflight benchmark-hold-realistic-preflight benchmark-taps benchmark-taps-realistic benchmark-taps-preflight benchmark-taps-realistic-preflight test-finder-navigation
+.PHONY: all build check clean install uninstall test-install benchmark-comparison-helpers benchmark-fixtures benchmark-realistic-fixtures benchmark-column benchmark-list benchmark-icon benchmark-views benchmark-column-realistic benchmark-list-realistic benchmark-icon-realistic benchmark-realistic-views benchmark-worker-timeout benchmark-hold benchmark-hold-realistic benchmark-hold-preflight benchmark-hold-realistic-preflight benchmark-taps benchmark-taps-realistic benchmark-taps-preflight benchmark-taps-realistic-preflight benchmark-visual-helper benchmark-column-visual benchmark-column-visual-realistic test-visual-latency-analyzer test-finder-navigation
 
 all: build
 
@@ -25,6 +26,11 @@ $(C_HELPER): src/finder_ax_step.c | $(BUILD_DIR)
 
 $(SWIFT_HELPER): src/finder_ax_move.swift | $(BUILD_DIR)
 	xcrun swiftc -O -module-cache-path $(MODULE_CACHE) \
+		-framework AppKit -framework ApplicationServices \
+		$< -o $@
+
+$(VISUAL_CAPTURE_HELPER): tools/finer_visual_capture.m | $(BUILD_DIR)
+	xcrun clang -fobjc-arc -O2 -Wall -Wextra -Werror \
 		-framework AppKit -framework ApplicationServices \
 		$< -o $@
 
@@ -145,6 +151,21 @@ benchmark-taps-realistic-preflight: benchmark-realistic-fixtures
 	FINDER_VIM_BENCHMARK_PROFILE=realistic-mixed \
 	FINDER_VIM_BENCHMARK_PREFLIGHT=1 \
 		./scripts/benchmark_tap_burst.sh "$(ITERATIONS)"
+
+benchmark-visual-helper: $(VISUAL_CAPTURE_HELPER)
+
+benchmark-column-visual: benchmark-fixtures benchmark-visual-helper
+	FINDER_VIM_BENCHMARK_COUNTS="$(COUNTS)" \
+		./scripts/benchmark_column_visual_latency.sh "$(ITERATIONS)"
+
+benchmark-column-visual-realistic: benchmark-realistic-fixtures benchmark-visual-helper
+	FINDER_VIM_FIXTURE_ROOT="$(CURDIR)/$(BUILD_DIR)/benchmark-fixtures/realistic-mixed" \
+	FINDER_VIM_BENCHMARK_PROFILE=realistic-mixed \
+	FINDER_VIM_BENCHMARK_COUNTS="$(COUNTS)" \
+		./scripts/benchmark_column_visual_latency.sh "$(ITERATIONS)"
+
+test-visual-latency-analyzer:
+	./scripts/test_visual_latency_analyzer.sh
 
 test-finder-navigation: benchmark-fixtures
 	./scripts/test_finder_navigation.sh

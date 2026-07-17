@@ -419,6 +419,12 @@ finder-vim/
 
 ## 16. Decision Log
 
+### 2026-07-17: 画面反映時間は可変フレームPTSと同画面マーカーで測る
+
+- Decision: Finderの画面に選択変化が現れるまでの自動計測は、固定範囲の画面収録へ非アクティブな赤/緑マーカーを重ね、緑へ更新した直後に既存ヘルパーを起動する。最後の赤フレームを基準に、最初の緑フレームとマーカー外で選択変化を検出した最初のフレームのPTS差を記録する。内部worker metricsも同じコマンドで併記するが、画面値と内部値を同一視しない。
+- Evidence: このMacの`/usr/sbin/screencapture`でFinderウィンドウを1秒収録した初期確認はH.264、nominal 60fps、0.883秒に48フレームとなり、静止区間の重複フレームが省かれる可変フレームレートだった。このため、フレーム番号の60fps換算や録画プロセス起動時刻では入力境界を決められない。200msの既知差を持つ60fps合成動画では、PTS解析が赤0.5秒、応答0.7秒、差200msを60/60フレームで復元した。
+- Constraint: マーカー更新はヘルパーの`posix_spawn`より先に行うため、値には最大およそ1収録フレームのマーカー先行と合成量子化が含まれる。物理キー、Karabiner評価、shell command開始までの時間は含まず、完全end-to-end key latencyとは表現しない。赤、緑、応答変化、最終選択パス、worker metricsのすべてが揃わない反復は失敗とする。録画は専用Finderウィンドウの固定範囲だけに限定し、通常利用へマーカー、収録、常駐処理を追加しない。
+
 ### 2026-07-17: Column遷移のper-transition AXObserverは採用しない
 
 - Decision: Columnの水平移動後は現行の短時間pollingとreadiness確認を維持する。Finderアプリ全体へ`AXFocusedUIElementChanged`と`AXCreated`を登録して待つper-transition AXObserver候補は本番経路へ残さない。
