@@ -141,7 +141,7 @@ evaluation and is not an end-to-end latency measurement.
 The focused [Column phase diagnosis](../benchmarks/results/2026-07-17-column-phases/SUMMARY.md)
 then split realistic 1,000- and 10,000-item `j l j` runs into event posting,
 transition probes, candidate-item acquisition, and context rebuilding. All 40
-final outcomes across the retained and temporary variants passed. In the
+initial outcomes across the retained and focus-only variants passed. In the
 retained path, warm `l` transition p95 was 162.731ms at 1,000 items and
 191.142ms at 10,000 items. Removing the old-container item-count probe did not
 consistently improve it: the wait moved to the focused-container AX probe,
@@ -149,6 +149,15 @@ whose p95 became 148.525ms and 147.432ms. This identifies Finder's asynchronous
 Column-to-AX publication boundary, not local item scanning, as the dominant
 phase on this host. The existing readiness synchronization remains in place to
 protect rapid `jlj` correctness.
+
+A follow-up AXObserver candidate waited for Finder-wide `AXCreated` or
+`AXFocusedUIElementChanged` notifications before the same readiness check. In a
+same-build comparison it reduced warm `l` AX reads from averages of 46.4 and
+35.6 to 9.0, and measured wakeups from 9.1 and 6.4 to zero. However, worker p95
+changed from 190.435ms to 192.365ms at 1,000 items and from 206.139ms to
+212.130ms at 10,000 items. Dispatch p95 and active footprint also increased.
+The candidate was therefore reverted: fewer active AX calls are useful only if
+they do not trade away responsiveness or add unjustified lifecycle complexity.
 
 ## Benchmark instrumentation
 

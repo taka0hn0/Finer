@@ -419,6 +419,12 @@ finder-vim/
 
 ## 16. Decision Log
 
+### 2026-07-17: Column遷移のper-transition AXObserverは採用しない
+
+- Decision: Columnの水平移動後は現行の短時間pollingとreadiness確認を維持する。Finderアプリ全体へ`AXFocusedUIElementChanged`と`AXCreated`を登録して待つper-transition AXObserver候補は本番経路へ残さない。
+- Evidence: 同一の一時ビルドでrealistic-mixedの1000項目と10000項目を各10反復比較し、pollingとObserverはいずれも20/20成功、Observerのfallbackは0だった。Observerはwarm `l`の平均AX readを46.4/35.6から9.0、平均Wakeupを9.1/6.4から0へ減らしたが、worker p95は190.435/206.139msから192.365/212.130ms、dispatch p95は310.838/348.668msから314.053/358.640msへ増えた。最大active footprintも1000項目で163,840 bytes、10000項目で98,304 bytes増えたため、速度と単純性を優先して候補を戻した。匿名化したraw dataを`benchmarks/results/2026-07-17-column-phases/`へ追加する。
+- Constraint: この判断はコマンドごとにObserverを作成・登録する候補に対するものとする。異なるObserver lifetimeやFinder側仕様変更を将来検討する場合も、最終選択の正しさだけでなくworker/dispatch latency、active footprint、CPU、Wakeupを同一条件で再比較し、速度改善がなければ採用しない。
+
 ### 2026-07-17: Column階層移動はFinderのAX公開待ちを維持し、フェーズ計測を明示時だけ追加する
 
 - Decision: Columnの`h/l`後は既存どおり、Finderの新しい列で項目配列と選択項目を解決できるまで後続コマンドを同期する。通常のメトリクスに加えて`FINDER_VIM_COLUMN_PHASE_METRICS=1`を指定した時だけ、コンテキスト検証・再作成、イベント送信、列遷移、項目配列、選択確定を別々に記録する。通常利用時はフェーズ時刻を取得しない。

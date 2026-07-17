@@ -13,14 +13,21 @@ present. The retained baseline behavior is the behavior shipped with the phase
 instrumentation. Its final repository build and installed helper both had
 SHA-256 `3a07d26d5d9a6d2e14872bc0bae76fc8c45aca3e8e2e563ff989b69937b77e54`.
 
+The later AXObserver comparison records commit
+`90a7fab8413c76329ff20805ef60df9f687358f1` with `dirty=true` because the
+observer candidate was intentionally benchmarked before deciding whether to
+keep it. The candidate was reverted after measurement.
+
 ## Correctness
 
-Both variants selected `01-A/item-00001.txt` in every iteration:
+All four variants selected `01-A/item-00001.txt` in every iteration:
 
 | Variant | 1,000 items | 10,000 items | Total |
 | --- | ---: | ---: | ---: |
 | Retained baseline | 10/10 | 10/10 | 20/20 |
 | Temporary focus-only wait | 10/10 | 10/10 | 20/20 |
+| Same-build polling control | 10/10 | 10/10 | 20/20 |
+| Temporary AXObserver wait | 10/10 | 10/10 | 20/20 |
 
 ## Phase results
 
@@ -42,6 +49,34 @@ consistent with Finder delaying the first post-event AX query until the new
 column becomes available, rather than Finer spending that interval scanning
 items locally.
 
+## AXObserver experiment
+
+A standalone feasibility probe registered Finder-wide
+`AXFocusedUIElementChanged` and `AXCreated` notifications. Observer creation
+plus both registrations took approximately 0.1–0.3ms when the existing
+navigation container supplied the Finder PID. The readiness notifications
+arrived around 126–156ms after the right-arrow event, so a benchmark-only worker
+variant waited for those notifications and then performed the same readiness
+verification. All 20 Observer iterations completed without falling back to
+polling.
+
+The table compares that candidate with a polling run from the same temporary
+build and test session. Values are warm `l` p95 except the average AX and Wakeup
+columns.
+
+| Strategy / items | Dispatch p95 | Worker p95 | Transition p95 | Avg AX reads | Avg wakeups | Max footprint |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Polling / 1,000 | 310.838ms | 190.435ms | 175.321ms | 46.4 | 9.1 | 4,227,576 bytes |
+| Observer / 1,000 | 314.053ms | 192.365ms | 177.244ms | 9.0 | 0.0 | 4,391,416 bytes |
+| Polling / 10,000 | 348.668ms | 206.139ms | 188.321ms | 35.6 | 6.4 | 5,587,472 bytes |
+| Observer / 10,000 | 358.640ms | 212.130ms | 187.786ms | 9.0 | 0.0 | 5,685,776 bytes |
+
+AXObserver substantially reduced AX reads and measured wakeups, but it did not
+improve worker or dispatch p95 at either item count. It also increased the
+maximum active footprint and average CPU slightly. Because Finer prioritizes
+responsiveness and the polling worker already exits after the burst, the added
+observer lifecycle and fallback path are not justified by this result.
+
 ## Decision
 
 - Keep the existing synchronization that prevents a queued `j` from operating
@@ -52,9 +87,11 @@ items locally.
 - Do not describe the measured wait as file-content processing or local O(N)
   selection work. The blocking phase is Finder's asynchronous Column-to-AX
   publication boundary on this host.
-- Investigate notification-based observation or true end-to-end frame timing
-  separately. Do not replace the readiness check with a fixed delay or remove
-  it merely to improve an internal latency number.
+- Do not adopt the per-transition AXObserver candidate. Reconsider notification
+  observation only if a different lifetime model shows an actual latency gain.
+- Investigate true end-to-end frame timing separately. Do not replace the
+  readiness check with a fixed delay or remove it merely to improve an internal
+  latency number.
 
 ## Scope and files
 
@@ -63,5 +100,6 @@ exclude physical input, Karabiner evaluation, and Finder frame rendering, so
 they are not end-to-end key latency measurements. Paths in the raw outcomes and
 environment files are sanitized to `$REPO` and `$HOME`.
 
-`baseline.*` contains the retained behavior. `focus-only.*` contains the
-temporary experiment that was not adopted.
+`baseline.*` contains the retained behavior and `focus-only.*` the first
+temporary experiment. `same-build-polling.*` and `observer.*` contain the later
+controlled comparison. Neither temporary candidate was adopted.
