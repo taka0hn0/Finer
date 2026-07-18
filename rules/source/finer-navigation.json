@@ -4127,6 +4127,11 @@
           "value": 1
         },
         {
+          "name": "finder_confirmed_marks_maybe_present",
+          "type": "variable_unless",
+          "value": 1
+        },
+        {
           "expression": "accessibility.focused_ui_element.role_string == 'AXOutline'",
           "type": "expression_if"
         },
@@ -4162,6 +4167,11 @@
         },
         {
           "name": "finder_visual_mode",
+          "type": "variable_unless",
+          "value": 1
+        },
+        {
+          "name": "finder_confirmed_marks_maybe_present",
           "type": "variable_unless",
           "value": 1
         },
@@ -4341,6 +4351,12 @@
         },
         {
           "set_variable": {
+            "name": "finder_confirmed_marks_maybe_present",
+            "value": 0
+          }
+        },
+        {
+          "set_variable": {
             "name": "finder_visual_mode",
             "value": 1
           }
@@ -4402,6 +4418,12 @@
       "to": [
         {
           "shell_command": "$HOME/.local/libexec/finder-vim/finder_ax_step clear-selection >/dev/null 2>&1; exec /usr/bin/truncate -s 0 $HOME/.local/state/finder-vim/finder_marks.txt $HOME/.local/state/finder-vim/finder_navigation_anchor.txt $HOME/.local/state/finder-vim/finder_visual_anchor.txt"
+        },
+        {
+          "set_variable": {
+            "name": "finder_confirmed_marks_maybe_present",
+            "value": 0
+          }
         },
         {
           "set_variable": {
@@ -4749,6 +4771,12 @@
         },
         {
           "set_variable": {
+            "name": "finder_confirmed_marks_maybe_present",
+            "value": 0
+          }
+        },
+        {
+          "set_variable": {
             "name": "finder_cut_pending",
             "value": 0
           }
@@ -4785,6 +4813,12 @@
         "key_code": "s"
       },
       "to": [
+        {
+          "set_variable": {
+            "name": "finder_confirmed_marks_maybe_present",
+            "value": 1
+          }
+        },
         {
           "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_step toggle-mark >/dev/null 2>&1"
         }

@@ -96,6 +96,7 @@ def clears_motion_count:
                 },
                 {"expression":$text_expression,"type":"expression_unless"},
                 {"name":"finder_visual_mode","type":"variable_unless","value":1},
+                {"name":"finder_confirmed_marks_maybe_present","type":"variable_unless","value":1},
                 {
                     "expression":$list_role_expression,
                     "type":"expression_if"
@@ -125,6 +126,7 @@ def clears_motion_count:
                 },
                 {"expression":$text_expression,"type":"expression_unless"},
                 {"name":"finder_visual_mode","type":"variable_unless","value":1},
+                {"name":"finder_confirmed_marks_maybe_present","type":"variable_unless","value":1},
                 {
                     "expression":$list_role_expression,
                     "type":"expression_if"
@@ -174,6 +176,7 @@ def clears_motion_count:
             and .from == {"key_code":"v"}
             and .to == [
                 {"shell_command":$visual_start_command},
+                {"set_variable":{"name":"finder_confirmed_marks_maybe_present","value":0}},
                 {"set_variable":{"name":"finder_visual_mode","value":1}}
             ]
             and finder_normal_conditions
@@ -280,6 +283,7 @@ def clears_motion_count:
                 {"set_variable":{"name":"finder_motion_count","value":0}},
                 {"set_variable":{"name":"finder_motion_count_expiration","value":0}},
                 {"shell_command":$clear_selection_command},
+                {"set_variable":{"name":"finder_confirmed_marks_maybe_present","value":0}},
                 {"set_variable":{"name":"finder_cut_pending","value":0}},
                 {"set_variable":{"name":"finder_copy_pending","value":0}}
             ]
@@ -362,6 +366,7 @@ def clears_motion_count:
             .description == "Normal Mode: Press Esc to clear discontiguous Finder marks"
             and .from == {"key_code":"escape"}
             and .to[0] == {"shell_command":$clear_selection_command}
+            and .to[1] == {"set_variable":{"name":"finder_confirmed_marks_maybe_present","value":0}}
             and ([.to[] | select(.shell_command? != null)] | length == 1)
             and finder_normal_conditions
         )
@@ -373,7 +378,10 @@ def clears_motion_count:
         | select(
             .description == "Normal Mode: Toggle discontiguous Finder mark with s"
             and .from == {"key_code":"s"}
-            and .to == [{"shell_command":"exec $HOME/.local/libexec/finder-vim/finder_ax_step toggle-mark >/dev/null 2>&1"}]
+            and .to == [
+                {"set_variable":{"name":"finder_confirmed_marks_maybe_present","value":1}},
+                {"shell_command":"exec $HOME/.local/libexec/finder-vim/finder_ax_step toggle-mark >/dev/null 2>&1"}
+            ]
             and finder_normal_conditions
         )
     ] | length == 1),
