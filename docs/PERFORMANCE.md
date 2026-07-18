@@ -121,12 +121,27 @@ selectable edge through AX, moves the vertical scroll position to that edge,
 and restarts the native repeat stream. The release token and frontmost PID are
 checked again immediately before this jump. Key release always posts key-up.
 
-Column View retains the hold-only direct AX path. That loop keeps the
-navigation item array and current index locally and schedules repeats on an
-absolute 8.333ms timeline with `mach_wait_until`. When an AX write misses a
+Column View retains the direct AX path as its stable fallback. That loop keeps
+the navigation item array and current index locally and schedules repeats on
+an absolute 8.333ms timeline with `mach_wait_until`. When an AX write misses a
 tick, it skips the expired tick instead of issuing a catch-up write. It reuses
 one mutable single-item selection array and verifies the real selection when
 the hold stops.
+
+A default-off `finder_native_column_hold_experiment` maps uncounted, unmarked
+Normal Mode `j/k` directly to Finder's repeating arrow events. Karabiner limits
+the path to a focused `AXList` without the `AXCollectionList` subrole, which
+distinguishes Column from Icon View on the measured host. Marked movement,
+Visual Mode, and counted motions continue to use the verified worker path. The
+prototype currently keeps Finder's native stop-at-edge behavior; Column edge
+wrapping and physical-input throughput remain adoption tests rather than
+established performance claims.
+
+In a subsequent 60Hz physical-key dogfood check with 1,000 items, the user
+reported that Column `j/k` hold speed felt comparable to the adopted List
+path. This is qualitative evidence that bypassing per-step AX selection removes
+the observed bottleneck; it is not a measured throughput or 120Hz rendering
+result.
 
 The optimization does not change taps, counted motions, Icon movement, Visual
 Mode, or marked navigation. Marked movement retains the verified path because

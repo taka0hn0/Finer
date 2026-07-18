@@ -4383,6 +4383,102 @@
           "name": "finder_visual_mode",
           "type": "variable_unless",
           "value": 1
+        },
+        {
+          "name": "finder_confirmed_marks_maybe_present",
+          "type": "variable_unless",
+          "value": 1
+        },
+        {
+          "expression": "accessibility.focused_ui_element.role_string == 'AXList'",
+          "type": "expression_if"
+        },
+        {
+          "expression": "accessibility.focused_ui_element.subrole_string == 'AXCollectionList'",
+          "type": "expression_unless"
+        },
+        {
+          "name": "finder_native_column_hold_experiment",
+          "type": "variable_if",
+          "value": 1
+        }
+      ],
+      "description": "Experimental Column native hold: Map j directly to Down Arrow",
+      "from": {
+        "key_code": "j"
+      },
+      "to": [
+        {
+          "key_code": "down_arrow",
+          "repeat": true
+        }
+      ],
+      "type": "basic"
+    },
+    {
+      "conditions": [
+        {
+          "bundle_identifiers": [
+            "^com\\.apple\\.finder$"
+          ],
+          "type": "frontmost_application_if"
+        },
+        {
+          "expression": "accessibility.focused_ui_element.role_string like 'AXText*'",
+          "type": "expression_unless"
+        },
+        {
+          "name": "finder_visual_mode",
+          "type": "variable_unless",
+          "value": 1
+        },
+        {
+          "name": "finder_confirmed_marks_maybe_present",
+          "type": "variable_unless",
+          "value": 1
+        },
+        {
+          "expression": "accessibility.focused_ui_element.role_string == 'AXList'",
+          "type": "expression_if"
+        },
+        {
+          "expression": "accessibility.focused_ui_element.subrole_string == 'AXCollectionList'",
+          "type": "expression_unless"
+        },
+        {
+          "name": "finder_native_column_hold_experiment",
+          "type": "variable_if",
+          "value": 1
+        }
+      ],
+      "description": "Experimental Column native hold: Map k directly to Up Arrow",
+      "from": {
+        "key_code": "k"
+      },
+      "to": [
+        {
+          "key_code": "up_arrow",
+          "repeat": true
+        }
+      ],
+      "type": "basic"
+    },
+    {
+      "conditions": [
+        {
+          "bundle_identifiers": [
+            "^com\\.apple\\.finder$"
+          ],
+          "type": "frontmost_application_if"
+        },
+        {
+          "expression": "accessibility.focused_ui_element.role_string like 'AXText*'",
+          "type": "expression_unless"
+        },
+        {
+          "name": "finder_visual_mode",
+          "type": "variable_unless",
+          "value": 1
         }
       ],
       "description": "Normal Mode: Map j to List wrap or Grid down with transient C worker",

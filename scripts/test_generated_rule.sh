@@ -5,6 +5,8 @@ repo_root="${0:A:h:h}"
 rule_file="$repo_root/rules/generated/finder-vim.json"
 text_expression="accessibility.focused_ui_element.role_string like 'AXText*'"
 list_role_expression="accessibility.focused_ui_element.role_string == 'AXOutline'"
+column_role_expression="accessibility.focused_ui_element.role_string == 'AXList'"
+icon_subrole_expression="accessibility.focused_ui_element.subrole_string == 'AXCollectionList'"
 clear_marks_command='exec /usr/bin/truncate -s 0 $HOME/.local/state/finder-vim/finder_marks.txt $HOME/.local/state/finder-vim/finder_navigation_anchor.txt'
 clear_visual_state_command='exec /usr/bin/truncate -s 0 $HOME/.local/state/finder-vim/finder_marks.txt $HOME/.local/state/finder-vim/finder_navigation_anchor.txt $HOME/.local/state/finder-vim/finder_visual_anchor.txt'
 clear_selection_command='$HOME/.local/libexec/finder-vim/finder_ax_step clear-selection >/dev/null 2>&1; exec /usr/bin/truncate -s 0 $HOME/.local/state/finder-vim/finder_marks.txt $HOME/.local/state/finder-vim/finder_navigation_anchor.txt $HOME/.local/state/finder-vim/finder_visual_anchor.txt'
@@ -14,6 +16,8 @@ copy_marks_command='$HOME/.local/libexec/finder-vim/finder_action_marked.sh copy
 jq -e \
     --arg text_expression "$text_expression" \
     --arg list_role_expression "$list_role_expression" \
+    --arg column_role_expression "$column_role_expression" \
+    --arg icon_subrole_expression "$icon_subrole_expression" \
     --arg clear_marks_command "$clear_marks_command" \
     --arg clear_visual_state_command "$clear_visual_state_command" \
     --arg clear_selection_command "$clear_selection_command" \
@@ -77,6 +81,54 @@ def clears_motion_count:
             and .from == {"key_code":"o"}
             and .to == [{"key_code":"down_arrow","modifiers":["command"],"repeat":false}]
             and finder_normal_conditions
+        )
+    ] | length == 1),
+    ([
+        .rules[]
+        | select(.description == "Finer Navigation")
+        | .manipulators[]
+        | select(
+            .description == "Experimental Column native hold: Map j directly to Down Arrow"
+            and .from == {"key_code":"j"}
+            and .to == [{"key_code":"down_arrow","repeat":true}]
+        )
+        | select(
+            .conditions == [
+                {
+                    "bundle_identifiers":["^com\\.apple\\.finder$"],
+                    "type":"frontmost_application_if"
+                },
+                {"expression":$text_expression,"type":"expression_unless"},
+                {"name":"finder_visual_mode","type":"variable_unless","value":1},
+                {"name":"finder_confirmed_marks_maybe_present","type":"variable_unless","value":1},
+                {"expression":$column_role_expression,"type":"expression_if"},
+                {"expression":$icon_subrole_expression,"type":"expression_unless"},
+                {"name":"finder_native_column_hold_experiment","type":"variable_if","value":1}
+            ]
+        )
+    ] | length == 1),
+    ([
+        .rules[]
+        | select(.description == "Finer Navigation")
+        | .manipulators[]
+        | select(
+            .description == "Experimental Column native hold: Map k directly to Up Arrow"
+            and .from == {"key_code":"k"}
+            and .to == [{"key_code":"up_arrow","repeat":true}]
+        )
+        | select(
+            .conditions == [
+                {
+                    "bundle_identifiers":["^com\\.apple\\.finder$"],
+                    "type":"frontmost_application_if"
+                },
+                {"expression":$text_expression,"type":"expression_unless"},
+                {"name":"finder_visual_mode","type":"variable_unless","value":1},
+                {"name":"finder_confirmed_marks_maybe_present","type":"variable_unless","value":1},
+                {"expression":$column_role_expression,"type":"expression_if"},
+                {"expression":$icon_subrole_expression,"type":"expression_unless"},
+                {"name":"finder_native_column_hold_experiment","type":"variable_if","value":1}
+            ]
         )
     ] | length == 1),
     ([
@@ -251,6 +303,58 @@ def clears_motion_count:
             | .manipulators
             | to_entries[]
             | select(.value.description == "Experimental List native hold: Map k directly to Up Arrow")
+            | .key][0]
+        < [.rules[]
+            | select(.description == "Finer Navigation")
+            | .manipulators
+            | to_entries[]
+            | select(.value.description == "Normal Mode: Map k to List wrap or Grid up with transient C worker")
+            | .key][0]
+    ),
+    (
+        [.rules[]
+            | select(.description == "Finer Navigation")
+            | .manipulators
+            | to_entries[]
+            | select(.value.description == "Normal Mode: Move down by Finder motion count")
+            | .key][0]
+        < [.rules[]
+            | select(.description == "Finer Navigation")
+            | .manipulators
+            | to_entries[]
+            | select(.value.description == "Experimental Column native hold: Map j directly to Down Arrow")
+            | .key][0]
+        and [.rules[]
+            | select(.description == "Finer Navigation")
+            | .manipulators
+            | to_entries[]
+            | select(.value.description == "Experimental Column native hold: Map j directly to Down Arrow")
+            | .key][0]
+        < [.rules[]
+            | select(.description == "Finer Navigation")
+            | .manipulators
+            | to_entries[]
+            | select(.value.description == "Normal Mode: Map j to List wrap or Grid down with transient C worker")
+            | .key][0]
+    ),
+    (
+        [.rules[]
+            | select(.description == "Finer Navigation")
+            | .manipulators
+            | to_entries[]
+            | select(.value.description == "Normal Mode: Move up by Finder motion count")
+            | .key][0]
+        < [.rules[]
+            | select(.description == "Finer Navigation")
+            | .manipulators
+            | to_entries[]
+            | select(.value.description == "Experimental Column native hold: Map k directly to Up Arrow")
+            | .key][0]
+        and [.rules[]
+            | select(.description == "Finer Navigation")
+            | .manipulators
+            | to_entries[]
+            | select(.value.description == "Experimental Column native hold: Map k directly to Up Arrow")
             | .key][0]
         < [.rules[]
             | select(.description == "Finer Navigation")
