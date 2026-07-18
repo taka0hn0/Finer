@@ -10,6 +10,25 @@ iterations="${1:-10}"
 counts_string="${FINDER_VIM_BENCHMARK_COUNTS:-10 1000 10000}"
 counts=("${(@s: :)counts_string}")
 
+group_menu_item() {
+    case "$1" in
+        None|Name|Kind|Application|Size|Tags) print "$1" ;;
+        DateLastOpened) print 'Date Last Opened' ;;
+        DateAdded) print 'Date Added' ;;
+        DateModified) print 'Date Modified' ;;
+        DateCreated) print 'Date Created' ;;
+        *) return 1 ;;
+    esac
+}
+
+original_group_arrangement="$(defaults read com.apple.finder FXArrangeGroupViewBy 2>/dev/null || print Name)"
+original_group_preference="$(defaults read com.apple.finder FXPreferredGroupBy 2>/dev/null || print None)"
+original_group_menu_item="$(group_menu_item "$original_group_preference" || true)"
+if [[ -z "$original_group_menu_item" ]]; then
+    print -u2 -- "Unsupported Finder grouping preference: $original_group_preference"
+    exit 1
+fi
+
 if [[ ! "$iterations" =~ '^[1-9][0-9]*$' ]]; then
     print -u2 -- "Iterations must be a positive integer: $iterations"
     exit 64
@@ -43,9 +62,23 @@ touch "$metrics_file" "$outcomes_file" "$environment_file"
 truncate -s 0 "$metrics_file" "$outcomes_file" "$environment_file"
 
 window_id=""
+grouping_changed=false
 close_test_window() {
+    local restore="${1:-false}"
+    local restore_status=0
     if [[ -z "$window_id" ]]; then
-        return
+        if [[ "$restore" == true ]]; then
+            if ! restore_grouping_preferences; then
+                restore_status=1
+            fi
+        fi
+        return "$restore_status"
+    fi
+    if [[ "$restore" == true ]]; then
+        if ! restore_grouping_runtime; then
+            print -u2 -- "Failed to restore Finder runtime grouping"
+            restore_status=1
+        fi
     fi
     typeset -a close_script=(
         -e 'set windowId to (system attribute "FINDER_VIM_WINDOW_ID") as integer'
@@ -56,6 +89,31 @@ close_test_window() {
     FINDER_VIM_WINDOW_ID="$window_id" /usr/bin/osascript "${close_script[@]}" \
         >/dev/null 2>&1 || true
     window_id=""
+    if [[ "$restore" == true ]]; then
+        if ! restore_grouping_preferences; then
+            print -u2 -- "Failed to restore Finder grouping preferences"
+            restore_status=1
+        fi
+    fi
+    return "$restore_status"
+}
+
+open_test_window() {
+    typeset -a open_script=(
+        -e 'set casePath to system attribute "FINDER_VIM_CASE_DIR"'
+        -e 'tell application "Finder"'
+        -e 'set targetFolder to POSIX file casePath as alias'
+        -e 'set testWindow to make new Finder window to targetFolder'
+        -e 'set current view of testWindow to column view'
+        -e 'set selection to {file "00-start.txt" of targetFolder}'
+        -e 'set index of testWindow to 1'
+        -e 'activate'
+        -e 'return id of testWindow'
+        -e 'end tell'
+    )
+    window_id="$(
+        FINDER_VIM_CASE_DIR="$case_dir" /usr/bin/osascript "${open_script[@]}"
+    )"
 }
 
 activate_test_window() {
@@ -71,24 +129,94 @@ activate_test_window() {
         >/dev/null 2>&1
 }
 
+set_grouping_criterion() {
+    local menu_item="$1"
+    activate_test_window
+    /usr/bin/osascript \
+        -e 'on run argv' \
+        -e 'set criterionName to item 1 of argv' \
+        -e 'tell application "System Events"' \
+        -e 'tell process "Finder"' \
+        -e 'set mainWindow to first window whose value of attribute "AXMain" is true' \
+        -e 'set groupButton to first menu button of toolbar 1 of mainWindow whose description is "Group"' \
+        -e 'click groupButton' \
+        -e 'click menu item criterionName of menu 1 of groupButton' \
+        -e 'end tell' \
+        -e 'end tell' \
+        -e 'end run' -- "$menu_item" >/dev/null
+    sleep 0.2
+}
+
+disable_grouping() {
+    if [[ "$grouping_changed" == true ]]; then
+        return
+    fi
+    set_grouping_criterion None
+    grouping_changed=true
+    # Finder can keep the old grouped AX browser alive after the menu change.
+    # Reopen the dedicated window so measurement starts from a fresh tree.
+    close_test_window false
+    open_test_window
+    sleep 1
+}
+
+restore_grouping_runtime() {
+    if [[ "$grouping_changed" != true || -z "$window_id" ]]; then
+        return
+    fi
+    set_grouping_criterion "$original_group_menu_item"
+}
+
+restore_grouping_preferences() {
+    if [[ "$grouping_changed" != true ]]; then
+        return
+    fi
+    defaults write com.apple.finder FXArrangeGroupViewBy \
+        -string "$original_group_arrangement"
+    defaults write com.apple.finder FXPreferredGroupBy \
+        -string "$original_group_preference"
+    grouping_changed=false
+}
+
+initial_context_ready() {
+    activate_test_window || return 1
+    if "$helper" first >/dev/null 2>&1; then
+        selected_path="$(/usr/bin/osascript -e 'tell application "Finder" to POSIX path of (item 1 of (get selection) as alias)' 2>/dev/null || true)"
+        if [[ "$selected_path" == "$initial_path" ]]; then
+            sleep 0.1
+            stable_path="$(/usr/bin/osascript -e 'tell application "Finder" to POSIX path of (item 1 of (get selection) as alias)' 2>/dev/null || true)"
+            if [[ "$stable_path" == "$initial_path" ]]; then
+                activate_test_window
+                return 0
+            fi
+        fi
+    fi
+    return 1
+}
+
 wait_for_initial_context() {
     for ((attempt = 1; attempt <= 20; ++attempt)); do
-        activate_test_window || true
-        if "$helper" first >/dev/null 2>&1; then
-            selected_path="$(/usr/bin/osascript -e 'tell application "Finder" to POSIX path of (item 1 of (get selection) as alias)' 2>/dev/null || true)"
-            if [[ "$selected_path" == "$initial_path" ]]; then
-                sleep 0.1
-                stable_path="$(/usr/bin/osascript -e 'tell application "Finder" to POSIX path of (item 1 of (get selection) as alias)' 2>/dev/null || true)"
-                if [[ "$stable_path" == "$initial_path" ]]; then
-                    activate_test_window
-                    return 0
-                fi
-            fi
+        if initial_context_ready; then
+            return 0
         fi
         sleep 0.1
     done
     print -u2 -- "Finder context did not become ready: $label iteration $iteration"
     return 1
+}
+
+prepare_initial_context() {
+    # Finder may retain the runtime grouping state after its stored preferences
+    # have been restored. Probe the actual new window before sending a shortcut
+    # that could otherwise invert an already-ungrouped browser.
+    for ((attempt = 1; attempt <= 10; ++attempt)); do
+        if initial_context_ready; then
+            return 0
+        fi
+        sleep 0.1
+    done
+    disable_grouping
+    wait_for_initial_context
 }
 
 send_benchmark_command() {
@@ -114,9 +242,9 @@ wait_for_metrics_flush() {
     return 1
 }
 
-trap close_test_window EXIT
-trap 'close_test_window; exit 130' INT
-trap 'close_test_window; exit 143' TERM
+trap 'close_test_window true' EXIT
+trap 'close_test_window true; exit 130' INT
+trap 'close_test_window true; exit 143' TERM
 
 commit="$(git -C "$repo_root" rev-parse HEAD)"
 dirty=false
@@ -145,6 +273,9 @@ fi
     print -- "iterations=$iterations"
     print -- "helper=$helper"
     print -- "column_phase_metrics=${FINDER_VIM_COLUMN_PHASE_METRICS:-0}"
+    print -- "finder_group_arrangement=$original_group_arrangement"
+    print -- "finder_group_preference=$original_group_preference"
+    print -- "benchmark_grouping=None"
 } > "$environment_file"
 if [[ -r "$fixture_root/manifest.tsv" ]]; then
     awk -F '\t' 'NR > 1 {
@@ -171,22 +302,8 @@ for count in "${counts[@]}"; do
     fi
 
     for ((iteration = 1; iteration <= iterations; ++iteration)); do
-        typeset -a open_script=(
-            -e 'set casePath to system attribute "FINDER_VIM_CASE_DIR"'
-            -e 'tell application "Finder"'
-            -e 'set targetFolder to POSIX file casePath as alias'
-            -e 'set testWindow to make new Finder window to targetFolder'
-            -e 'set current view of testWindow to column view'
-            -e 'set selection to {file "00-start.txt" of targetFolder}'
-            -e 'set index of testWindow to 1'
-            -e 'activate'
-            -e 'return id of testWindow'
-            -e 'end tell'
-        )
-        window_id="$(
-            FINDER_VIM_CASE_DIR="$case_dir" /usr/bin/osascript "${open_script[@]}"
-        )"
-        wait_for_initial_context
+        open_test_window
+        prepare_initial_context
 
         send_benchmark_command down
         send_benchmark_command right
@@ -201,7 +318,11 @@ for count in "${counts[@]}"; do
             result=fail
         fi
         print -r -- "$label"$'\t'"$iteration"$'\t'"$result"$'\t'"$selected_path" >> "$outcomes_file"
-        close_test_window
+        final_iteration=false
+        if [[ "$count" == "${counts[-1]}" && "$iteration" == "$iterations" ]]; then
+            final_iteration=true
+        fi
+        close_test_window "$final_iteration"
         (( expected_metrics_rows += 3 ))
         wait_for_metrics_flush "$expected_metrics_rows"
     done

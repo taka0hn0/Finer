@@ -41,6 +41,13 @@ After installing the current helper, run `make benchmark-list`,
 closes a dedicated Finder window per iteration, verifies the final selected
 path, and rejects incomplete or failed metrics.
 
+The Column runner temporarily disables Finder grouping for the benchmark run
+so group headings cannot be mistaken for fixture items. After closing the
+final window, or from its failure cleanup path, it restores the original
+grouping criterion and enabled state. Restoration first selects the captured
+criterion from the final test window's Group menu, then writes back the exact
+two Finder preference values after that window closes.
+
 The default empty-file fixtures isolate item-count and AX costs. Run
 `make benchmark-realistic-views` to repeat the matrices with deterministic
 mixed, non-empty local content; see `docs/BENCHMARKS.md` for the distinction.
