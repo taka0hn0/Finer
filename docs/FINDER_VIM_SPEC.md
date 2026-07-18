@@ -429,6 +429,13 @@ finder-vim/
 
 ## 16. Decision Log
 
+### 2026-07-18: Karabiner直結List長押しの端監視を既定OFFの遅延実験へ分離する
+
+- Decision: `finder_native_list_hold_experiment=1`に加えて`finder_native_list_edge_wrap_experiment=1`の時だけ、Listの`j/k`を標準上下矢印へ直結したまま250ms後に端監視を起動する。Karabinerの`to`は押下中変数を設定してから`repeat: true`の矢印を最後に送り、`to_after_key_up`で変数を戻す。遅延アクションは押下中変数が1の時だけ即終了するランチャーを呼び、最大30秒の一時子プロセスが標準矢印の押下状態、前面Finder PID、ListのAX role、確定マークなしを検証する。通常区間は50msごと、端まで12項目以内は8.333msごとに選択を読み、端で2回連続して停止した時だけ反対端の選択と縦スクロール端を更新する。方向別lockで重複起動を防ぎ、折り返し後は標準矢印が反対端から離れるまで再折り返ししない。
+- Reason: KarabinerからFinder標準矢印へ直接写像する経路は通常区間の速度とスクロール追従を保てるが、Finder標準動作だけでは端で停止する。通常反復を送る主体と端だけを補う主体を分離すれば、hot pathへAX書き込みを戻さずにFinerの循環要件を試せる。`to_if_held_down`はKarabinerの仕様上、保持時アクションより前に既存`to`のkey-upを送るため、この用途には使わない。
+- Evidence: C helperは`-O2 -Wall -Wextra -Werror`でビルドでき、生成JSONの回帰試験は、通常の直結経路と端監視経路がフラグで排他的であること、矢印が`to`の最後であること、250ms遅延、押下中変数、key-up解除、条件付きランチャーを検証している。`make check`は通過した。一方、`CGEventPost`による合成矢印はKarabinerの仮想HIDが作る押下状態を再現できなかったため、端監視の機能合格には使用しない。
+- Constraint: `finder_native_list_edge_wrap_experiment`は既定OFFとし、現在のdogfoodでは有効化しない。採用前に実キーボードとKarabinerを通した`j/k`長押しで、250ms後も標準repeatが途切れないこと、上下端の循環、key-up後のdriftなし、確定マーク時のワーカーfallbackを確認する。120Hzでの画面収録が可能になってから通常区間と折り返し前後の滑らかさを最終評価する。実験中も常駐プロセスは追加せず、一時監視はkey-up、Finder失焦点、または30秒で終了する。
+
 ### 2026-07-17: Listの端移動は表示位置も揃え、Iconの水平移動は仮想化された全体を折り返す
 
 - Decision: Normal ModeのList `gg/G`は先頭・末尾の選択と縦スクロール端を同時に更新する。Iconの`h/l`はFinderが現在公開する仮想化項目だけを循環させず、行境界で標準上下矢印と行端への水平移動を送り、表示範囲変更時に項目配列を再取得する。フォルダ全体の端ではスクロール位置を反対端へ移してから実ファイル項目を再取得・選択する。Icon section前後のURLを持たない補助要素は両端だけを検査して除外する。

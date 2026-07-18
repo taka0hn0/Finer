@@ -105,6 +105,11 @@ def clears_motion_count:
                     "name":"finder_native_list_hold_experiment",
                     "type":"variable_if",
                     "value":1
+                },
+                {
+                    "name":"finder_native_list_edge_wrap_experiment",
+                    "type":"variable_unless",
+                    "value":1
                 }
             ]
         )
@@ -135,7 +140,94 @@ def clears_motion_count:
                     "name":"finder_native_list_hold_experiment",
                     "type":"variable_if",
                     "value":1
+                },
+                {
+                    "name":"finder_native_list_edge_wrap_experiment",
+                    "type":"variable_unless",
+                    "value":1
                 }
+            ]
+        )
+    ] | length == 1),
+    ([
+        .rules[]
+        | select(.description == "Finer Navigation")
+        | .manipulators[]
+        | select(
+            .description == "Experimental List native hold with delayed edge monitor: Map j to Down Arrow"
+            and .from == {"key_code":"j"}
+            and .parameters == {"basic.to_delayed_action_delay_milliseconds":250}
+            and .to == [
+                {"set_variable":{"name":"finder_native_list_j_pressed","value":1}},
+                {"key_code":"down_arrow","repeat":true}
+            ]
+            and .to_after_key_up == [
+                {"set_variable":{"name":"finder_native_list_j_pressed","value":0}}
+            ]
+            and .to_delayed_action == {
+                "to_if_invoked":[{
+                    "conditions":[{
+                        "name":"finder_native_list_j_pressed",
+                        "type":"variable_if",
+                        "value":1
+                    }],
+                    "shell_command":"exec $HOME/.local/libexec/finder-vim/finder_ax_step list-edge-monitor-start down >/dev/null 2>&1"
+                }]
+            }
+        )
+        | select(
+            .conditions == [
+                {
+                    "bundle_identifiers":["^com\\.apple\\.finder$"],
+                    "type":"frontmost_application_if"
+                },
+                {"expression":$text_expression,"type":"expression_unless"},
+                {"name":"finder_visual_mode","type":"variable_unless","value":1},
+                {"name":"finder_confirmed_marks_maybe_present","type":"variable_unless","value":1},
+                {"expression":$list_role_expression,"type":"expression_if"},
+                {"name":"finder_native_list_hold_experiment","type":"variable_if","value":1},
+                {"name":"finder_native_list_edge_wrap_experiment","type":"variable_if","value":1}
+            ]
+        )
+    ] | length == 1),
+    ([
+        .rules[]
+        | select(.description == "Finer Navigation")
+        | .manipulators[]
+        | select(
+            .description == "Experimental List native hold with delayed edge monitor: Map k to Up Arrow"
+            and .from == {"key_code":"k"}
+            and .parameters == {"basic.to_delayed_action_delay_milliseconds":250}
+            and .to == [
+                {"set_variable":{"name":"finder_native_list_k_pressed","value":1}},
+                {"key_code":"up_arrow","repeat":true}
+            ]
+            and .to_after_key_up == [
+                {"set_variable":{"name":"finder_native_list_k_pressed","value":0}}
+            ]
+            and .to_delayed_action == {
+                "to_if_invoked":[{
+                    "conditions":[{
+                        "name":"finder_native_list_k_pressed",
+                        "type":"variable_if",
+                        "value":1
+                    }],
+                    "shell_command":"exec $HOME/.local/libexec/finder-vim/finder_ax_step list-edge-monitor-start up >/dev/null 2>&1"
+                }]
+            }
+        )
+        | select(
+            .conditions == [
+                {
+                    "bundle_identifiers":["^com\\.apple\\.finder$"],
+                    "type":"frontmost_application_if"
+                },
+                {"expression":$text_expression,"type":"expression_unless"},
+                {"name":"finder_visual_mode","type":"variable_unless","value":1},
+                {"name":"finder_confirmed_marks_maybe_present","type":"variable_unless","value":1},
+                {"expression":$list_role_expression,"type":"expression_if"},
+                {"name":"finder_native_list_hold_experiment","type":"variable_if","value":1},
+                {"name":"finder_native_list_edge_wrap_experiment","type":"variable_if","value":1}
             ]
         )
     ] | length == 1),

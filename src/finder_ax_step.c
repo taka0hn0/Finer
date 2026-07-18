@@ -1659,6 +1659,13 @@ static CGKeyCode arrow_key_code(direction_t direction) {
     }
 }
 
+static bool arrow_key_is_down(direction_t direction) {
+    return CGEventSourceKeyState(
+        kCGEventSourceStateCombinedSessionState,
+        arrow_key_code(direction)
+    );
+}
+
 static CFIndex wait_for_selection_change(
     const navigation_context_t *context,
     CFIndex current
@@ -3965,6 +3972,196 @@ static int run_hold_repeat(direction_t direction) {
     return 0;
 }
 
+static int open_list_edge_monitor_lock(direction_t direction) {
+    char path[PATH_MAX];
+    const char *name = direction == direction_down
+        ? "finder_list_down_edge_monitor.lock"
+        : "finder_list_up_edge_monitor.lock";
+    state_path(path, sizeof(path), name);
+    return open(path, O_CREAT | O_RDWR, 0600);
+}
+
+static int run_list_edge_monitor_worker(direction_t direction) {
+    if (direction != direction_down && direction != direction_up) return 64;
+
+    int monitor_lock_fd = open_list_edge_monitor_lock(direction);
+    if (monitor_lock_fd < 0) return 1;
+    if (flock(monitor_lock_fd, LOCK_EX | LOCK_NB) != 0) {
+        close(monitor_lock_fd);
+        return errno == EWOULDBLOCK || errno == EAGAIN ? 0 : 1;
+    }
+
+    int result = 0;
+    int movement_lock_fd = -1;
+    navigation_context_t context;
+    bool context_created = false;
+
+    if (!AXIsProcessTrusted()) {
+        result = 1;
+        goto cleanup;
+    }
+    // The monitor is launched after Karabiner's delayed-action threshold. If
+    // the remapped arrow is no longer down, the physical j/k was released and
+    // there is no edge work to perform.
+    if (!arrow_key_is_down(direction)) goto cleanup;
+
+    movement_lock_fd = open_movement_lock();
+    if (movement_lock_fd >= 0) flock(movement_lock_fd, LOCK_EX);
+    context_created = navigation_context_create(&context);
+    if (movement_lock_fd >= 0) flock(movement_lock_fd, LOCK_UN);
+    if (!context_created) {
+        result = 1;
+        goto cleanup;
+    }
+
+    CFIndex item_count = CFArrayGetCount(context.items);
+    if (context.role != navigation_outline
+        || item_count < 2
+        || !mark_state_is_empty()) {
+        goto cleanup;
+    }
+
+    CFIndex boundary = direction == direction_down ? item_count - 1 : 0;
+    CFIndex wrapped_target = direction == direction_down ? 0 : item_count - 1;
+    CFIndex previous = -1;
+    unsigned stable_observations = 0;
+    bool awaiting_departure = false;
+    double deadline = monotonic_seconds() + 30.0;
+
+    while (monotonic_seconds() < deadline) {
+        if (!arrow_key_is_down(direction)
+            || !process_is_frontmost(context.finder_pid)) {
+            break;
+        }
+
+        CFIndex current = current_index(&context);
+        if (current < 0) {
+            usleep(50000);
+            continue;
+        }
+
+        if (awaiting_departure) {
+            // Do not allow a one-item or stalled view to bounce repeatedly.
+            // Native repeat must first move away from the wrapped edge.
+            if (current != wrapped_target) awaiting_departure = false;
+            previous = current;
+            usleep(8333);
+            continue;
+        }
+
+        if (current == boundary) {
+            stable_observations = previous == current
+                ? stable_observations + 1
+                : 1;
+            if (stable_observations >= 2) {
+                if (!arrow_key_is_down(direction)
+                    || !process_is_frontmost(context.finder_pid)
+                    || !mark_state_is_empty()) {
+                    break;
+                }
+
+                if (movement_lock_fd >= 0) {
+                    flock(movement_lock_fd, LOCK_EX);
+                }
+                CFIndex confirmed = current_index(&context);
+                CFIndex wrapped_position = 0;
+                bool scrolled = false;
+                if (confirmed == boundary
+                    && arrow_key_is_down(direction)
+                    && process_is_frontmost(context.finder_pid)) {
+                    bool last = direction == direction_up;
+                    wrapped_position = select_outline_edge(&context, last);
+                    if (wrapped_position > 0) {
+                        scrolled = scroll_outline_to_edge(
+                            &context,
+                            wrapped_position - 1,
+                            last
+                        );
+                    }
+                }
+                if (movement_lock_fd >= 0) {
+                    flock(movement_lock_fd, LOCK_UN);
+                }
+                if (wrapped_position == 0 || !scrolled) {
+                    result = 1;
+                    break;
+                }
+
+                awaiting_departure = true;
+                stable_observations = 0;
+                previous = wrapped_target;
+                usleep(8333);
+                continue;
+            }
+        } else {
+            stable_observations = 0;
+        }
+
+        previous = current;
+        CFIndex distance = direction == direction_down
+            ? boundary - current
+            : current;
+        // Keep AX traffic low across the normal native-repeat path, then probe
+        // at roughly one 120 Hz frame only when the selection is near an edge.
+        usleep(distance <= 12 ? 8333 : 50000);
+    }
+
+cleanup:
+    if (movement_lock_fd >= 0) close(movement_lock_fd);
+    if (context_created) navigation_context_release(&context);
+    flock(monitor_lock_fd, LOCK_UN);
+    close(monitor_lock_fd);
+    return result;
+}
+
+static bool spawn_list_edge_monitor(direction_t direction) {
+    if (direction != direction_down && direction != direction_up) return false;
+
+    const char *direction_value = direction == direction_down ? "down" : "up";
+    char *arguments[] = {
+        (char *)program_path,
+        "list-edge-monitor-worker",
+        (char *)direction_value,
+        NULL,
+    };
+
+    posix_spawn_file_actions_t file_actions;
+    posix_spawn_file_actions_init(&file_actions);
+    posix_spawn_file_actions_addopen(
+        &file_actions,
+        STDIN_FILENO,
+        "/dev/null",
+        O_RDONLY,
+        0
+    );
+    posix_spawn_file_actions_addopen(
+        &file_actions,
+        STDOUT_FILENO,
+        "/dev/null",
+        O_WRONLY,
+        0
+    );
+    posix_spawn_file_actions_addopen(
+        &file_actions,
+        STDERR_FILENO,
+        "/dev/null",
+        O_WRONLY,
+        0
+    );
+
+    pid_t child;
+    int spawn_error = posix_spawn(
+        &child,
+        program_path,
+        &file_actions,
+        NULL,
+        arguments,
+        environ
+    );
+    posix_spawn_file_actions_destroy(&file_actions);
+    return spawn_error == 0;
+}
+
 static bool parse_direction(const char *value, direction_t *direction) {
     if (strcmp(value, "down") == 0) {
         *direction = direction_down;
@@ -4099,6 +4296,12 @@ int main(int argc, char **argv) {
     if (argc == 3) {
         direction_t direction;
         if (!parse_direction(argv[2], &direction)) return 64;
+        if (strcmp(argv[1], "list-edge-monitor-worker") == 0) {
+            return run_list_edge_monitor_worker(direction);
+        }
+        if (strcmp(argv[1], "list-edge-monitor-start") == 0) {
+            return spawn_list_edge_monitor(direction) ? 0 : 1;
+        }
         if (strcmp(argv[1], "hold-start") == 0) return run_hold_start(direction);
         if (strcmp(argv[1], "hold-repeat") == 0) {
             if (!AXIsProcessTrusted()) {
@@ -4112,7 +4315,8 @@ int main(int argc, char **argv) {
     fprintf(
         stderr,
         "Usage: finder_ax_step <clear-selection|toggle-mark|first|last|down-wrap|up-wrap|left-wrap|right-wrap> | "
-        "<hold-start|hold-repeat> <down|up|left|right>\n"
+        "<hold-start|hold-repeat> <down|up|left|right> | "
+        "list-edge-monitor-start <down|up>\n"
     );
     return 64;
 }
