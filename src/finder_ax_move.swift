@@ -403,6 +403,45 @@ private func readMarkedPaths(from fileURL: URL) -> [String] {
     return contents.split(separator: "\n").map(String.init)
 }
 
+private func visibleMarkedItems(
+    selected: [AXUIElement],
+    items: [AXUIElement],
+    markedPaths: Set<String>
+) -> [AXUIElement] {
+    var result: [AXUIElement] = []
+    var includedIndices = Set<Int>()
+    for selectedItem in selected {
+        guard let index = navigationItemIndex(containing: selectedItem, in: items),
+              !includedIndices.contains(index),
+              let url = urlAttribute(items[index]),
+              markedPaths.contains(url.standardizedFileURL.path) else {
+            continue
+        }
+        result.append(items[index])
+        includedIndices.insert(index)
+    }
+    return result
+}
+
+private func visibleMarkAndCursorSelection(
+    selected: [AXUIElement],
+    items: [AXUIElement],
+    destinationIndex: Int,
+    markedPaths: Set<String>
+) -> [AXUIElement] {
+    guard !markedPaths.isEmpty else { return [items[destinationIndex]] }
+
+    var result = visibleMarkedItems(
+        selected: selected,
+        items: items,
+        markedPaths: markedPaths
+    )
+    if !result.contains(where: { CFEqual($0, items[destinationIndex]) }) {
+        result.append(items[destinationIndex])
+    }
+    return result
+}
+
 private func writeMarkedPaths(_ paths: [String], to fileURL: URL) throws {
     do {
         try FileManager.default.createDirectory(
@@ -469,7 +508,11 @@ private func toggleCurrentMark(_ container: AXUIElement, role: String) throws ->
         guard let url = urlAttribute(item) else { return false }
         return markedSet.contains(url.standardizedFileURL.path)
     }
-    try setSelection(markedItems, in: container, role: role, allItems: items)
+    var visibleSelection = markedItems
+    if !visibleSelection.contains(where: { CFEqual($0, items[currentIndex]) }) {
+        visibleSelection.append(items[currentIndex])
+    }
+    try setSelection(visibleSelection, in: container, role: role, allItems: items)
     try writeNavigationAnchor(indexHint: currentIndex, itemURL: currentURL)
     return markedItems.count
 }
@@ -666,12 +709,17 @@ private func moveInOutline(
     direction: Direction,
     count: Int,
     wrapping: Bool = false,
-    useNavigationAnchor: Bool = true
+    useNavigationAnchor: Bool = true,
+    currentIndexOverride: Int? = nil
 ) throws -> Int {
     let rows = try navigationItems(outline, role: kAXOutlineRole)
-
-    let currentIndex = (useNavigationAnchor ? takeNavigationAnchor(in: rows) : nil)
-        ?? rows.firstIndex { boolAttribute($0, kAXSelectedAttribute) }
+    let selected = selectedItems(outline, role: kAXOutlineRole, items: rows)
+    let markedPaths = Set(readMarkedPaths(from: marksFileURL()))
+    let currentIndex = currentIndexOverride
+        ?? (useNavigationAnchor ? takeNavigationAnchor(in: rows) : nil)
+        ?? selected.last.flatMap { selectedItem in
+            navigationItemIndex(containing: selectedItem, in: rows)
+        }
     let destinationIndex = targetIndex(
         currentIndex: currentIndex,
         itemCount: rows.count,
@@ -681,11 +729,23 @@ private func moveInOutline(
     )
 
     try setSelection(
-        [rows[destinationIndex]],
+        visibleMarkAndCursorSelection(
+            selected: selected,
+            items: rows,
+            destinationIndex: destinationIndex,
+            markedPaths: markedPaths
+        ),
         in: outline,
         role: kAXOutlineRole,
         allItems: rows
     )
+    if !markedPaths.isEmpty,
+       let destinationURL = urlAttribute(rows[destinationIndex]) {
+        try writeNavigationAnchor(
+            indexHint: destinationIndex,
+            itemURL: destinationURL
+        )
+    }
     return destinationIndex + 1
 }
 
@@ -694,14 +754,17 @@ private func moveInList(
     direction: Direction,
     count: Int,
     wrapping: Bool = false,
-    useNavigationAnchor: Bool = true
+    useNavigationAnchor: Bool = true,
+    currentIndexOverride: Int? = nil
 ) throws -> Int {
     let items = try navigationItems(list, role: kAXListRole)
 
     let selectedItems = elements(list, kAXSelectedChildrenAttribute)
-    let currentIndex = (useNavigationAnchor ? takeNavigationAnchor(in: items) : nil)
+    let markedPaths = Set(readMarkedPaths(from: marksFileURL()))
+    let currentIndex = currentIndexOverride
+        ?? (useNavigationAnchor ? takeNavigationAnchor(in: items) : nil)
         ?? selectedItems.first.flatMap { selectedItem in
-            items.firstIndex { CFEqual($0, selectedItem) }
+            navigationItemIndex(containing: selectedItem, in: items)
         }
     let destinationIndex = targetIndex(
         currentIndex: currentIndex,
@@ -711,9 +774,24 @@ private func moveInList(
         wrapping: wrapping
     )
 
-    let selection = [items[destinationIndex]] as CFArray
-    try setAttribute(list, kAXSelectedChildrenAttribute, selection)
-    _ = AXUIElementSetAttributeValue(list, kAXFocusedAttribute as CFString, kCFBooleanTrue)
+    try setSelection(
+        visibleMarkAndCursorSelection(
+            selected: selectedItems,
+            items: items,
+            destinationIndex: destinationIndex,
+            markedPaths: markedPaths
+        ),
+        in: list,
+        role: kAXListRole,
+        allItems: items
+    )
+    if !markedPaths.isEmpty,
+       let destinationURL = urlAttribute(items[destinationIndex]) {
+        try writeNavigationAnchor(
+            indexHint: destinationIndex,
+            itemURL: destinationURL
+        )
+    }
     return destinationIndex + 1
 }
 
@@ -786,25 +864,32 @@ private func run() throws -> Int {
     let (container, role) = try navigationContainer(from: focusedElement, in: finderElement)
 
     var shouldUseNavigationAnchor = true
+    var movementCursorIndex: Int?
     func move(_ direction: Direction, count: Int, wrapping: Bool) throws -> Int {
         let useNavigationAnchor = shouldUseNavigationAnchor
         shouldUseNavigationAnchor = false
+        let position: Int
         if role == kAXOutlineRole {
-            return try moveInOutline(
+            position = try moveInOutline(
                 container,
                 direction: direction,
                 count: count,
                 wrapping: wrapping,
-                useNavigationAnchor: useNavigationAnchor
+                useNavigationAnchor: useNavigationAnchor,
+                currentIndexOverride: movementCursorIndex
+            )
+        } else {
+            position = try moveInList(
+                container,
+                direction: direction,
+                count: count,
+                wrapping: wrapping,
+                useNavigationAnchor: useNavigationAnchor,
+                currentIndexOverride: movementCursorIndex
             )
         }
-        return try moveInList(
-            container,
-            direction: direction,
-            count: count,
-            wrapping: wrapping,
-            useNavigationAnchor: useNavigationAnchor
-        )
+        movementCursorIndex = position - 1
+        return position
     }
 
     switch command {

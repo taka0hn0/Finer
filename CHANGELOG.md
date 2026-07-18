@@ -15,6 +15,8 @@ The project is currently pre-alpha and has not published a tagged release.
   fixed-anchor `gg`/`G` motions.
 - Discontiguous marks whose next movement starts from the most recently marked
   item.
+- Persistent display of confirmed marks alongside a separate transient current
+  position in List, Column, and Icon views.
 - Safe, repeatable development install and uninstall scripts with backup of a
   replaced importable rule.
 - Reproducible 10, 1,000, and 10,000-item benchmark fixtures and sanitized
@@ -36,6 +38,13 @@ The project is currently pre-alpha and has not published a tagged release.
 - Product and public repository name standardized on Finer. Existing
   `finder-vim` paths remain compatibility identifiers.
 - Worker idle timeout set to 750ms based on a reproducible comparison matrix.
+- Normal Mode `y`, `x`, and `d` target only confirmed marks when any exist;
+  the transient current position remains excluded.
+- Visual Mode `Esc` now clears the mode and Finder selection in one press.
+- Unmarked vertical holds in List View now use Finder-native arrow auto-repeat
+  with limited boundary probing and wrap handling. Column View uses a
+  predicted-index AX loop on an absolute 8.333ms timeline. Both paths stop from
+  the release token without changing taps, marked navigation, or idle residency.
 
 ### Fixed
 

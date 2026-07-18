@@ -10,6 +10,7 @@ preflight_only="${FINDER_VIM_BENCHMARK_PREFLIGHT:-0}"
 iterations="${1:-10}"
 hold_duration_ms="${FINDER_VIM_HOLD_DURATION_MS:-1000}"
 held_threshold_ms="${FINDER_VIM_HELD_THRESHOLD_MS:-150}"
+hold_view="${FINDER_VIM_HOLD_VIEW:-list}"
 case_dir="$fixture_root/items-1000/01-A"
 token_file="${FINDER_VIM_HOLD_TOKEN_FILE:-$HOME/.local/state/finder-vim/finder_down_hold.txt}"
 
@@ -36,6 +37,13 @@ case "$content_profile" in
     empty-files|realistic-mixed) ;;
     *)
         print -u2 -- "Unsupported content profile: $content_profile"
+        exit 64
+        ;;
+esac
+case "$hold_view" in
+    list|column) ;;
+    *)
+        print -u2 -- "Unsupported hold benchmark view: $hold_view"
         exit 64
         ;;
 esac
@@ -86,12 +94,14 @@ close_test_window() {
         return
     fi
     typeset -a close_script=(
-        -e 'set windowId to (system attribute "FINDER_VIM_WINDOW_ID") as integer'
+        -e 'on run argv'
+        -e 'set windowId to (item 1 of argv) as integer'
         -e 'tell application "Finder"'
         -e 'if exists (first Finder window whose id is windowId) then close (first Finder window whose id is windowId)'
         -e 'end tell'
+        -e 'end run'
     )
-    FINDER_VIM_WINDOW_ID="$window_id" /usr/bin/osascript "${close_script[@]}" \
+    /usr/bin/osascript "${close_script[@]}" -- "$window_id" \
         >/dev/null 2>&1 || true
     window_id=""
 }
@@ -106,14 +116,16 @@ cleanup() {
 
 activate_test_window() {
     typeset -a activate_script=(
-        -e 'set windowId to (system attribute "FINDER_VIM_WINDOW_ID") as integer'
+        -e 'on run argv'
+        -e 'set windowId to (item 1 of argv) as integer'
         -e 'tell application "Finder"'
         -e 'set testWindow to first Finder window whose id is windowId'
         -e 'set index of testWindow to 1'
         -e 'activate'
         -e 'end tell'
+        -e 'end run'
     )
-    FINDER_VIM_WINDOW_ID="$window_id" /usr/bin/osascript "${activate_script[@]}" \
+    /usr/bin/osascript "${activate_script[@]}" -- "$window_id" \
         >/dev/null 2>&1
 }
 
@@ -147,13 +159,18 @@ open_test_window() {
         -e 'on run argv'
         -e 'set casePath to item 1 of argv'
         -e 'set initialPath to item 2 of argv'
+        -e 'set viewName to item 3 of argv'
         -e 'tell application "Finder"'
         -e 'set targetFolder to POSIX file casePath as alias'
         -e 'set initialItem to POSIX file initialPath as alias'
         -e 'set testWindow to make new Finder window'
         -e 'set target of testWindow to targetFolder'
+        -e 'if viewName is "list" then'
         -e 'set current view of testWindow to list view'
         -e 'set sort column of list view options of testWindow to name column'
+        -e 'else'
+        -e 'set current view of testWindow to column view'
+        -e 'end if'
         -e 'set selection to {initialItem}'
         -e 'set index of testWindow to 1'
         -e 'activate'
@@ -162,7 +179,7 @@ open_test_window() {
         -e 'end run'
     )
     window_id="$(/usr/bin/osascript "${open_script[@]}" -- \
-        "$case_dir" "$initial_path")"
+        "$case_dir" "$initial_path" "$hold_view")"
 }
 
 trap cleanup EXIT
@@ -187,7 +204,7 @@ hardware_model="$(sysctl -n hw.model 2>/dev/null || print unknown)"
     print -- "finder_version=$finder_version"
     print -- "hardware_model=$hardware_model"
     print -- "architecture=$(uname -m)"
-    print -- "view=list"
+    print -- "view=$hold_view"
     print -- "sort_order=name"
     print -- "grouping=not-controlled"
     print -- "content_profile=$content_profile"

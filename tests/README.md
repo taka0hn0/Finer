@@ -61,6 +61,17 @@ Finder rectangle and still excludes physical input and Karabiner evaluation.
 
 Run `make test-finder-navigation` for functional regressions that do not belong
 in the latency matrix. It covers grouped mixed-content List View wrap, a
-one-second held List movement, and Icon View forward/reverse row wrap. The test
-temporarily changes grouping only on its dedicated Finder window and restores
-the original Finder grouping criterion and enabled state before closing it.
+held grouped List movement whose final selection must remain a fixture item, a
+one-second ungrouped List movement, and Icon View forward/reverse row wrap. The
+test temporarily changes grouping only on its dedicated Finder window and
+restores the original Finder grouping criterion and enabled state before
+closing it.
+
+Run `make test-finder-selection` for the confirmed-mark selection model. It
+opens dedicated List, Column, and Icon windows and verifies that A remains
+visible after moving to B, that A and B remain visible after moving to C, that
+C is still transient and excluded from the copy target, and that one clear
+command removes the displayed selection. Its List case also holds `j` while A
+and B are confirmed and checks that both marks remain visible, exercising the
+verified fallback rather than the unmarked fast path. The test uses isolated
+state files and closes every window it creates.

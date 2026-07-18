@@ -37,24 +37,27 @@ grouping_changed=false
 
 activate_test_window() {
     typeset -a activate_script=(
-        -e 'set windowId to (system attribute "FINDER_VIM_WINDOW_ID") as integer'
+        -e 'on run argv'
+        -e 'set windowId to (item 1 of argv) as integer'
         -e 'tell application "Finder"'
         -e 'set testWindow to first Finder window whose id is windowId'
         -e 'set index of testWindow to 1'
         -e 'activate'
         -e 'end tell'
+        -e 'end run'
     )
-    FINDER_VIM_WINDOW_ID="$window_id" /usr/bin/osascript "${activate_script[@]}" \
+    /usr/bin/osascript "${activate_script[@]}" -- "$window_id" \
         >/dev/null 2>&1
 }
 
 send_group_shortcut() {
     local key="$1"
     activate_test_window
-    FINDER_VIM_GROUP_KEY="$key" /usr/bin/osascript \
-        -e 'set groupKey to system attribute "FINDER_VIM_GROUP_KEY"' \
+    /usr/bin/osascript \
+        -e 'on run argv' \
+        -e 'set groupKey to item 1 of argv' \
         -e 'tell application "System Events" to keystroke groupKey using {control down, command down}' \
-        >/dev/null
+        -e 'end run' -- "$key" >/dev/null
     sleep 0.2
 }
 
@@ -75,12 +78,14 @@ close_test_window() {
     fi
     restore_grouping
     typeset -a close_script=(
-        -e 'set windowId to (system attribute "FINDER_VIM_WINDOW_ID") as integer'
+        -e 'on run argv'
+        -e 'set windowId to (item 1 of argv) as integer'
         -e 'tell application "Finder"'
         -e 'if exists (first Finder window whose id is windowId) then close (first Finder window whose id is windowId)'
         -e 'end tell'
+        -e 'end run'
     )
-    FINDER_VIM_WINDOW_ID="$window_id" /usr/bin/osascript "${close_script[@]}" \
+    /usr/bin/osascript "${close_script[@]}" -- "$window_id" \
         >/dev/null 2>&1 || true
     window_id=""
     sleep 1
@@ -91,12 +96,15 @@ open_test_window() {
     local case_dir="$2"
     local initial_name="$3"
     typeset -a open_script=(
-        -e 'set casePath to system attribute "FINDER_VIM_CASE_DIR"'
-        -e 'set initialName to system attribute "FINDER_VIM_INITIAL_NAME"'
-        -e 'set viewName to system attribute "FINDER_VIM_VIEW"'
+        -e 'on run argv'
+        -e 'set casePath to item 1 of argv'
+        -e 'set initialName to item 2 of argv'
+        -e 'set viewName to item 3 of argv'
         -e 'tell application "Finder"'
-        -e 'set targetFolder to POSIX file casePath as alias'
-        -e 'set testWindow to make new Finder window to targetFolder'
+        -e 'set targetFolder to (POSIX file casePath as alias)'
+        -e 'set initialItem to (POSIX file (casePath & "/" & initialName) as alias)'
+        -e 'set testWindow to make new Finder window'
+        -e 'set target of testWindow to targetFolder'
         -e 'if viewName is "list" then'
         -e 'set current view of testWindow to list view'
         -e 'set sort column of list view options of testWindow to name column'
@@ -104,18 +112,15 @@ open_test_window() {
         -e 'set current view of testWindow to icon view'
         -e 'set arrangement of icon view options of testWindow to arranged by name'
         -e 'end if'
-        -e 'set selection to {file initialName of targetFolder}'
+        -e 'set selection to {initialItem}'
         -e 'set index of testWindow to 1'
         -e 'activate'
         -e 'return id of testWindow'
         -e 'end tell'
+        -e 'end run'
     )
-    window_id="$(
-        FINDER_VIM_CASE_DIR="$case_dir" \
-        FINDER_VIM_INITIAL_NAME="$initial_name" \
-        FINDER_VIM_VIEW="$view" \
-            /usr/bin/osascript "${open_script[@]}"
-    )"
+    window_id="$(/usr/bin/osascript "${open_script[@]}" -- \
+        "$case_dir" "$initial_name" "$view")"
     sleep 1
     activate_test_window
     "$helper" first >/dev/null
@@ -125,7 +130,12 @@ open_test_window() {
 selected_path() {
     activate_test_window
     /usr/bin/osascript \
-        -e 'tell application "Finder" to POSIX path of (item 1 of (get selection) as alias)'
+        -e 'tell application "Finder"' \
+        -e 'set selectedItems to get selection' \
+        -e 'if (count of selectedItems) is 0 then return ""' \
+        -e 'set selectedItem to item 1 of selectedItems' \
+        -e 'return POSIX path of (selectedItem as alias)' \
+        -e 'end tell'
 }
 
 send_step() {
@@ -160,6 +170,23 @@ if [[ "$grouped_first" == "$grouped_last"
     print -u2 -- "Grouped mixed List View regression failed"
     exit 1
 fi
+
+"$helper" first >/dev/null
+"$helper" hold-start down
+sleep 0.1
+(
+    sleep 0.5
+    truncate -s 0 "$HOME/.local/state/finder-vim/finder_down_hold.txt"
+) &
+grouped_stopper_pid=$!
+grouped_repeat_result="$("$helper" hold-repeat down)"
+wait "$grouped_stopper_pid"
+grouped_held_path="$(selected_path)"
+if [[ ! "$grouped_repeat_result" =~ '^[1-9][0-9]*$'
+    || "$grouped_held_path" != "$mixed_dir"/* ]]; then
+    print -u2 -- "Grouped held List View regression failed: result=$grouped_repeat_result path=$grouped_held_path"
+    exit 1
+fi
 close_test_window
 
 list_dir="$fixture_root/items-10/01-A"
@@ -191,7 +218,7 @@ send_step left
 icon_reverse="$(selected_path)"
 if [[ "$icon_forward" != "$list_dir/item-00000.txt"
     || "$icon_reverse" != "$list_dir/item-00009.txt" ]]; then
-    print -u2 -- "Icon View wrap regression failed"
+    print -u2 -- "Icon View wrap regression failed: forward=$icon_forward reverse=$icon_reverse"
     exit 1
 fi
 close_test_window

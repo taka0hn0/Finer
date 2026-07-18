@@ -39,8 +39,12 @@ view settings, and tested commit.
 - [ ] Single taps, 100ms tap sequences, and held keys.
 - [ ] Counts from 1 through representative two-digit values.
 - [ ] Visual Mode `j/k`, counted `j/k`, `gg`, and `G` with a fixed anchor.
-- [ ] Discontiguous marks move from the most recently marked item.
-- [ ] `Esc` exits modes and deselects without changing Finder location.
+- [ ] Discontiguous marks remain visible while movement starts from the most
+  recently marked item and updates only the transient current position.
+- [ ] One `Esc` exits Normal or Visual Mode and deselects without changing
+  Finder location.
+- [ ] With confirmed marks, `y`, `x`, and `d` exclude the transient current
+  position; without marks they use the current Finder selection.
 - [ ] Copy, cut, paste, rename, and trash operations use only intended targets.
 - [ ] Finder restart and window switching recover safely.
 

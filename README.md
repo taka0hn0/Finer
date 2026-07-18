@@ -28,6 +28,16 @@ macOS Accessibility and Karabiner-Elements.
 - Avoid dependence on the macOS UI language.
 - Generate user-editable key mappings without replacing `karabiner.json`.
 
+## Selection behavior
+
+- `s` toggles a confirmed mark. Confirmed marks remain visibly selected while
+  the current position moves with `h`/`j`/`k`/`l`.
+- The moving current position is transient. When confirmed marks exist,
+  `y`/`x`/`d` act only on those marks, not on the transient position.
+- With no confirmed marks, `y`/`x`/`d` act on the current Finder selection.
+- `Esc` clears the displayed selection in one press, including from Visual
+  Mode.
+
 ## Documentation
 
 - [Troubleshooting and permissions](docs/TROUBLESHOOTING.md)
@@ -97,6 +107,7 @@ Run the Finder functional navigation regressions with:
 
 ```sh
 make test-finder-navigation
+make test-finder-selection
 ```
 
 ## Install the development snapshot

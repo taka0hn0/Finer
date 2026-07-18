@@ -4,17 +4,21 @@ set -euo pipefail
 repo_root="${0:A:h:h}"
 rule_file="$repo_root/rules/generated/finder-vim.json"
 text_expression="accessibility.focused_ui_element.role_string like 'AXText*'"
+list_role_expression="accessibility.focused_ui_element.role_string == 'AXOutline'"
 clear_marks_command='exec /usr/bin/truncate -s 0 $HOME/.local/state/finder-vim/finder_marks.txt $HOME/.local/state/finder-vim/finder_navigation_anchor.txt'
 clear_visual_state_command='exec /usr/bin/truncate -s 0 $HOME/.local/state/finder-vim/finder_marks.txt $HOME/.local/state/finder-vim/finder_navigation_anchor.txt $HOME/.local/state/finder-vim/finder_visual_anchor.txt'
 clear_selection_command='$HOME/.local/libexec/finder-vim/finder_ax_step clear-selection >/dev/null 2>&1; exec /usr/bin/truncate -s 0 $HOME/.local/state/finder-vim/finder_marks.txt $HOME/.local/state/finder-vim/finder_navigation_anchor.txt $HOME/.local/state/finder-vim/finder_visual_anchor.txt'
 visual_start_command='$HOME/.local/libexec/finder-vim/finder_ax_move visual-start >/dev/null 2>&1; exec /usr/bin/truncate -s 0 $HOME/.local/state/finder-vim/finder_marks.txt $HOME/.local/state/finder-vim/finder_navigation_anchor.txt'
+copy_marks_command='$HOME/.local/libexec/finder-vim/finder_action_marked.sh copy >/dev/null 2>&1; exec /usr/bin/truncate -s 0 $HOME/.local/state/finder-vim/finder_marks.txt $HOME/.local/state/finder-vim/finder_navigation_anchor.txt'
 
 jq -e \
     --arg text_expression "$text_expression" \
+    --arg list_role_expression "$list_role_expression" \
     --arg clear_marks_command "$clear_marks_command" \
     --arg clear_visual_state_command "$clear_visual_state_command" \
     --arg clear_selection_command "$clear_selection_command" \
-    --arg visual_start_command "$visual_start_command" '
+    --arg visual_start_command "$visual_start_command" \
+    --arg copy_marks_command "$copy_marks_command" '
 def finder_normal_conditions:
     ([.conditions[] | select(
         .type == "frontmost_application_if"
@@ -75,6 +79,92 @@ def clears_motion_count:
             and finder_normal_conditions
         )
     ] | length == 1),
+    ([
+        .rules[]
+        | select(.description == "Finer Navigation")
+        | .manipulators[]
+        | select(
+            .description == "Experimental List native hold: Map j directly to Down Arrow"
+            and .from == {"key_code":"j"}
+            and .to == [{"key_code":"down_arrow","repeat":true}]
+        )
+        | select(
+            .conditions == [
+                {
+                    "bundle_identifiers":["^com\\.apple\\.finder$"],
+                    "type":"frontmost_application_if"
+                },
+                {"expression":$text_expression,"type":"expression_unless"},
+                {"name":"finder_visual_mode","type":"variable_unless","value":1},
+                {
+                    "expression":$list_role_expression,
+                    "type":"expression_if"
+                },
+                {
+                    "name":"finder_native_list_hold_experiment",
+                    "type":"variable_if",
+                    "value":1
+                }
+            ]
+        )
+    ] | length == 1),
+    ([
+        .rules[]
+        | select(.description == "Finer Navigation")
+        | .manipulators[]
+        | select(
+            .description == "Experimental List native hold: Map k directly to Up Arrow"
+            and .from == {"key_code":"k"}
+            and .to == [{"key_code":"up_arrow","repeat":true}]
+        )
+        | select(
+            .conditions == [
+                {
+                    "bundle_identifiers":["^com\\.apple\\.finder$"],
+                    "type":"frontmost_application_if"
+                },
+                {"expression":$text_expression,"type":"expression_unless"},
+                {"name":"finder_visual_mode","type":"variable_unless","value":1},
+                {
+                    "expression":$list_role_expression,
+                    "type":"expression_if"
+                },
+                {
+                    "name":"finder_native_list_hold_experiment",
+                    "type":"variable_if",
+                    "value":1
+                }
+            ]
+        )
+    ] | length == 1),
+    (
+        [.rules[]
+            | select(.description == "Finer Navigation")
+            | .manipulators
+            | to_entries[]
+            | select(.value.description == "Experimental List native hold: Map j directly to Down Arrow")
+            | .key][0]
+        < [.rules[]
+            | select(.description == "Finer Navigation")
+            | .manipulators
+            | to_entries[]
+            | select(.value.description == "Normal Mode: Map j to List wrap or Grid down with transient C worker")
+            | .key][0]
+    ),
+    (
+        [.rules[]
+            | select(.description == "Finer Navigation")
+            | .manipulators
+            | to_entries[]
+            | select(.value.description == "Experimental List native hold: Map k directly to Up Arrow")
+            | .key][0]
+        < [.rules[]
+            | select(.description == "Finer Navigation")
+            | .manipulators
+            | to_entries[]
+            | select(.value.description == "Normal Mode: Map k to List wrap or Grid up with transient C worker")
+            | .key][0]
+    ),
     ([
         .rules[]
         | select(.description == "Finer Navigation")
@@ -183,13 +273,15 @@ def clears_motion_count:
         | select(.description == "Finer Navigation")
         | .manipulators[]
         | select(
-            .description == "Visual Mode -> Normal Mode: Press Esc to stop range selection"
+            .description == "Visual Mode: Press Esc to leave Visual Mode and clear selection"
             and .from == {"key_code":"escape"}
             and .to == [
                 {"set_variable":{"name":"finder_visual_mode","value":0}},
                 {"set_variable":{"name":"finder_motion_count","value":0}},
                 {"set_variable":{"name":"finder_motion_count_expiration","value":0}},
-                {"shell_command":"exec /usr/bin/truncate -s 0 $HOME/.local/state/finder-vim/finder_visual_anchor.txt"}
+                {"shell_command":$clear_selection_command},
+                {"set_variable":{"name":"finder_cut_pending","value":0}},
+                {"set_variable":{"name":"finder_copy_pending","value":0}}
             ]
             and finder_visual_conditions
         )
@@ -286,6 +378,81 @@ def clears_motion_count:
         )
     ] | length == 1),
     ([
+        .rules[]
+        | select(.description == "Finer Navigation")
+        | .manipulators[]
+        | select(
+            .description == "Normal Mode: Copy confirmed marks, or selection when no marks exist, with y"
+            and .from == {"key_code":"y"}
+            and .to == [
+                {"shell_command":$copy_marks_command},
+                {"set_variable":{"name":"finder_cut_pending","value":0}},
+                {"set_variable":{"name":"finder_copy_pending","value":1}}
+            ]
+            and finder_normal_conditions
+        )
+    ] | length == 1),
+    ([
+        .rules[]
+        | select(.description == "Finer Navigation")
+        | .manipulators[]
+        | select(
+            .description == "Normal Mode: Cut confirmed marks, or selection when no marks exist, with x"
+            and .from == {"key_code":"x"}
+            and .to == [
+                {"shell_command":"exec $HOME/.local/libexec/finder-vim/finder_action_marked.sh cut >/dev/null 2>&1"},
+                {"set_variable":{"name":"finder_cut_pending","value":1}},
+                {"set_variable":{"name":"finder_copy_pending","value":0}}
+            ]
+            and finder_normal_conditions
+        )
+    ] | length == 1),
+    ([
+        .rules[]
+        | select(.description == "Finer Navigation")
+        | .manipulators[]
+        | select(
+            .description == "Normal Mode: Trash confirmed marks, or selection when no marks exist, with d"
+            and .from == {"key_code":"d"}
+            and .to == [{"shell_command":"exec $HOME/.local/libexec/finder-vim/finder_action_marked.sh delete >/dev/null 2>&1"}]
+            and finder_normal_conditions
+        )
+    ] | length == 1),
+    ([
+        .rules[]
+        | select(.description == "Finer Navigation")
+        | .manipulators[]
+        | select(
+            .description == "Normal Mode: Copy-paste Finer items with p after y"
+            and .from == {"key_code":"p"}
+            and .to == [{"shell_command":"exec $HOME/.local/libexec/finder-vim/finder_paste.sh copy >/dev/null 2>&1"}]
+            and ([.conditions[] | select(
+                .name == "finder_copy_pending"
+                and .type == "variable_if"
+                and .value == 1
+            )] | length == 1)
+            and ([.conditions[] | select(
+                .name == "finder_cut_pending"
+                and .type == "variable_unless"
+                and .value == 1
+            )] | length == 1)
+            and finder_normal_conditions
+        )
+    ] | length == 1),
+    ([
+        .rules[]
+        | select(.description == "Finer Navigation")
+        | .manipulators[]
+        | select(
+            .description == "Normal Mode: Paste Finder items with p"
+            and ([.conditions[] | select(
+                .name == "finder_copy_pending"
+                and .type == "variable_unless"
+                and .value == 1
+            )] | length == 1)
+        )
+    ] | length == 1),
+    ([
         .rules[].manipulators[].to[]?
         | select(.key_code == "a")
         | select((.modifiers // []) | index("command"))
@@ -303,7 +470,8 @@ def clears_motion_count:
         | (. == $clear_marks_command
             or . == $clear_visual_state_command
             or . == $clear_selection_command
-            or . == $visual_start_command)
+            or . == $visual_start_command
+            or . == $copy_marks_command)
     ] | all)
 ] | all
 ' "$rule_file" >/dev/null

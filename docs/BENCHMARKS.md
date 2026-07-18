@@ -327,6 +327,13 @@ Run the same hold path against the 1000-item realistic mixed fixture with:
 make benchmark-hold-realistic ITERATIONS=10
 ```
 
+The default view is List. To run the same vertical hold measurement in Column
+View, set `FINDER_VIM_HOLD_VIEW=column`; only `list` and `column` are accepted:
+
+```sh
+FINDER_VIM_HOLD_VIEW=column make benchmark-hold ITERATIONS=10
+```
+
 Before leaving the machine to a visible Finder run, validate the helper, fixture
 profile, item count, and deterministic name order without opening Finder:
 
@@ -342,6 +349,9 @@ includes the repeat helper's AX context creation and steady loop, but excludes
 Karabiner's shell launch before the helper begins. A valid native comparison
 still requires physical key input and an independent timestamp source, as
 described in the end-to-end limitation above.
+
+The retained direct-AX, native-event, and repeated-keyDown comparison is under
+[`benchmarks/results/2026-07-17-hold-fast-path/`](../benchmarks/results/2026-07-17-hold-fast-path/SUMMARY.md).
 
 ## Rapid `h/j/k/l` tap bursts
 

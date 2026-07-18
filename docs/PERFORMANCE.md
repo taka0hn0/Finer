@@ -49,6 +49,13 @@ The C burst worker follows these rules:
 - Recognize Finder's `AXCollectionList` Icon container separately from ordinary
   Column View `AXList` containers, and flatten its `AXSectionList` children once
   into the burst-local item array.
+- For an unmarked vertical hold in List View, post Finder-native arrow
+  auto-repeat events and leave ordinary selection drawing and scrolling to
+  Finder. Avoid AX selection readback until enough events could have reached a
+  boundary.
+- For an unmarked vertical hold in Column View, read the starting selection
+  once, advance a burst-local predicted index, and write only each destination.
+  Verify the real selection when the hold stops instead of after every repeat.
 
 The target common-path cost is:
 
@@ -98,6 +105,53 @@ operation ignores the variable and retains the compiled default. The timeout
 matrix records process reuse across fixed tap gaps and the delay from a
 process's final command until its metrics flush and exit path begins.
 
+## Held vertical fast path
+
+An unmarked `j` or `k` hold in List View uses Finder-native arrow auto-repeat
+events from an on-demand background process. Each repeat verifies the release
+token and compares the current frontmost PID with the Finder PID captured at
+startup. The common path does not read AX selection or manipulate the scroll
+bar, so Finder owns both selection rendering and ordinary viewport tracking.
+
+Finer begins boundary probing only after the number of posted events could
+have reached the relevant edge from the starting index. It then reads the
+selected row once every six events. Two consecutive unchanged observations
+mean Finder has stopped at the edge. Finer posts key-up, selects the opposite
+selectable edge through AX, moves the vertical scroll position to that edge,
+and restarts the native repeat stream. The release token and frontmost PID are
+checked again immediately before this jump. Key release always posts key-up.
+
+Column View retains the hold-only direct AX path. That loop keeps the
+navigation item array and current index locally and schedules repeats on an
+absolute 8.333ms timeline with `mach_wait_until`. When an AX write misses a
+tick, it skips the expired tick instead of issuing a catch-up write. It reuses
+one mutable single-item selection array and verifies the real selection when
+the hold stops.
+
+The optimization does not change taps, counted motions, Icon movement, Visual
+Mode, or marked navigation. Marked movement retains the verified path because
+Finder's visible selection must continue to contain the confirmed marks plus
+the transient cursor.
+
+In the retained three-iteration 1,000-item internal measurements, the earlier
+direct-AX candidate raised List throughput from 58.236 to 95.756 steps/s at p50
+and Column from 23.820 to 32.510 steps/s. All retained baseline and candidate
+iterations had the expected final path and zero drift through 100ms after
+return. Those measurements did not include physical input or screen tracking;
+the direct-AX List candidate could therefore select rows outside the visible
+viewport despite its stronger internal throughput. See the
+[sanitized comparison](../benchmarks/results/2026-07-17-hold-fast-path/SUMMARY.md).
+
+A subsequent physical-key dogfood check used the same 1,000-item List fixture.
+From `item-00500`, a manual approximately one-second `j` hold ended on
+`item-00576` while the visible range moved to `541–579` and the vertical scroll
+value moved from `0.500` to `0.563`. The matching `k` hold ended on
+`item-00418`, with visible range `413–452` and scroll value `0.432`. An upward
+wrap from `item-00005` ended on `item-00944` with scroll value `0.975`; a
+downward wrap from `item-00994` ended on `item-00027` with scroll value `0`.
+These are functional screen-tracking observations from Finder's Accessibility
+tree, not instrumented throughput samples.
+
 ## List View row strategy
 
 Finder can expose thousands of `AXRows` before it has populated every row's
@@ -108,8 +162,10 @@ of sync with `AXSelectedRows` while Finder was still materializing rows.
 The worker now keeps the raw row array and selects only the next target row.
 When Finder rejects a nonselectable group row it advances to the next candidate.
 It never clears selection by writing every row individually. Native arrow
-movement was measured but rejected for this path: Finder's asynchronous
-selection update caused queued commands to mistake an interior row for an edge.
+movement remains unsuitable for independent taps and counted movement because
+Finder's asynchronous selection update can cause queued commands to mistake an
+interior row for an edge. The held List path is separate: it avoids per-event
+selection inference and probes only after the theoretical boundary distance.
 Grouped List View, mixed file/folder directories, and long-held movement remain
 required regressions for this strategy; no fallback may restore per-row AX
 queries or writes to the common path.

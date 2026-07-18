@@ -11,7 +11,7 @@ BASELINE_REF ?= 793a82c
 CANDIDATE_REF ?= HEAD
 VERSION ?=
 
-.PHONY: all build rules check-rules check clean install uninstall test-install dist test-dist benchmark-comparison-helpers benchmark-fixtures benchmark-realistic-fixtures benchmark-column benchmark-list benchmark-icon benchmark-views benchmark-column-realistic benchmark-list-realistic benchmark-icon-realistic benchmark-realistic-views benchmark-worker-timeout benchmark-hold benchmark-hold-realistic benchmark-hold-preflight benchmark-hold-realistic-preflight benchmark-taps benchmark-taps-realistic benchmark-taps-preflight benchmark-taps-realistic-preflight benchmark-visual-helper benchmark-column-visual benchmark-column-visual-realistic test-visual-latency-analyzer test-finder-navigation
+.PHONY: all build rules check-rules check clean install uninstall test-install dist test-dist benchmark-comparison-helpers benchmark-fixtures benchmark-realistic-fixtures benchmark-column benchmark-list benchmark-icon benchmark-views benchmark-column-realistic benchmark-list-realistic benchmark-icon-realistic benchmark-realistic-views benchmark-worker-timeout benchmark-hold benchmark-hold-realistic benchmark-hold-preflight benchmark-hold-realistic-preflight benchmark-taps benchmark-taps-realistic benchmark-taps-preflight benchmark-taps-realistic-preflight benchmark-visual-helper benchmark-column-visual benchmark-column-visual-realistic test-visual-latency-analyzer test-finder-navigation test-finder-selection
 
 all: build
 
@@ -183,6 +183,9 @@ test-visual-latency-analyzer:
 
 test-finder-navigation: benchmark-fixtures
 	./scripts/test_finder_navigation.sh
+
+test-finder-selection: build
+	./scripts/test_finder_selection.sh
 
 clean:
 	rm -rf $(BUILD_DIR)

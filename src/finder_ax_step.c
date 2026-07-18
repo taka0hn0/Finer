@@ -1,6 +1,7 @@
 #include <ApplicationServices/ApplicationServices.h>
 #include <Carbon/Carbon.h>
 #include <CoreFoundation/CoreFoundation.h>
+#include <mach/mach_time.h>
 #include <libproc.h>
 #include <errno.h>
 #include <math.h>
@@ -39,8 +40,13 @@ typedef enum {
 typedef struct {
     AXUIElementRef container;
     CFArrayRef items;
+    CFArrayRef visible_marked_items;
+    pid_t finder_pid;
     navigation_role_t role;
     CFIndex predicted_index;
+    CFIndex cursor_index;
+    bool has_marks;
+    bool marks_loaded;
 } navigation_context_t;
 
 typedef struct {
@@ -116,6 +122,10 @@ extern char **environ;
 
 static uint64_t monotonic_nanoseconds(void);
 static uint64_t counter_delta(uint64_t end, uint64_t start);
+static CFStringRef copy_navigation_item_url_string(
+    AXUIElementRef element,
+    int depth
+);
 
 static const char *home_directory(void) {
     const char *home = getenv("HOME");
@@ -220,11 +230,43 @@ static CFArrayRef copy_navigation_items(
                 kAXChildrenAttribute
             );
             if (!children) continue;
-            CFArrayAppendArray(
-                items,
-                children,
-                CFRangeMake(0, CFArrayGetCount(children))
-            );
+            CFIndex child_count = CFArrayGetCount(children);
+            // Finder places non-file supplementary groups at the two edges of
+            // a virtualized Icon section. Probe only those edges so the common
+            // path does not add one AX request per visible file.
+            CFIndex first_item = 0;
+            while (first_item < child_count) {
+                AXUIElementRef child = (AXUIElementRef)CFArrayGetValueAtIndex(
+                    children,
+                    first_item
+                );
+                CFStringRef url = copy_navigation_item_url_string(child, 0);
+                if (url) {
+                    CFRelease(url);
+                    break;
+                }
+                ++first_item;
+            }
+            CFIndex item_end = child_count;
+            while (item_end > first_item) {
+                AXUIElementRef child = (AXUIElementRef)CFArrayGetValueAtIndex(
+                    children,
+                    item_end - 1
+                );
+                CFStringRef url = copy_navigation_item_url_string(child, 0);
+                if (url) {
+                    CFRelease(url);
+                    break;
+                }
+                --item_end;
+            }
+            if (item_end > first_item) {
+                CFArrayAppendArray(
+                    items,
+                    children,
+                    CFRangeMake(first_item, item_end - first_item)
+                );
+            }
             CFRelease(children);
         }
         CFRelease(sections);
@@ -247,15 +289,32 @@ static CFIndex raw_navigation_item_count(
     return count;
 }
 
-static bool finder_is_frontmost(pid_t *finder_pid, AXUIElementRef *application) {
+static bool frontmost_process_pid(pid_t *frontmost_pid) {
     ProcessSerialNumber process_serial_number;
     pid_t pid = 0;
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wdeprecated-declarations"
     OSStatus front_process_error = GetFrontProcess(&process_serial_number);
-    OSStatus process_pid_error = GetProcessPID(&process_serial_number, &pid);
+    OSStatus process_pid_error = front_process_error == noErr
+        ? GetProcessPID(&process_serial_number, &pid)
+        : front_process_error;
 #pragma clang diagnostic pop
     if (front_process_error != noErr || process_pid_error != noErr) return false;
+
+    *frontmost_pid = pid;
+    return true;
+}
+
+static bool process_is_frontmost(pid_t expected_pid) {
+    pid_t frontmost_pid = 0;
+    return expected_pid > 0
+        && frontmost_process_pid(&frontmost_pid)
+        && frontmost_pid == expected_pid;
+}
+
+static bool finder_is_frontmost(pid_t *finder_pid, AXUIElementRef *application) {
+    pid_t pid = 0;
+    if (!frontmost_process_pid(&pid)) return false;
 
     char process_name[PROC_PIDPATHINFO_MAXSIZE] = {0};
     proc_name(pid, process_name, sizeof(process_name));
@@ -435,9 +494,10 @@ static AXUIElementRef copy_navigation_container(
 static bool navigation_context_create(navigation_context_t *context) {
     memset(context, 0, sizeof(*context));
     context->predicted_index = -1;
+    context->cursor_index = -1;
 
     AXUIElementRef application = NULL;
-    if (!finder_is_frontmost(NULL, &application)) {
+    if (!finder_is_frontmost(&context->finder_pid, &application)) {
         fprintf(stderr, "finder_ax_step: Finder is not frontmost\n");
         return false;
     }
@@ -474,6 +534,9 @@ static bool navigation_context_create(navigation_context_t *context) {
 }
 
 static void navigation_context_release(navigation_context_t *context) {
+    if (context->visible_marked_items) {
+        CFRelease(context->visible_marked_items);
+    }
     if (context->items) CFRelease(context->items);
     if (context->container) CFRelease(context->container);
     memset(context, 0, sizeof(*context));
@@ -853,6 +916,262 @@ static bool select_index(const navigation_context_t *context, CFIndex index) {
     return error == kAXErrorSuccess;
 }
 
+static void marks_path(char *buffer, size_t size) {
+    const char *override = getenv("KARABINER_FINDER_MARKS_FILE");
+    if (override && override[0] != '\0') {
+        snprintf(buffer, size, "%s", override);
+    } else {
+        state_path(buffer, size, "finder_marks.txt");
+    }
+}
+
+static CFArrayRef copy_mark_urls(void) {
+    CFMutableArrayRef urls = CFArrayCreateMutable(
+        kCFAllocatorDefault,
+        0,
+        &kCFTypeArrayCallBacks
+    );
+    char path[PATH_MAX];
+    marks_path(path, sizeof(path));
+    int descriptor = open(path, O_RDONLY | O_NOFOLLOW);
+    if (descriptor < 0) return urls;
+
+    FILE *stream = fdopen(descriptor, "r");
+    if (!stream) {
+        close(descriptor);
+        return urls;
+    }
+    char *line = NULL;
+    size_t capacity = 0;
+    ssize_t length;
+    while ((length = getline(&line, &capacity, stream)) >= 0) {
+        while (length > 0
+                && (line[length - 1] == '\n' || line[length - 1] == '\r')) {
+            line[--length] = '\0';
+        }
+        if (length == 0) continue;
+        CFURLRef url = CFURLCreateFromFileSystemRepresentation(
+            kCFAllocatorDefault,
+            (const UInt8 *)line,
+            length,
+            false
+        );
+        if (!url) continue;
+        CFStringRef url_string = CFStringCreateCopy(
+            kCFAllocatorDefault,
+            CFURLGetString(url)
+        );
+        CFRelease(url);
+        if (!url_string) continue;
+        CFArrayAppendValue(urls, url_string);
+        CFRelease(url_string);
+    }
+    free(line);
+    fclose(stream);
+    return urls;
+}
+
+static bool item_matches_any_url(
+    AXUIElementRef item,
+    CFArrayRef urls
+) {
+    CFIndex count = CFArrayGetCount(urls);
+    for (CFIndex index = 0; index < count; ++index) {
+        if (navigation_item_matches_url(
+                item,
+                (CFStringRef)CFArrayGetValueAtIndex(urls, index)
+            )) {
+            return true;
+        }
+    }
+    return false;
+}
+
+static CFArrayRef copy_selected_items(
+    const navigation_context_t *context
+) {
+    CFStringRef attribute = context->role == navigation_outline
+        ? kAXSelectedRowsAttribute
+        : kAXSelectedChildrenAttribute;
+    CFArrayRef selected = copy_array_attribute(context->container, attribute);
+    if (selected) return selected;
+
+    CFMutableArrayRef fallback = CFArrayCreateMutable(
+        kCFAllocatorDefault,
+        0,
+        &kCFTypeArrayCallBacks
+    );
+    CFIndex count = CFArrayGetCount(context->items);
+    for (CFIndex index = 0; index < count; ++index) {
+        AXUIElementRef item = (AXUIElementRef)CFArrayGetValueAtIndex(
+            context->items,
+            index
+        );
+        bool selected_item = context->role == navigation_outline
+            ? bool_attribute(item, kAXSelectedAttribute)
+            : descendant_selected(item, 0);
+        if (selected_item) CFArrayAppendValue(fallback, item);
+    }
+    return fallback;
+}
+
+static void refresh_visible_marks(navigation_context_t *context) {
+    if (context->visible_marked_items) {
+        CFRelease(context->visible_marked_items);
+        context->visible_marked_items = NULL;
+    }
+
+    CFArrayRef mark_urls = copy_mark_urls();
+    context->has_marks = CFArrayGetCount(mark_urls) > 0;
+    context->marks_loaded = true;
+    CFMutableArrayRef marked_items = CFArrayCreateMutable(
+        kCFAllocatorDefault,
+        0,
+        &kCFTypeArrayCallBacks
+    );
+    if (!context->has_marks) {
+        context->cursor_index = -1;
+        context->visible_marked_items = marked_items;
+        CFRelease(mark_urls);
+        return;
+    }
+
+    CFArrayRef selected = copy_selected_items(context);
+    CFIndex selected_count = CFArrayGetCount(selected);
+    for (CFIndex selected_index = 0;
+            selected_index < selected_count;
+            ++selected_index) {
+        AXUIElementRef selected_item = (AXUIElementRef)CFArrayGetValueAtIndex(
+            selected,
+            selected_index
+        );
+        CFIndex item_index = navigation_item_index(context, selected_item);
+        if (item_index == kCFNotFound) continue;
+        AXUIElementRef item = (AXUIElementRef)CFArrayGetValueAtIndex(
+            context->items,
+            item_index
+        );
+        if (!item_matches_any_url(item, mark_urls)
+            || CFArrayContainsValue(
+                marked_items,
+                CFRangeMake(0, CFArrayGetCount(marked_items)),
+                item
+            )) {
+            continue;
+        }
+        CFArrayAppendValue(marked_items, item);
+    }
+    CFRelease(selected);
+    CFRelease(mark_urls);
+    context->visible_marked_items = marked_items;
+}
+
+static bool set_visible_mark_and_cursor_selection(
+    const navigation_context_t *context,
+    CFIndex cursor_index
+) {
+    if (!context->has_marks) return select_index(context, cursor_index);
+
+    CFMutableArrayRef selection = CFArrayCreateMutableCopy(
+        kCFAllocatorDefault,
+        0,
+        context->visible_marked_items
+    );
+    AXUIElementRef cursor = (AXUIElementRef)CFArrayGetValueAtIndex(
+        context->items,
+        cursor_index
+    );
+    if (!CFArrayContainsValue(
+            selection,
+            CFRangeMake(0, CFArrayGetCount(selection)),
+            cursor
+        )) {
+        CFArrayAppendValue(selection, cursor);
+    }
+
+    CFStringRef attribute = context->role == navigation_outline
+        ? kAXSelectedRowsAttribute
+        : kAXSelectedChildrenAttribute;
+    AXError error = set_attribute(context->container, attribute, selection);
+    CFRelease(selection);
+    if (error == kAXErrorSuccess) {
+        set_attribute(
+            context->container,
+            kAXFocusedAttribute,
+            kCFBooleanTrue
+        );
+    }
+    return error == kAXErrorSuccess;
+}
+
+static bool write_navigation_anchor(
+    const navigation_context_t *context
+) {
+    if (!context->has_marks || context->cursor_index < 0
+        || context->cursor_index >= CFArrayGetCount(context->items)) {
+        return true;
+    }
+
+    AXUIElementRef item = (AXUIElementRef)CFArrayGetValueAtIndex(
+        context->items,
+        context->cursor_index
+    );
+    CFStringRef url = copy_navigation_item_url_string(item, 0);
+    if (!url) return false;
+    char url_text[PATH_MAX * 4];
+    bool converted = CFStringGetCString(
+        url,
+        url_text,
+        sizeof(url_text),
+        kCFStringEncodingUTF8
+    );
+    CFRelease(url);
+    if (!converted) return false;
+
+    char path[PATH_MAX];
+    const char *override = getenv("KARABINER_FINDER_ANCHOR_FILE");
+    if (override && override[0] != '\0') {
+        snprintf(path, sizeof(path), "%s", override);
+    } else {
+        state_path(path, sizeof(path), "finder_navigation_anchor.txt");
+    }
+    char temporary_path[PATH_MAX];
+    int temporary_length = snprintf(
+        temporary_path,
+        sizeof(temporary_path),
+        "%s.tmp.%ld.%u",
+        path,
+        (long)getpid(),
+        arc4random()
+    );
+    if (temporary_length < 0
+        || (size_t)temporary_length >= sizeof(temporary_path)) {
+        return false;
+    }
+    int descriptor = open(
+        temporary_path,
+        O_CREAT | O_EXCL | O_WRONLY | O_NOFOLLOW,
+        0600
+    );
+    if (descriptor < 0) return false;
+
+    char record[PATH_MAX * 4 + 64];
+    int record_length = snprintf(
+        record,
+        sizeof(record),
+        "1\t%ld\t%s\n",
+        context->cursor_index,
+        url_text
+    );
+    bool success = record_length > 0
+        && (size_t)record_length < sizeof(record)
+        && write(descriptor, record, (size_t)record_length) == record_length;
+    close(descriptor);
+    if (success) success = rename(temporary_path, path) == 0;
+    if (!success) unlink(temporary_path);
+    return success;
+}
+
 static bool clear_selection(navigation_context_t *context) {
     CFStringRef selected_attribute = context->role == navigation_outline
         ? kAXSelectedRowsAttribute
@@ -1086,21 +1405,26 @@ static bool uses_descendant_selection(
     return descendant;
 }
 
-static bool post_key_code(CGKeyCode key_code) {
-    CGEventRef key_down = CGEventCreateKeyboardEvent(NULL, key_code, true);
-    CGEventRef key_up = CGEventCreateKeyboardEvent(NULL, key_code, false);
-    if (!key_down || !key_up) {
-        if (key_down) CFRelease(key_down);
-        if (key_up) CFRelease(key_up);
-        return false;
+static bool post_key_event(
+    CGKeyCode key_code,
+    bool key_down,
+    bool autorepeat
+) {
+    CGEventRef event = CGEventCreateKeyboardEvent(NULL, key_code, key_down);
+    if (!event) return false;
+    if (autorepeat) {
+        CGEventSetIntegerValueField(event, kCGKeyboardEventAutorepeat, 1);
     }
-
-    CGEventPost(kCGHIDEventTap, key_down);
-    CGEventPost(kCGHIDEventTap, key_up);
-    if (metrics_path) metrics_cg_events += 2;
-    CFRelease(key_down);
-    CFRelease(key_up);
+    CGEventPost(kCGHIDEventTap, event);
+    if (metrics_path) ++metrics_cg_events;
+    CFRelease(event);
     return true;
+}
+
+static bool post_key_code(CGKeyCode key_code) {
+    bool key_down_posted = post_key_event(key_code, true, false);
+    bool key_up_posted = post_key_event(key_code, false, false);
+    return key_down_posted && key_up_posted;
 }
 
 static bool menu_item_has_deselect_shortcut(AXUIElementRef element) {
@@ -1210,6 +1534,120 @@ static bool perform_finder_deselect_menu_action(void) {
     AXError error = AXUIElementPerformAction(menu_item, kAXPressAction);
     CFRelease(menu_item);
     return error == kAXErrorSuccess;
+}
+
+static AXUIElementRef copy_ax_element_attribute(
+    AXUIElementRef element,
+    CFStringRef attribute
+) {
+    CFTypeRef value = copy_attribute(element, attribute);
+    if (!value || CFGetTypeID(value) != AXUIElementGetTypeID()) {
+        if (value) CFRelease(value);
+        return NULL;
+    }
+    return (AXUIElementRef)value;
+}
+
+static AXError perform_ax_action(
+    AXUIElementRef element,
+    CFStringRef action
+) {
+    if (metrics_path) ++metrics_ax_writes;
+    return AXUIElementPerformAction(element, action);
+}
+
+static AXUIElementRef copy_vertical_scroll_bar(
+    const navigation_context_t *context
+) {
+    AXUIElementRef current = (AXUIElementRef)CFRetain(context->container);
+    for (int depth = 0; depth < 8; ++depth) {
+        AXUIElementRef scroll_bar = copy_ax_element_attribute(
+            current,
+            kAXVerticalScrollBarAttribute
+        );
+        if (scroll_bar) {
+            CFRelease(current);
+            return scroll_bar;
+        }
+
+        AXUIElementRef parent = copy_ax_element_attribute(
+            current,
+            kAXParentAttribute
+        );
+        CFRelease(current);
+        if (!parent) return NULL;
+        current = parent;
+    }
+    CFRelease(current);
+    return NULL;
+}
+
+static bool vertical_scroll_value(
+    const navigation_context_t *context,
+    double *result
+) {
+    AXUIElementRef scroll_bar = copy_vertical_scroll_bar(context);
+    if (!scroll_bar) return false;
+    CFTypeRef value = copy_attribute(scroll_bar, kAXValueAttribute);
+    CFRelease(scroll_bar);
+    bool success = value && CFGetTypeID(value) == CFNumberGetTypeID()
+        && CFNumberGetValue(
+            (CFNumberRef)value,
+            kCFNumberDoubleType,
+            result
+        );
+    if (value) CFRelease(value);
+    return success;
+}
+
+static bool set_vertical_scroll_edge(
+    const navigation_context_t *context,
+    bool last,
+    bool *available
+) {
+    if (available) *available = false;
+    AXUIElementRef scroll_bar = copy_vertical_scroll_bar(context);
+    if (!scroll_bar) return false;
+    if (available) *available = true;
+    double edge_value = last ? 1.0 : 0.0;
+    CFNumberRef edge = CFNumberCreate(
+        kCFAllocatorDefault,
+        kCFNumberDoubleType,
+        &edge_value
+    );
+    bool success = edge && set_attribute(
+        scroll_bar,
+        kAXValueAttribute,
+        edge
+    ) == kAXErrorSuccess;
+    if (edge) CFRelease(edge);
+    CFRelease(scroll_bar);
+    return success;
+}
+
+static bool scroll_outline_to_edge(
+    const navigation_context_t *context,
+    CFIndex target,
+    bool last
+) {
+    AXUIElementRef item = (AXUIElementRef)CFArrayGetValueAtIndex(
+        context->items,
+        target
+    );
+    bool scroll_bar_available = false;
+    bool scrolled = set_vertical_scroll_edge(
+        context,
+        last,
+        &scroll_bar_available
+    );
+    if (!scrolled) {
+        scrolled = perform_ax_action(item, CFSTR("AXScrollToVisible"))
+            == kAXErrorSuccess;
+    }
+    // A short List that already fits in its viewport has no vertical scroll
+    // bar and Finder may not expose AXScrollToVisible on its rows. Selection
+    // is already visible in that state, so there is no scrolling work to do.
+    return scrolled || !scroll_bar_available;
 }
 
 static CGKeyCode arrow_key_code(direction_t direction) {
@@ -1351,10 +1789,92 @@ static bool same_grid_row(
         && fabs(first_position.y - second_position.y) <= 8.0;
 }
 
+static CFIndex maximum_grid_column(
+    const navigation_context_t *context
+) {
+    CFIndex maximum = 0;
+    CFIndex count = CFArrayGetCount(context->items);
+    for (CFIndex index = 0; index < count; ++index) {
+        CFIndex column = grid_column_index(context, index);
+        if (column > maximum) maximum = column;
+    }
+    return maximum;
+}
+
+static CFIndex select_grid_document_edge(
+    navigation_context_t *context,
+    bool last
+) {
+    CFIndex old_count = CFArrayGetCount(context->items);
+    AXUIElementRef old_first = old_count > 0
+        ? (AXUIElementRef)CFRetain(CFArrayGetValueAtIndex(context->items, 0))
+        : NULL;
+    AXUIElementRef old_last = old_count > 0
+        ? (AXUIElementRef)CFRetain(
+            CFArrayGetValueAtIndex(context->items, old_count - 1)
+        )
+        : NULL;
+    if (!set_vertical_scroll_edge(context, last, NULL)) {
+        if (old_last) CFRelease(old_last);
+        if (old_first) CFRelease(old_first);
+        return 0;
+    }
+
+    CFArrayRef replacement = NULL;
+    for (unsigned attempt = 0; attempt < 80; ++attempt) {
+        if (attempt == 0) usleep(5000);
+        replacement = copy_navigation_items(
+            context->container,
+            context->role
+        );
+        if (replacement && CFArrayGetCount(replacement) > 0) {
+            CFIndex replacement_count = CFArrayGetCount(replacement);
+            AXUIElementRef replacement_first =
+                (AXUIElementRef)CFArrayGetValueAtIndex(replacement, 0);
+            AXUIElementRef replacement_last =
+                (AXUIElementRef)CFArrayGetValueAtIndex(
+                    replacement,
+                    replacement_count - 1
+                );
+            bool changed = replacement_count != old_count
+                || !old_first
+                || !old_last
+                || !CFEqual(old_first, replacement_first)
+                || !CFEqual(old_last, replacement_last);
+            if (changed || attempt == 79) break;
+        }
+        if (replacement) {
+            CFRelease(replacement);
+            replacement = NULL;
+        }
+        usleep(1000);
+    }
+    if (old_last) CFRelease(old_last);
+    if (old_first) CFRelease(old_first);
+    if (!replacement || CFArrayGetCount(replacement) == 0) {
+        if (replacement) CFRelease(replacement);
+        return 0;
+    }
+
+    CFRelease(context->items);
+    context->items = replacement;
+    CFIndex count = CFArrayGetCount(context->items);
+    CFIndex target = last ? count - 1 : 0;
+    if (!select_index(context, target)) return 0;
+    AXUIElementRef item = (AXUIElementRef)CFArrayGetValueAtIndex(
+        context->items,
+        target
+    );
+    perform_ax_action(item, CFSTR("AXScrollToVisible"));
+    context->predicted_index = target;
+    return target + 1;
+}
+
 static CFIndex move_grid_horizontal(
-    const navigation_context_t *context,
+    navigation_context_t *context,
     CFIndex current,
-    direction_t direction
+    direction_t direction,
+    bool *navigation_may_change
 ) {
     CFIndex count = CFArrayGetCount(context->items);
     CFIndex target = direction == direction_right
@@ -1365,8 +1885,23 @@ static CFIndex move_grid_horizontal(
         return target + 1;
     }
 
+    double scroll_value = 0.0;
+    bool has_scroll_value = vertical_scroll_value(context, &scroll_value);
     if (direction == direction_right) {
         if (target == 0) {
+            if (has_scroll_value && scroll_value < 0.999) {
+                if (!post_key_code(kVK_DownArrow)) return 0;
+                CFIndex column = grid_column_index(context, current);
+                for (CFIndex step = 0; step < column; ++step) {
+                    post_key_code(kVK_LeftArrow);
+                }
+                wait_for_selection_change(context, current);
+                if (navigation_may_change) *navigation_may_change = true;
+                return current + 1;
+            }
+            if (has_scroll_value) {
+                return select_grid_document_edge(context, false);
+            }
             CFIndex row = grid_row_index(context, current);
             CFIndex column = grid_column_index(context, current);
             for (CFIndex step = 0; step < row; ++step) {
@@ -1384,6 +1919,19 @@ static CFIndex move_grid_horizontal(
         }
     } else {
         if (current == 0) {
+            if (has_scroll_value && scroll_value > 0.001) {
+                if (!post_key_code(kVK_UpArrow)) return 0;
+                CFIndex target_column = maximum_grid_column(context);
+                for (CFIndex step = 0; step < target_column; ++step) {
+                    post_key_code(kVK_RightArrow);
+                }
+                wait_for_selection_change(context, current);
+                if (navigation_may_change) *navigation_may_change = true;
+                return current + 1;
+            }
+            if (has_scroll_value) {
+                return select_grid_document_edge(context, true);
+            }
             CFIndex target_row = grid_row_index(context, target);
             CFIndex target_column = grid_column_index(context, target);
             for (CFIndex step = 0; step < target_row; ++step) {
@@ -1430,11 +1978,20 @@ static CFIndex move_once(
     if (navigation_may_change) *navigation_may_change = false;
     if (lock_fd >= 0) flock(lock_fd, LOCK_EX);
 
+    if (use_navigation_anchor || !context->marks_loaded) {
+        refresh_visible_marks(context);
+    }
+
     CFIndex count = CFArrayGetCount(context->items);
-    CFIndex anchor = use_navigation_anchor
-        ? take_navigation_anchor(context)
-        : -1;
-    if (anchor >= 0 && !select_index(context, anchor)) anchor = -1;
+    CFIndex anchor = context->cursor_index >= 0
+        ? context->cursor_index
+        : use_navigation_anchor
+            ? take_navigation_anchor(context)
+            : -1;
+    if (anchor >= 0 && !context->has_marks
+        && !select_index(context, anchor)) {
+        anchor = -1;
+    }
     if (anchor >= 0) context->predicted_index = -1;
     CFIndex current = anchor >= 0
         ? anchor
@@ -1446,9 +2003,40 @@ static CFIndex move_once(
         CFIndex position = 0;
         if (current >= 0
             && (direction == direction_left || direction == direction_right)) {
-            position = move_grid_horizontal(context, current, direction);
+            if (context->has_marks) {
+                CFIndex destination = direction == direction_right
+                    ? (current + 1) % count
+                    : (current + count - 1) % count;
+                position = set_visible_mark_and_cursor_selection(
+                    context,
+                    destination
+                ) ? destination + 1 : 0;
+            } else {
+                position = move_grid_horizontal(
+                    context,
+                    current,
+                    direction,
+                    navigation_may_change
+                );
+            }
         } else if (current >= 0 && post_key_code(arrow_key_code(direction))) {
-            position = current + 1;
+            CFIndex destination = context->has_marks
+                ? wait_for_selection_change(context, current)
+                : current;
+            position = destination >= 0 ? destination + 1 : 0;
+        }
+        if (context->has_marks && position > 0
+            && direction != direction_left
+            && direction != direction_right) {
+            if (!set_visible_mark_and_cursor_selection(
+                    context,
+                    position - 1
+                )) {
+                position = 0;
+            }
+        }
+        if (context->has_marks && position > 0) {
+            context->cursor_index = position - 1;
         }
         if (lock_fd >= 0) flock(lock_fd, LOCK_UN);
         return position;
@@ -1457,6 +2045,16 @@ static CFIndex move_once(
     if (context->role == navigation_outline
         && (direction == direction_down || direction == direction_up)) {
         CFIndex position = select_outline_next(context, current, direction);
+        if (context->has_marks && position > 0
+            && !set_visible_mark_and_cursor_selection(
+                context,
+                position - 1
+            )) {
+            position = 0;
+        }
+        if (context->has_marks && position > 0) {
+            context->cursor_index = position - 1;
+        }
         if (lock_fd >= 0) flock(lock_fd, LOCK_UN);
         return position;
     }
@@ -1480,7 +2078,17 @@ static CFIndex move_once(
             CFIndex destination = success
                 ? wait_for_selection_change(context, current)
                 : -1;
+            if (context->has_marks && destination >= 0
+                && !set_visible_mark_and_cursor_selection(
+                    context,
+                    destination
+                )) {
+                destination = -1;
+            }
             position = destination >= 0 ? destination + 1 : 0;
+        }
+        if (context->has_marks && position > 0) {
+            context->cursor_index = position - 1;
         }
         if (lock_fd >= 0) flock(lock_fd, LOCK_UN);
         return position;
@@ -1505,23 +2113,36 @@ static CFIndex move_once(
         destination = current < 0 ? count - 1 : (current + count - 1) % count;
     }
 
-    bool success = select_index(context, destination);
+    bool success = set_visible_mark_and_cursor_selection(
+        context,
+        destination
+    );
     if (success) {
         for (int attempt = 0; attempt < 20; ++attempt) {
-            if (current_index(context) == destination) break;
+            if (context->has_marks || current_index(context) == destination) {
+                break;
+            }
             usleep(500);
         }
+    }
+    if (success && context->has_marks) {
+        context->cursor_index = destination;
     }
     if (lock_fd >= 0) flock(lock_fd, LOCK_UN);
     return success ? destination + 1 : 0;
 }
 
 static CFIndex move_to_edge(
-    const navigation_context_t *context,
+    navigation_context_t *context,
     bool last
 ) {
+    refresh_visible_marks(context);
     CFIndex count = CFArrayGetCount(context->items);
-    CFIndex current = current_index(context);
+    CFIndex anchor = take_navigation_anchor(context);
+    CFIndex current = anchor >= 0 ? anchor : current_index(context);
+    if (context->has_marks && current >= 0 && !select_index(context, current)) {
+        return 0;
+    }
     if (context->role == navigation_grid
         || uses_descendant_selection(context, current)) {
         if (current < 0) return 0;
@@ -1561,24 +2182,47 @@ static CFIndex move_to_edge(
             if (!post_key_code(key_code)) return 0;
         }
         for (int attempt = 0; attempt < 40; ++attempt) {
-            if (current_index(context) == target) return target + 1;
-            usleep(500);
-        }
-        CFIndex actual = current_index(context);
-        return actual >= 0 ? actual + 1 : 0;
-    }
-
-    if (context->role == navigation_outline) {
-        return select_outline_edge(context, last);
-    }
-
-    CFIndex target = last ? count - 1 : 0;
-    bool success = select_index(context, target);
-    if (success) {
-        for (int attempt = 0; attempt < 20; ++attempt) {
             if (current_index(context) == target) break;
             usleep(500);
         }
+        CFIndex actual = current_index(context);
+        if (actual < 0) return 0;
+        if (context->has_marks
+            && !set_visible_mark_and_cursor_selection(context, actual)) {
+            return 0;
+        }
+        if (context->has_marks) context->cursor_index = actual;
+        if (!write_navigation_anchor(context)) return 0;
+        return actual + 1;
+    }
+
+    if (context->role == navigation_outline) {
+        CFIndex position = select_outline_edge(context, last);
+        if (position <= 0) return 0;
+        if (context->has_marks
+            && !set_visible_mark_and_cursor_selection(
+                context,
+                position - 1
+            )) {
+            return 0;
+        }
+        if (context->has_marks) context->cursor_index = position - 1;
+        if (!scroll_outline_to_edge(context, position - 1, last)) return 0;
+        if (!write_navigation_anchor(context)) return 0;
+        return position;
+    }
+
+    CFIndex target = last ? count - 1 : 0;
+    bool success = set_visible_mark_and_cursor_selection(context, target);
+    if (success) {
+        for (int attempt = 0; attempt < 20; ++attempt) {
+            if (context->has_marks || current_index(context) == target) break;
+            usleep(500);
+        }
+    }
+    if (success) {
+        if (context->has_marks) context->cursor_index = target;
+        success = write_navigation_anchor(context);
     }
     return success ? target + 1 : 0;
 }
@@ -2195,11 +2839,13 @@ static CFIndex move_worker_context(
             : -1;
     }
     if (navigation_may_change) {
-        wait_for_navigation_transition(
-            context,
-            previous_item_count,
-            column_phases
-        );
+        if (context->role != navigation_grid) {
+            wait_for_navigation_transition(
+                context,
+                previous_item_count,
+                column_phases
+            );
+        }
         navigation_context_release(context);
         *context_created = false;
     }
@@ -2346,6 +2992,11 @@ static CFIndex execute_worker_command(
         true,
         active_column_phases
     );
+    if (position > 0 && *context_created
+        && context->has_marks
+        && !write_navigation_anchor(context)) {
+        position = 0;
+    }
     if (metrics_path) {
         metrics_snapshot_t end = capture_metrics_snapshot();
         record_command_metrics(
@@ -2454,8 +3105,6 @@ static int run_worker(
 
 static bool enqueue_worker_command(char command, const char *command_name) {
     uint64_t submitted_nanoseconds = monotonic_nanoseconds();
-    if (send_worker_command(command, submitted_nanoseconds)) return true;
-
     int worker_lock_fd = open_worker_lock();
     if (worker_lock_fd < 0) return false;
 
@@ -2480,10 +3129,12 @@ static bool enqueue_worker_command(char command, const char *command_name) {
         return false;
     }
 
-    if (send_worker_command(command, submitted_nanoseconds)) {
-        flock(worker_lock_fd, LOCK_UN);
-        close(worker_lock_fd);
-        return true;
+    // A live worker owns this lock for its full lifetime. If we acquired it,
+    // any existing socket has no receiver and must not be treated as a
+    // successful enqueue target.
+    struct sockaddr_un address;
+    if (socket_address(&address)) {
+        unlink(address.sun_path);
     }
 
     char lock_descriptor[32];
@@ -2569,6 +3220,664 @@ static int run_hold_start(direction_t direction) {
     return enqueued && token_written ? 0 : 1;
 }
 
+static bool hold_token_matches(
+    int token_fd,
+    const char *initial_token,
+    ssize_t initial_length
+) {
+    char current_token[64];
+    ssize_t current_length = read_token(
+        token_fd,
+        current_token,
+        sizeof(current_token)
+    );
+    return current_length == initial_length
+        && memcmp(initial_token, current_token, (size_t)initial_length) == 0;
+}
+
+static bool fast_ax_hold_mode_enabled(void) {
+    const char *mode = getenv("FINDER_VIM_HOLD_MODE");
+    return !mode || strcmp(mode, "ax-fast") == 0;
+}
+
+static useconds_t fast_ax_hold_interval_microseconds(void) {
+    const useconds_t default_interval = 8333;
+    const char *value = getenv("FINDER_VIM_HOLD_INTERVAL_US");
+    if (!value || value[0] == '\0') return default_interval;
+
+    char *end = NULL;
+    errno = 0;
+    long parsed = strtol(value, &end, 10);
+    if (errno != 0 || !end || end[0] != '\0'
+        || parsed < 4000 || parsed > 50000) {
+        return default_interval;
+    }
+    return (useconds_t)parsed;
+}
+
+static uint64_t mach_ticks_for_microseconds(useconds_t microseconds) {
+    mach_timebase_info_data_t timebase;
+    if (mach_timebase_info(&timebase) != KERN_SUCCESS
+        || timebase.numer == 0 || timebase.denom == 0) {
+        return (uint64_t)microseconds * 1000ULL;
+    }
+    long double nanoseconds = (long double)microseconds * 1000.0L;
+    return (uint64_t)(
+        nanoseconds
+            * (long double)timebase.denom
+            / (long double)timebase.numer
+    );
+}
+
+static bool mark_state_is_empty(void) {
+    CFArrayRef urls = copy_mark_urls();
+    bool empty = CFArrayGetCount(urls) == 0;
+    CFRelease(urls);
+    return empty;
+}
+
+static bool native_list_hold_enabled(void) {
+    const char *value = getenv("FINDER_VIM_HOLD_LIST_NATIVE");
+    return !value || strcmp(value, "0") != 0;
+}
+
+static bool supports_native_list_hold(
+    const navigation_context_t *context,
+    direction_t direction
+) {
+    return native_list_hold_enabled()
+        && mark_state_is_empty()
+        && (direction == direction_down || direction == direction_up)
+        && context->role == navigation_outline;
+}
+
+static bool supports_fast_ax_hold(
+    const navigation_context_t *context,
+    direction_t direction
+) {
+    bool vertical_list = (direction == direction_down
+            || direction == direction_up)
+        && (context->role == navigation_outline
+            || context->role == navigation_list);
+    return fast_ax_hold_mode_enabled()
+        && mark_state_is_empty()
+        && vertical_list;
+}
+
+static bool direction_advances_index(direction_t direction) {
+    return direction == direction_down || direction == direction_right;
+}
+
+static CFIndex fast_selected_index(
+    const navigation_context_t *context
+) {
+    CFIndex item_count = CFArrayGetCount(context->items);
+    CFStringRef selected_attribute = context->role == navigation_outline
+        ? kAXSelectedRowsAttribute
+        : kAXSelectedChildrenAttribute;
+    CFArrayRef selected = copy_array_attribute(
+        context->container,
+        selected_attribute
+    );
+    if (!selected || CFArrayGetCount(selected) == 0) {
+        if (selected) CFRelease(selected);
+        return -1;
+    }
+
+    AXUIElementRef selected_item = (AXUIElementRef)CFArrayGetValueAtIndex(
+        selected,
+        0
+    );
+    CFIndex index = CFArrayGetFirstIndexOfValue(
+        context->items,
+        CFRangeMake(0, item_count),
+        selected_item
+    );
+    if (index == kCFNotFound && context->role != navigation_outline) {
+        AXUIElementRef item_ancestor = copy_navigation_item_ancestor(
+            selected_item,
+            context->items
+        );
+        if (item_ancestor) {
+            index = CFArrayGetFirstIndexOfValue(
+                context->items,
+                CFRangeMake(0, item_count),
+                item_ancestor
+            );
+            CFRelease(item_ancestor);
+        }
+    }
+    CFRelease(selected);
+    return index == kCFNotFound ? -1 : index;
+}
+
+static CFIndex wait_for_fast_ax_index(
+    const navigation_context_t *context,
+    CFIndex expected
+) {
+    for (unsigned attempt = 0; attempt < 40; ++attempt) {
+        CFIndex current = fast_selected_index(context);
+        if (current == expected) return current + 1;
+        usleep(500);
+    }
+    return 0;
+}
+
+static CFIndex recover_fast_ax_hold_position(
+    const navigation_context_t *context,
+    CFIndex predicted,
+    direction_t direction
+) {
+    CFIndex count = CFArrayGetCount(context->items);
+    CFIndex candidate = predicted;
+    CFIndex attempt_limit = count < 8 ? count : 8;
+    for (CFIndex attempt = 0; attempt < attempt_limit; ++attempt) {
+        if (select_index(context, candidate)) {
+            CFIndex position = wait_for_fast_ax_index(context, candidate);
+            if (position > 0) return position;
+        }
+        candidate = direction_advances_index(direction)
+            ? (candidate + 1) % count
+            : (candidate + count - 1) % count;
+    }
+    return 0;
+}
+
+static CFIndex settle_fast_ax_hold_position(
+    const navigation_context_t *context,
+    CFIndex predicted,
+    direction_t direction
+) {
+    CFIndex previous = -1;
+    unsigned stable_samples = 0;
+    for (unsigned attempt = 0; attempt < 20; ++attempt) {
+        CFIndex current = fast_selected_index(context);
+        if (current >= 0 && current == previous) {
+            if (++stable_samples >= 2) return current + 1;
+        } else {
+            previous = current;
+            stable_samples = 0;
+        }
+        usleep(1000);
+    }
+    if (previous >= 0) return previous + 1;
+
+    // Group headers in Finder's outline can accept AXSelectedRows writes while
+    // leaving the real selection empty. Keep that verification out of the hot
+    // loop, then recover from the predicted row only when the hold stops.
+    return recover_fast_ax_hold_position(context, predicted, direction);
+}
+
+static bool fast_ax_hold_scroll_to_visible_enabled(void) {
+    const char *value = getenv("FINDER_VIM_HOLD_SCROLL_TO_VISIBLE");
+    return !value || strcmp(value, "0") != 0;
+}
+
+typedef struct {
+    AXUIElementRef scroll_bar;
+    AXUIElementRef increment_button;
+    AXUIElementRef decrement_button;
+    CFNumberRef minimum_value;
+    CFNumberRef maximum_value;
+    CFIndex first_visible;
+    CFIndex last_visible;
+    bool enabled;
+} fast_ax_scroll_state_t;
+
+static void fast_ax_scroll_state_create(
+    const navigation_context_t *context,
+    fast_ax_scroll_state_t *state
+) {
+    memset(state, 0, sizeof(*state));
+    state->first_visible = -1;
+    state->last_visible = -1;
+    state->enabled = fast_ax_hold_scroll_to_visible_enabled();
+    if (!state->enabled) return;
+
+    CFStringRef visible_attribute = context->role == navigation_outline
+        ? kAXVisibleRowsAttribute
+        : kAXVisibleChildrenAttribute;
+    CFArrayRef visible = copy_array_attribute(
+        context->container,
+        visible_attribute
+    );
+    if (visible && CFArrayGetCount(visible) > 0) {
+        CFIndex item_count = CFArrayGetCount(context->items);
+        CFIndex visible_count = CFArrayGetCount(visible);
+        state->first_visible = CFArrayGetFirstIndexOfValue(
+            context->items,
+            CFRangeMake(0, item_count),
+            CFArrayGetValueAtIndex(visible, 0)
+        );
+        state->last_visible = CFArrayGetFirstIndexOfValue(
+            context->items,
+            CFRangeMake(0, item_count),
+            CFArrayGetValueAtIndex(visible, visible_count - 1)
+        );
+        if (state->first_visible == kCFNotFound
+            || state->last_visible == kCFNotFound) {
+            state->first_visible = -1;
+            state->last_visible = -1;
+        }
+    }
+    if (visible) CFRelease(visible);
+
+    if (context->role != navigation_outline) return;
+    AXUIElementRef parent = copy_ax_element_attribute(
+        context->container,
+        kAXParentAttribute
+    );
+    if (!parent) return;
+    state->scroll_bar = copy_ax_element_attribute(
+        parent,
+        kAXVerticalScrollBarAttribute
+    );
+    CFRelease(parent);
+    if (!state->scroll_bar) return;
+    state->increment_button = copy_ax_element_attribute(
+        state->scroll_bar,
+        kAXIncrementButtonAttribute
+    );
+    state->decrement_button = copy_ax_element_attribute(
+        state->scroll_bar,
+        kAXDecrementButtonAttribute
+    );
+    double minimum = 0.0;
+    double maximum = 1.0;
+    state->minimum_value = CFNumberCreate(
+        kCFAllocatorDefault,
+        kCFNumberDoubleType,
+        &minimum
+    );
+    state->maximum_value = CFNumberCreate(
+        kCFAllocatorDefault,
+        kCFNumberDoubleType,
+        &maximum
+    );
+}
+
+static void fast_ax_scroll_state_release(fast_ax_scroll_state_t *state) {
+    if (state->maximum_value) CFRelease(state->maximum_value);
+    if (state->minimum_value) CFRelease(state->minimum_value);
+    if (state->decrement_button) CFRelease(state->decrement_button);
+    if (state->increment_button) CFRelease(state->increment_button);
+    if (state->scroll_bar) CFRelease(state->scroll_bar);
+    memset(state, 0, sizeof(*state));
+}
+
+static void scroll_fast_ax_target_to_visible(
+    const navigation_context_t *context,
+    fast_ax_scroll_state_t *state,
+    CFIndex current,
+    CFIndex target,
+    direction_t direction,
+    AXUIElementRef item
+) {
+    if (!state->enabled) return;
+
+    CFIndex item_count = CFArrayGetCount(context->items);
+    CFIndex visible_span = state->first_visible >= 0
+        && state->last_visible >= state->first_visible
+        ? state->last_visible - state->first_visible
+        : 0;
+    bool advances = direction_advances_index(direction);
+    bool wrapped = (advances && target < current)
+        || (!advances && target > current);
+    if (wrapped && state->scroll_bar) {
+        CFNumberRef edge = direction == direction_down
+            ? state->minimum_value
+            : state->maximum_value;
+        if (!edge || set_attribute(
+                state->scroll_bar,
+                kAXValueAttribute,
+                edge
+            ) != kAXErrorSuccess) {
+            perform_ax_action(item, CFSTR("AXScrollToVisible"));
+            return;
+        }
+        if (direction == direction_down) {
+            state->first_visible = 0;
+            state->last_visible = visible_span;
+        } else {
+            state->last_visible = item_count - 1;
+            state->first_visible = state->last_visible - visible_span;
+        }
+        return;
+    }
+
+    bool below = state->last_visible >= 0 && target > state->last_visible;
+    bool above = state->first_visible >= 0 && target < state->first_visible;
+    if (state->first_visible < 0 || state->last_visible < 0) {
+        perform_ax_action(item, CFSTR("AXScrollToVisible"));
+        return;
+    }
+    if (!below && !above) return;
+
+    bool scrolled = false;
+    if (context->role == navigation_outline) {
+        AXUIElementRef button = below
+            ? state->increment_button
+            : state->decrement_button;
+        CFIndex distance = below
+            ? target - state->last_visible
+            : state->first_visible - target;
+        if (button) {
+            scrolled = true;
+            for (CFIndex step = 0; step < distance; ++step) {
+                if (perform_ax_action(button, kAXPressAction)
+                        != kAXErrorSuccess) {
+                    scrolled = false;
+                    break;
+                }
+            }
+        }
+    } else {
+        scrolled = perform_ax_action(item, CFSTR("AXScrollToVisible"))
+            == kAXErrorSuccess;
+    }
+    if (!scrolled) return;
+
+    if (below) {
+        CFIndex distance = target - state->last_visible;
+        state->first_visible += distance;
+        state->last_visible = target;
+    } else {
+        CFIndex distance = state->first_visible - target;
+        state->first_visible = target;
+        state->last_visible += distance;
+    }
+}
+
+static CFIndex select_fast_ax_next(
+    const navigation_context_t *context,
+    CFIndex current,
+    direction_t direction,
+    CFMutableArrayRef selection,
+    fast_ax_scroll_state_t *scroll_state
+) {
+    CFIndex count = CFArrayGetCount(context->items);
+    CFIndex target = current;
+    for (CFIndex attempt = 0; attempt < count; ++attempt) {
+        target = direction_advances_index(direction)
+            ? (target + 1) % count
+            : (target + count - 1) % count;
+        AXUIElementRef item = (AXUIElementRef)CFArrayGetValueAtIndex(
+            context->items,
+            target
+        );
+        if (CFArrayGetCount(selection) == 0) {
+            CFArrayAppendValue(selection, item);
+        } else {
+            CFArraySetValueAtIndex(selection, 0, item);
+        }
+
+        AXError error;
+        if (context->role == navigation_outline) {
+            error = set_attribute(
+                context->container,
+                kAXSelectedRowsAttribute,
+                selection
+            );
+            if (error != kAXErrorSuccess) {
+                error = set_attribute(
+                    item,
+                    kAXSelectedAttribute,
+                    kCFBooleanTrue
+                );
+            }
+        } else {
+            error = set_attribute(
+                context->container,
+                kAXSelectedChildrenAttribute,
+                selection
+            );
+        }
+        if (error == kAXErrorSuccess) {
+            scroll_fast_ax_target_to_visible(
+                context,
+                scroll_state,
+                current,
+                target,
+                direction,
+                item
+            );
+            return target;
+        }
+    }
+    return -1;
+}
+
+static CFIndex run_fast_ax_hold_repeat(
+    navigation_context_t *context,
+    direction_t direction,
+    int token_fd,
+    const char *initial_token,
+    ssize_t initial_length,
+    double deadline,
+    int lock_fd
+) {
+    CFIndex current = current_index(context);
+    if (current < 0) return 0;
+
+    CFMutableArrayRef selection = CFArrayCreateMutable(
+        kCFAllocatorDefault,
+        1,
+        &kCFTypeArrayCallBacks
+    );
+    if (!selection) return 0;
+    fast_ax_scroll_state_t scroll_state;
+    fast_ax_scroll_state_create(context, &scroll_state);
+
+    useconds_t interval = fast_ax_hold_interval_microseconds();
+    uint64_t interval_ticks = mach_ticks_for_microseconds(interval);
+    uint64_t next_step = mach_absolute_time();
+    while (monotonic_seconds() < deadline) {
+        uint64_t now = mach_absolute_time();
+        if (now < next_step) {
+            mach_wait_until(next_step);
+        }
+        if (monotonic_seconds() >= deadline
+            || !hold_token_matches(
+                token_fd,
+                initial_token,
+                initial_length
+            )
+            || !process_is_frontmost(context->finder_pid)) {
+            break;
+        }
+        if (lock_fd >= 0) flock(lock_fd, LOCK_EX);
+        CFIndex target = select_fast_ax_next(
+            context,
+            current,
+            direction,
+            selection,
+            &scroll_state
+        );
+        if (lock_fd >= 0) flock(lock_fd, LOCK_UN);
+        if (target < 0) break;
+        current = target;
+
+        next_step += interval_ticks;
+        uint64_t finished = mach_absolute_time();
+        if (finished >= next_step) {
+            uint64_t missed = (finished - next_step) / interval_ticks + 1;
+            next_step += missed * interval_ticks;
+        }
+    }
+
+    CFIndex settled = 0;
+    if (process_is_frontmost(context->finder_pid)) {
+        if (lock_fd >= 0) flock(lock_fd, LOCK_EX);
+        settled = settle_fast_ax_hold_position(
+            context,
+            current,
+            direction
+        );
+        if (lock_fd >= 0) flock(lock_fd, LOCK_UN);
+    }
+    fast_ax_scroll_state_release(&scroll_state);
+    CFRelease(selection);
+    return settled;
+}
+
+static CFIndex run_native_list_hold_repeat(
+    navigation_context_t *context,
+    direction_t direction,
+    int token_fd,
+    const char *initial_token,
+    ssize_t initial_length,
+    double deadline,
+    int lock_fd
+) {
+    CFIndex initial = current_index(context);
+    if (initial < 0) return 0;
+
+    CFIndex item_count = CFArrayGetCount(context->items);
+    CFIndex predicted = initial;
+    CFIndex posted_since_wrap = 0;
+    // Keep the common native-repeat path free of AX readback. Only begin
+    // probing after enough posted events could have reached the relevant
+    // boundary, then require repeated stable observations before wrapping.
+    CFIndex steps_before_probe = direction == direction_down
+        ? item_count - initial - 1
+        : initial;
+    CFIndex posted_since_probe = 0;
+    CFIndex last_observed = -1;
+    unsigned stable_observations = 0;
+    const CFIndex probe_interval_steps = 6;
+    const unsigned stable_observations_before_wrap = 2;
+
+    fast_ax_scroll_state_t scroll_state;
+    memset(&scroll_state, 0, sizeof(scroll_state));
+    bool scroll_state_created = false;
+
+    useconds_t interval = fast_ax_hold_interval_microseconds();
+    uint64_t interval_ticks = mach_ticks_for_microseconds(interval);
+    uint64_t next_step = mach_absolute_time();
+    CGKeyCode key_code = arrow_key_code(direction);
+    bool key_is_down = false;
+
+    while (monotonic_seconds() < deadline) {
+        uint64_t now = mach_absolute_time();
+        if (now < next_step) {
+            mach_wait_until(next_step);
+        }
+        if (monotonic_seconds() >= deadline
+            || !hold_token_matches(
+                token_fd,
+                initial_token,
+                initial_length
+            )
+            || !process_is_frontmost(context->finder_pid)) {
+            break;
+        }
+
+        if (lock_fd >= 0) flock(lock_fd, LOCK_EX);
+        bool posted = post_key_event(
+            key_code,
+            true,
+            key_is_down
+        );
+        if (lock_fd >= 0) flock(lock_fd, LOCK_UN);
+        if (!posted) break;
+        key_is_down = true;
+
+        if (item_count > 1) {
+            ++posted_since_wrap;
+            if (posted_since_wrap >= steps_before_probe
+                && ++posted_since_probe >= probe_interval_steps) {
+                posted_since_probe = 0;
+                if (lock_fd >= 0) flock(lock_fd, LOCK_EX);
+                CFIndex observed = current_index(context);
+                if (observed >= 0) predicted = observed;
+                if (observed >= 0 && observed == last_observed) {
+                    ++stable_observations;
+                } else {
+                    last_observed = observed;
+                    stable_observations = 0;
+                }
+
+                bool should_wrap = stable_observations
+                    >= stable_observations_before_wrap
+                    && hold_token_matches(
+                        token_fd,
+                        initial_token,
+                        initial_length
+                    )
+                    && process_is_frontmost(context->finder_pid);
+                if (should_wrap) {
+                    post_key_event(key_code, false, false);
+                    key_is_down = false;
+                    if (!scroll_state_created) {
+                        fast_ax_scroll_state_create(context, &scroll_state);
+                        scroll_state_created = true;
+                    }
+                    CFIndex wrapped_position = select_outline_edge(
+                        context,
+                        direction == direction_up
+                    );
+                    if (wrapped_position > 0) {
+                        CFIndex target = wrapped_position - 1;
+                        AXUIElementRef target_item =
+                            (AXUIElementRef)CFArrayGetValueAtIndex(
+                                context->items,
+                                target
+                            );
+                        scroll_fast_ax_target_to_visible(
+                            context,
+                            &scroll_state,
+                            observed,
+                            target,
+                            direction,
+                            target_item
+                        );
+                        predicted = target;
+                        posted_since_wrap = 0;
+                        steps_before_probe = direction == direction_down
+                            ? item_count - target - 1
+                            : target;
+                        posted_since_probe = 0;
+                        last_observed = -1;
+                        stable_observations = 0;
+                    }
+                }
+                if (lock_fd >= 0) flock(lock_fd, LOCK_UN);
+            }
+        }
+
+        next_step += interval_ticks;
+        uint64_t finished = mach_absolute_time();
+        if (finished >= next_step) {
+            uint64_t missed = (finished - next_step) / interval_ticks + 1;
+            next_step += missed * interval_ticks;
+        }
+    }
+
+    if (key_is_down) {
+        if (lock_fd >= 0) flock(lock_fd, LOCK_EX);
+        post_key_event(key_code, false, false);
+        if (lock_fd >= 0) flock(lock_fd, LOCK_UN);
+    }
+
+    if (!process_is_frontmost(context->finder_pid)) {
+        if (scroll_state_created) {
+            fast_ax_scroll_state_release(&scroll_state);
+        }
+        return 0;
+    }
+    if (lock_fd >= 0) flock(lock_fd, LOCK_EX);
+    CFIndex settled = settle_fast_ax_hold_position(
+        context,
+        predicted,
+        direction
+    );
+    if (lock_fd >= 0) flock(lock_fd, LOCK_UN);
+    if (scroll_state_created) {
+        fast_ax_scroll_state_release(&scroll_state);
+    }
+    return settled;
+}
+
 static int run_hold_repeat(direction_t direction) {
     char path[PATH_MAX];
     token_path(path, sizeof(path), direction);
@@ -2595,30 +3904,60 @@ static int run_hold_repeat(direction_t direction) {
 
     CFIndex last_position = 0;
     double deadline = monotonic_seconds() + 30.0;
-    unsigned iteration = 0;
-    bool use_navigation_anchor = true;
-    while (monotonic_seconds() < deadline) {
-        char current_token[64];
-        ssize_t current_length = read_token(token_fd, current_token, sizeof(current_token));
-        if (current_length != initial_length
-            || memcmp(initial_token, current_token, (size_t)initial_length) != 0) {
-            break;
-        }
-        if ((iteration++ % 20) == 0 && !finder_is_frontmost(NULL, NULL)) break;
-
-        last_position = worker_move(
+    if (supports_native_list_hold(&context, direction)) {
+        last_position = run_native_list_hold_repeat(
             &context,
-            &context_created,
             direction,
-            lock_fd,
-            use_navigation_anchor,
-            NULL
+            token_fd,
+            initial_token,
+            initial_length,
+            deadline,
+            lock_fd
         );
-        use_navigation_anchor = false;
-        if (last_position == 0) break;
-        usleep(5000);
+    } else if (supports_fast_ax_hold(&context, direction)) {
+        last_position = run_fast_ax_hold_repeat(
+            &context,
+            direction,
+            token_fd,
+            initial_token,
+            initial_length,
+            deadline,
+            lock_fd
+        );
+    } else {
+        unsigned iteration = 0;
+        bool use_navigation_anchor = true;
+        while (monotonic_seconds() < deadline) {
+            if (!hold_token_matches(
+                    token_fd,
+                    initial_token,
+                    initial_length
+                )) {
+                break;
+            }
+            if ((iteration++ % 20) == 0
+                && !finder_is_frontmost(NULL, NULL)) {
+                break;
+            }
+
+            last_position = worker_move(
+                &context,
+                &context_created,
+                direction,
+                lock_fd,
+                use_navigation_anchor,
+                NULL
+            );
+            use_navigation_anchor = false;
+            if (last_position == 0) break;
+            usleep(5000);
+        }
     }
 
+    if (last_position > 0 && context_created && context.has_marks
+        && !write_navigation_anchor(&context)) {
+        last_position = 0;
+    }
     if (lock_fd >= 0) close(lock_fd);
     if (context_created) navigation_context_release(&context);
     close(token_fd);
