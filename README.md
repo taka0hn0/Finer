@@ -44,6 +44,7 @@ macOS Accessibility and Karabiner-Elements.
 - [Product requirements and architecture](docs/FINDER_VIM_SPEC.md)
 - [Performance architecture](docs/PERFORMANCE.md)
 - [Benchmark procedure](docs/BENCHMARKS.md)
+- [Project operations and growth strategy](docs/PROJECT_STRATEGY.md)
 - [Release checklist](docs/RELEASE_CHECKLIST.md)
 - [Contributing](CONTRIBUTING.md)
 - [Security policy](SECURITY.md)
