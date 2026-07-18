@@ -37,6 +37,11 @@ typedef enum {
     navigation_grid,
 } navigation_role_t;
 
+typedef enum {
+    edge_monitor_list_view,
+    edge_monitor_column_view,
+} edge_monitor_view_t;
+
 typedef struct {
     AXUIElementRef container;
     CFArrayRef items;
@@ -1625,7 +1630,7 @@ static bool set_vertical_scroll_edge(
     return success;
 }
 
-static bool scroll_outline_to_edge(
+static bool scroll_vertical_selection_to_edge(
     const navigation_context_t *context,
     CFIndex target,
     bool last
@@ -1682,12 +1687,39 @@ static CFIndex wait_for_selection_change(
     return current;
 }
 
-static CFIndex select_outline_edge(
+static CFIndex selectable_vertical_edge_index(
     const navigation_context_t *context,
     bool last
 ) {
     CFIndex count = CFArrayGetCount(context->items);
+    if (count <= 0) return -1;
+
     CFIndex index = last ? count - 1 : 0;
+    CFIndex step = last ? -1 : 1;
+    // Finder can expose group headings as AXOutline rows. Inspect only a small
+    // edge prefix so monitor startup remains independent of directory size.
+    for (int attempt = 0;
+            attempt < 32 && index >= 0 && index < count;
+            ++attempt, index += step) {
+        AXUIElementRef item = (AXUIElementRef)CFArrayGetValueAtIndex(
+            context->items,
+            index
+        );
+        CFStringRef url = copy_navigation_item_url_string(item, 0);
+        if (!url) continue;
+        CFRelease(url);
+        return index;
+    }
+
+    return last ? count - 1 : 0;
+}
+
+static CFIndex select_vertical_edge(
+    const navigation_context_t *context,
+    bool last
+) {
+    CFIndex count = CFArrayGetCount(context->items);
+    CFIndex index = selectable_vertical_edge_index(context, last);
     CFIndex step = last ? -1 : 1;
     for (; index >= 0 && index < count; index += step) {
         if (!select_index(context, index)) continue;
@@ -1697,6 +1729,23 @@ static CFIndex select_outline_edge(
         }
     }
     return 0;
+}
+
+static CFIndex wrap_vertical_edge(
+    const navigation_context_t *context,
+    direction_t direction
+) {
+    bool last = direction == direction_up;
+    CFIndex position = select_vertical_edge(context, last);
+    if (position <= 0) return 0;
+    if (!scroll_vertical_selection_to_edge(
+            context,
+            position - 1,
+            last
+        )) {
+        return 0;
+    }
+    return position;
 }
 
 static CFIndex select_outline_next(
@@ -2204,7 +2253,7 @@ static CFIndex move_to_edge(
     }
 
     if (context->role == navigation_outline) {
-        CFIndex position = select_outline_edge(context, last);
+        CFIndex position = select_vertical_edge(context, last);
         if (position <= 0) return 0;
         if (context->has_marks
             && !set_visible_mark_and_cursor_selection(
@@ -2214,7 +2263,13 @@ static CFIndex move_to_edge(
             return 0;
         }
         if (context->has_marks) context->cursor_index = position - 1;
-        if (!scroll_outline_to_edge(context, position - 1, last)) return 0;
+        if (!scroll_vertical_selection_to_edge(
+                context,
+                position - 1,
+                last
+            )) {
+            return 0;
+        }
         if (!write_navigation_anchor(context)) return 0;
         return position;
     }
@@ -3819,7 +3874,7 @@ static CFIndex run_native_list_hold_repeat(
                         fast_ax_scroll_state_create(context, &scroll_state);
                         scroll_state_created = true;
                     }
-                    CFIndex wrapped_position = select_outline_edge(
+                    CFIndex wrapped_position = select_vertical_edge(
                         context,
                         direction == direction_up
                     );
@@ -3972,19 +4027,155 @@ static int run_hold_repeat(direction_t direction) {
     return 0;
 }
 
-static int open_list_edge_monitor_lock(direction_t direction) {
+typedef struct {
+    CFIndex previous;
+    unsigned stable_observations;
+    bool awaiting_departure;
+} vertical_edge_monitor_state_t;
+
+static void vertical_edge_monitor_state_create(
+    vertical_edge_monitor_state_t *state
+) {
+    memset(state, 0, sizeof(*state));
+    state->previous = -1;
+}
+
+static bool vertical_edge_monitor_observe(
+    vertical_edge_monitor_state_t *state,
+    CFIndex current,
+    CFIndex boundary,
+    CFIndex wrapped_target
+) {
+    if (state->awaiting_departure) {
+        // Do not allow a one-item or stalled view to bounce repeatedly.
+        // Native repeat must first move away from the wrapped edge.
+        if (current != wrapped_target) state->awaiting_departure = false;
+        state->previous = current;
+        return false;
+    }
+
+    if (current == boundary) {
+        state->stable_observations = state->previous == current
+            ? state->stable_observations + 1
+            : 1;
+        state->previous = current;
+        return state->stable_observations >= 2;
+    }
+
+    state->stable_observations = 0;
+    state->previous = current;
+    return false;
+}
+
+static void vertical_edge_monitor_mark_wrapped(
+    vertical_edge_monitor_state_t *state,
+    CFIndex wrapped_target
+) {
+    state->awaiting_departure = true;
+    state->stable_observations = 0;
+    state->previous = wrapped_target;
+}
+
+static int run_vertical_edge_monitor_state_self_test(void) {
+    vertical_edge_monitor_state_t state;
+    vertical_edge_monitor_state_create(&state);
+
+    if (vertical_edge_monitor_observe(&state, 4, 9, 0)
+        || vertical_edge_monitor_observe(&state, 9, 9, 0)
+        || !vertical_edge_monitor_observe(&state, 9, 9, 0)) {
+        fprintf(stderr, "edge monitor self-test: stable boundary failed\n");
+        return 1;
+    }
+
+    vertical_edge_monitor_mark_wrapped(&state, 0);
+    if (vertical_edge_monitor_observe(&state, 0, 9, 0)
+        || !state.awaiting_departure
+        || vertical_edge_monitor_observe(&state, 1, 9, 0)
+        || state.awaiting_departure) {
+        fprintf(stderr, "edge monitor self-test: rearm failed\n");
+        return 1;
+    }
+
+    if (vertical_edge_monitor_observe(&state, 9, 9, 0)
+        || vertical_edge_monitor_observe(&state, 8, 9, 0)
+        || vertical_edge_monitor_observe(&state, 9, 9, 0)
+        || !vertical_edge_monitor_observe(&state, 9, 9, 0)) {
+        fprintf(stderr, "edge monitor self-test: reset failed\n");
+        return 1;
+    }
+
+    vertical_edge_monitor_state_create(&state);
+    if (vertical_edge_monitor_observe(&state, 3, 0, 9)
+        || vertical_edge_monitor_observe(&state, 0, 0, 9)
+        || !vertical_edge_monitor_observe(&state, 0, 0, 9)) {
+        fprintf(stderr, "edge monitor self-test: reverse boundary failed\n");
+        return 1;
+    }
+
+    printf("Vertical edge monitor state tests passed.\n");
+    return 0;
+}
+
+static int open_vertical_edge_monitor_lock(
+    edge_monitor_view_t view,
+    direction_t direction
+) {
     char path[PATH_MAX];
-    const char *name = direction == direction_down
-        ? "finder_list_down_edge_monitor.lock"
-        : "finder_list_up_edge_monitor.lock";
+    const char *view_name = view == edge_monitor_list_view
+        ? "list"
+        : "column";
+    const char *direction_name = direction == direction_down ? "down" : "up";
+    char name[64];
+    snprintf(
+        name,
+        sizeof(name),
+        "finder_%s_%s_edge_monitor.lock",
+        view_name,
+        direction_name
+    );
     state_path(path, sizeof(path), name);
     return open(path, O_CREAT | O_RDWR, 0600);
 }
 
-static int run_list_edge_monitor_worker(direction_t direction) {
+static int run_vertical_edge_monitor_lock_self_test(void) {
+    const edge_monitor_view_t views[] = {
+        edge_monitor_list_view,
+        edge_monitor_column_view,
+    };
+    const direction_t directions[] = {
+        direction_down,
+        direction_up,
+    };
+
+    for (size_t view_index = 0;
+            view_index < sizeof(views) / sizeof(views[0]);
+            ++view_index) {
+        for (size_t direction_index = 0;
+                direction_index < sizeof(directions) / sizeof(directions[0]);
+                ++direction_index) {
+            int lock_fd = open_vertical_edge_monitor_lock(
+                views[view_index],
+                directions[direction_index]
+            );
+            if (lock_fd < 0) {
+                fprintf(stderr, "edge monitor lock self-test: open failed\n");
+                return 1;
+            }
+            close(lock_fd);
+        }
+    }
+
+    printf("Vertical edge monitor lock tests passed.\n");
+    return 0;
+}
+
+static int run_vertical_edge_monitor_worker(
+    edge_monitor_view_t view,
+    direction_t direction
+) {
     if (direction != direction_down && direction != direction_up) return 64;
 
-    int monitor_lock_fd = open_list_edge_monitor_lock(direction);
+    int monitor_lock_fd = open_vertical_edge_monitor_lock(view, direction);
     if (monitor_lock_fd < 0) return 1;
     if (flock(monitor_lock_fd, LOCK_EX | LOCK_NB) != 0) {
         close(monitor_lock_fd);
@@ -3996,14 +4187,14 @@ static int run_list_edge_monitor_worker(direction_t direction) {
     navigation_context_t context;
     bool context_created = false;
 
-    if (!AXIsProcessTrusted()) {
-        result = 1;
-        goto cleanup;
-    }
     // The monitor is launched after Karabiner's delayed-action threshold. If
     // the remapped arrow is no longer down, the physical j/k was released and
     // there is no edge work to perform.
     if (!arrow_key_is_down(direction)) goto cleanup;
+    if (!AXIsProcessTrusted()) {
+        result = 1;
+        goto cleanup;
+    }
 
     movement_lock_fd = open_movement_lock();
     if (movement_lock_fd >= 0) flock(movement_lock_fd, LOCK_EX);
@@ -4015,17 +4206,22 @@ static int run_list_edge_monitor_worker(direction_t direction) {
     }
 
     CFIndex item_count = CFArrayGetCount(context.items);
-    if (context.role != navigation_outline
+    navigation_role_t expected_role = view == edge_monitor_list_view
+        ? navigation_outline
+        : navigation_list;
+    if (context.role != expected_role
         || item_count < 2
         || !mark_state_is_empty()) {
         goto cleanup;
     }
 
-    CFIndex boundary = direction == direction_down ? item_count - 1 : 0;
-    CFIndex wrapped_target = direction == direction_down ? 0 : item_count - 1;
-    CFIndex previous = -1;
-    unsigned stable_observations = 0;
-    bool awaiting_departure = false;
+    CFIndex first = selectable_vertical_edge_index(&context, false);
+    CFIndex last = selectable_vertical_edge_index(&context, true);
+    CFIndex boundary = direction == direction_down ? last : first;
+    CFIndex wrapped_target = direction == direction_down ? first : last;
+    if (first < 0 || last < 0 || first == last) goto cleanup;
+    vertical_edge_monitor_state_t monitor_state;
+    vertical_edge_monitor_state_create(&monitor_state);
     double deadline = monotonic_seconds() + 30.0;
 
     while (monotonic_seconds() < deadline) {
@@ -4040,67 +4236,54 @@ static int run_list_edge_monitor_worker(direction_t direction) {
             continue;
         }
 
-        if (awaiting_departure) {
-            // Do not allow a one-item or stalled view to bounce repeatedly.
-            // Native repeat must first move away from the wrapped edge.
-            if (current != wrapped_target) awaiting_departure = false;
-            previous = current;
+        bool was_awaiting_departure = monitor_state.awaiting_departure;
+        bool should_wrap = vertical_edge_monitor_observe(
+            &monitor_state,
+            current,
+            boundary,
+            wrapped_target
+        );
+        if (was_awaiting_departure) {
+            usleep(8333);
+            continue;
+        }
+        if (should_wrap) {
+            if (!arrow_key_is_down(direction)
+                || !process_is_frontmost(context.finder_pid)
+                || !mark_state_is_empty()) {
+                break;
+            }
+
+            if (movement_lock_fd >= 0) {
+                flock(movement_lock_fd, LOCK_EX);
+            }
+            CFIndex confirmed = current_index(&context);
+            CFIndex wrapped_position = 0;
+            if (confirmed == boundary
+                && arrow_key_is_down(direction)
+                && process_is_frontmost(context.finder_pid)) {
+                wrapped_position = wrap_vertical_edge(&context, direction);
+            }
+            if (movement_lock_fd >= 0) {
+                flock(movement_lock_fd, LOCK_UN);
+            }
+            if (wrapped_position == 0) {
+                result = 1;
+                break;
+            }
+
+            vertical_edge_monitor_mark_wrapped(
+                &monitor_state,
+                wrapped_target
+            );
             usleep(8333);
             continue;
         }
 
-        if (current == boundary) {
-            stable_observations = previous == current
-                ? stable_observations + 1
-                : 1;
-            if (stable_observations >= 2) {
-                if (!arrow_key_is_down(direction)
-                    || !process_is_frontmost(context.finder_pid)
-                    || !mark_state_is_empty()) {
-                    break;
-                }
-
-                if (movement_lock_fd >= 0) {
-                    flock(movement_lock_fd, LOCK_EX);
-                }
-                CFIndex confirmed = current_index(&context);
-                CFIndex wrapped_position = 0;
-                bool scrolled = false;
-                if (confirmed == boundary
-                    && arrow_key_is_down(direction)
-                    && process_is_frontmost(context.finder_pid)) {
-                    bool last = direction == direction_up;
-                    wrapped_position = select_outline_edge(&context, last);
-                    if (wrapped_position > 0) {
-                        scrolled = scroll_outline_to_edge(
-                            &context,
-                            wrapped_position - 1,
-                            last
-                        );
-                    }
-                }
-                if (movement_lock_fd >= 0) {
-                    flock(movement_lock_fd, LOCK_UN);
-                }
-                if (wrapped_position == 0 || !scrolled) {
-                    result = 1;
-                    break;
-                }
-
-                awaiting_departure = true;
-                stable_observations = 0;
-                previous = wrapped_target;
-                usleep(8333);
-                continue;
-            }
-        } else {
-            stable_observations = 0;
-        }
-
-        previous = current;
         CFIndex distance = direction == direction_down
             ? boundary - current
-            : current;
+            : current - boundary;
+        if (distance < 0) distance = 0;
         // Keep AX traffic low across the normal native-repeat path, then probe
         // at roughly one 120 Hz frame only when the selection is near an edge.
         usleep(distance <= 12 ? 8333 : 50000);
@@ -4114,13 +4297,69 @@ cleanup:
     return result;
 }
 
-static bool spawn_list_edge_monitor(direction_t direction) {
+static int run_vertical_edge_wrap_test(
+    edge_monitor_view_t view,
+    direction_t direction
+) {
+    if (direction != direction_down && direction != direction_up) return 64;
+    if (!AXIsProcessTrusted()) {
+        fprintf(stderr, "finder_ax_step: Accessibility access is unavailable\n");
+        return 1;
+    }
+
+    int result = 1;
+    int movement_lock_fd = open_movement_lock();
+    navigation_context_t context;
+    bool context_created = false;
+    if (movement_lock_fd >= 0) flock(movement_lock_fd, LOCK_EX);
+    context_created = navigation_context_create(&context);
+    if (!context_created) goto cleanup;
+
+    navigation_role_t expected_role = view == edge_monitor_list_view
+        ? navigation_outline
+        : navigation_list;
+    CFIndex item_count = CFArrayGetCount(context.items);
+    CFIndex boundary = selectable_vertical_edge_index(
+        &context,
+        direction == direction_down
+    );
+    if (context.role != expected_role
+        || item_count < 2
+        || !mark_state_is_empty()
+        || current_index(&context) != boundary) {
+        goto cleanup;
+    }
+
+    CFIndex position = wrap_vertical_edge(&context, direction);
+    // Grouped List views may expose a non-selectable heading at an edge, so
+    // the AX array position is not necessarily 1 or item_count. The Finder
+    // integration test verifies the selected file path after this action.
+    if (position <= 0) goto cleanup;
+    printf("%ld\n", position);
+    result = 0;
+
+cleanup:
+    if (context_created) navigation_context_release(&context);
+    if (movement_lock_fd >= 0) {
+        flock(movement_lock_fd, LOCK_UN);
+        close(movement_lock_fd);
+    }
+    return result;
+}
+
+static bool spawn_vertical_edge_monitor(
+    edge_monitor_view_t view,
+    direction_t direction
+) {
     if (direction != direction_down && direction != direction_up) return false;
 
     const char *direction_value = direction == direction_down ? "down" : "up";
+    const char *worker_command = view == edge_monitor_list_view
+        ? "list-edge-monitor-worker"
+        : "column-edge-monitor-worker";
     char *arguments[] = {
         (char *)program_path,
-        "list-edge-monitor-worker",
+        (char *)worker_command,
         (char *)direction_value,
         NULL,
     };
@@ -4223,6 +4462,14 @@ int main(int argc, char **argv) {
             : 1;
     }
 
+    if (argc == 2 && strcmp(argv[1], "edge-monitor-self-test") == 0) {
+        return run_vertical_edge_monitor_state_self_test();
+    }
+
+    if (argc == 2 && strcmp(argv[1], "edge-monitor-lock-self-test") == 0) {
+        return run_vertical_edge_monitor_lock_self_test();
+    }
+
     if (argc == 2 && (strcmp(argv[1], "first") == 0
             || strcmp(argv[1], "last") == 0)) {
         if (!AXIsProcessTrusted()) {
@@ -4293,14 +4540,46 @@ int main(int argc, char **argv) {
         return 0;
     }
 
+    if (argc == 4 && strcmp(argv[1], "edge-wrap-test") == 0) {
+        edge_monitor_view_t view;
+        if (strcmp(argv[2], "list") == 0) {
+            view = edge_monitor_list_view;
+        } else if (strcmp(argv[2], "column") == 0) {
+            view = edge_monitor_column_view;
+        } else {
+            return 64;
+        }
+        direction_t direction;
+        if (!parse_direction(argv[3], &direction)) return 64;
+        return run_vertical_edge_wrap_test(view, direction);
+    }
+
     if (argc == 3) {
         direction_t direction;
         if (!parse_direction(argv[2], &direction)) return 64;
         if (strcmp(argv[1], "list-edge-monitor-worker") == 0) {
-            return run_list_edge_monitor_worker(direction);
+            return run_vertical_edge_monitor_worker(
+                edge_monitor_list_view,
+                direction
+            );
         }
         if (strcmp(argv[1], "list-edge-monitor-start") == 0) {
-            return spawn_list_edge_monitor(direction) ? 0 : 1;
+            return spawn_vertical_edge_monitor(
+                edge_monitor_list_view,
+                direction
+            ) ? 0 : 1;
+        }
+        if (strcmp(argv[1], "column-edge-monitor-worker") == 0) {
+            return run_vertical_edge_monitor_worker(
+                edge_monitor_column_view,
+                direction
+            );
+        }
+        if (strcmp(argv[1], "column-edge-monitor-start") == 0) {
+            return spawn_vertical_edge_monitor(
+                edge_monitor_column_view,
+                direction
+            ) ? 0 : 1;
         }
         if (strcmp(argv[1], "hold-start") == 0) return run_hold_start(direction);
         if (strcmp(argv[1], "hold-repeat") == 0) {
@@ -4314,9 +4593,10 @@ int main(int argc, char **argv) {
 
     fprintf(
         stderr,
-        "Usage: finder_ax_step <clear-selection|toggle-mark|first|last|down-wrap|up-wrap|left-wrap|right-wrap> | "
+        "Usage: finder_ax_step <clear-selection|toggle-mark|edge-monitor-self-test|edge-monitor-lock-self-test|first|last|down-wrap|up-wrap|left-wrap|right-wrap> | "
         "<hold-start|hold-repeat> <down|up|left|right> | "
-        "list-edge-monitor-start <down|up>\n"
+        "<list-edge-monitor-start|column-edge-monitor-start> <down|up> | "
+        "edge-wrap-test <list|column> <down|up>\n"
     );
     return 64;
 }

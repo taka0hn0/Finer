@@ -133,9 +133,20 @@ Normal Mode `j/k` directly to Finder's repeating arrow events. Karabiner limits
 the path to a focused `AXList` without the `AXCollectionList` subrole, which
 distinguishes Column from Icon View on the measured host. Marked movement,
 Visual Mode, and counted motions continue to use the verified worker path. The
-prototype currently keeps Finder's native stop-at-edge behavior; Column edge
-wrapping and physical-input throughput remain adoption tests rather than
-established performance claims.
+default path keeps Finder's native stop-at-edge behavior. A second default-off
+`finder_native_column_edge_wrap_experiment` retains the repeating arrow and
+launches the same transient edge-state model used by the List prototype after
+250ms. It accepts only Column's `AXList`, uses a separate direction lock, and
+touches AX selection and scrolling only after two stable edge observations.
+Column edge wrapping and physical-input throughput remain adoption tests rather
+than established performance claims.
+
+The refresh-rate-independent integration test opens dedicated 1,000-item List
+and Column windows and invokes the monitor's actual wrap-and-scroll action at
+both boundaries. It verifies the resulting Finder selection path and requires
+the scroll action to succeed. List boundary discovery probes only a short edge
+prefix for selectable file rows so Finder group headings do not become wrap
+targets and startup work does not grow with directory size.
 
 In a subsequent 60Hz physical-key dogfood check with 1,000 items, the user
 reported that Column `j/k` hold speed felt comparable to the adopted List

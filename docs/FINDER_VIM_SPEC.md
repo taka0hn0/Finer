@@ -215,7 +215,7 @@ Keyboard
 
 Columnの縦方向移動は、既定では開始時に現在位置を1回取得し、以後はキャッシュした項目配列と予測位置から移動先だけをAX選択する。各反復の選択readbackは行わず、8.333ms単位の絶対時刻スケジュールで反復する。処理が予定時刻を越えた場合は過ぎたtickを飛ばし、遅れを取り戻すための連続書き込みを行わない。反復中は1要素の可変選択配列を再利用し、キー解放tokenをAX書き込み直前に1回だけ確認する。キーを離した時に実選択を短時間検証する。
 
-`finder_native_column_hold_experiment=1`の時だけ、確定マークがないNormal ModeのカウントなしColumn `j/k`をKarabinerからFinder標準の上下矢印へ直接写像する。ColumnはFocused UI Elementの`role=AXList`かつ`subrole!=AXCollectionList`で判別し、Icon Viewを除外する。Visual Mode、確定マーク付き移動、数値移動、Icon Viewは既存の検証付き経路を維持する。実験経路はFinder標準と同じく列の端で停止し、Column用の端折り返しは物理入力で通常区間を検証した後に別途設計する。
+`finder_native_column_hold_experiment=1`の時だけ、確定マークがないNormal ModeのカウントなしColumn `j/k`をKarabinerからFinder標準の上下矢印へ直接写像する。ColumnはFocused UI Elementの`role=AXList`かつ`subrole!=AXCollectionList`で判別し、Icon Viewを除外する。Visual Mode、確定マーク付き移動、数値移動、Icon Viewは既存の検証付き経路を維持する。`finder_native_column_edge_wrap_experiment=1`も同時に指定した場合だけ、250ms後に最大30秒の一時端監視を起動する。監視は矢印押下、前面Finder、Column role、確定マークなしを検証し、端で同じ選択を2回連続観測した時だけ反対端の選択と表示位置へ折り返す。折り返し後はネイティブ矢印が反対端から離れるまで再発火しない。端監視フラグが0の時はFinder標準と同じく列端で停止する。
 
 ### 6.5 コマンド転送
 
@@ -239,7 +239,7 @@ Columnの縦方向移動は、既定では開始時に現在位置を1回取得�
 ネイティブ矢印イベントとAX直接選択を実測比較し、表示形式別に速く安全な方式を採用する。
 
 - List: 単押し、数値移動、確定マーク付き移動では生の`AXRows`を一括取得し、移動先だけをAX選択する。選択できないグループ見出しなどに当たった場合だけ次候補へ進み、各行の子要素検証は行わない。確定マークなしの縦長押しはFinder標準の上下矢印auto-repeatを使い、通常区間の表示追従をFinderへ任せる。端だけ停止を限定的にAX確認し、反対端の選択と表示位置へ折り返す。Normal Modeの`gg/G`は先頭・末尾を選択したうえで縦スクロール位置も同じ端へ動かし、選択項目を必ず表示する。`h/l`はFinder標準の左右移動として開示三角形の折りたたみ・展開を維持し、選択項目を開く操作は`o`から`Command+Down Arrow`を送る。
-- Column: Finder標準移動を優先し、階層更新を検出する。既定の同一列内縦移動は予測位置型AX経路を使う。独立した既定OFF実験では、Focused UI Elementが`AXList`かつ`AXCollectionList`でない時に限り、確定マークなし・カウントなしNormal Modeの`j/k`を標準上下矢印へ直結する。
+- Column: Finder標準移動を優先し、階層更新を検出する。既定の同一列内縦移動は予測位置型AX経路を使う。独立した既定OFF実験では、Focused UI Elementが`AXList`かつ`AXCollectionList`でない時に限り、確定マークなし・カウントなしNormal Modeの`j/k`を標準上下矢印へ直結する。さらに別の既定OFFフラグで250ms後だけ一時端監視を起動し、2回連続して列端で停止した場合に限り反対端の選択と表示位置へ折り返す。
 - Icon: `AXCollectionList`直下の`AXSectionList`を1段展開し、各sectionの前後にあるURLを持たない補助要素だけを除外する。補助要素の判定では全項目を走査せず、section両端から最初のファイル項目までだけを調べる。Finderが公開する項目配列は表示位置に応じて仮想化されるため、`h/l`は同一行では標準矢印を送り、行境界では上下移動と行端への水平移動を組み合わせる。表示範囲が変わった時だけコンテキストを再取得し、フォルダ全体の先頭・末尾では縦スクロール位置を反対端へ動かしてから、その端で公開された最初・最後のファイルを選択する。水平イベント後は算出済み移動先を次コマンドの予測位置として保持する。
 - 境界移動: 必要に応じて先頭・末尾を直接選択する。
 
@@ -431,12 +431,19 @@ finder-vim/
 
 ## 16. Decision Log
 
+### 2026-07-18: ListとColumnの遅延端監視を共通状態機械で試作する
+
+- Decision: `finder_native_column_hold_experiment=1`に加えて`finder_native_column_edge_wrap_experiment=1`の時だけ、Columnの`j/k`を標準上下矢印へ直結したまま250ms後にColumn用端監視を起動する。ListとColumnの監視は表示形式と方向ごとに独立したlockを使い、期待するAX roleだけを受理する。2回連続の端停止、折り返し後のdeparture待ち、端を離れた時の安定回数resetはUI非依存の共通状態機械へ分離する。反対端の選択と縦スクロール端更新は、ListとColumnの両方で使える共通関数から行う。
+- Reason: Columnの通常区間はKarabiner直結でListと同程度の体感速度になったが、Finder標準の上下矢印は列端で停止する。List用の遅延監視と同じ安全境界を再利用すれば、通常区間へAX書き込みを戻さずColumnにも循環候補を用意できる。端判定を純粋な状態機械へ分離すれば、120Hzや物理キーがない状態でも誤った1回観測で折り返さないことと、折り返し直後に往復しないことを回帰検証できる。
+- Evidence: C helperのヘッドレス試験は、正方向・逆方向とも2回目の連続端観測だけで発火すること、途中で端を離れると安定回数をresetすること、折り返し先に留まる間は再発火せず離脱後にrearmすることを検証する。さらに専用lockセルフテストがList/Column・上下4組を隔離HOMEへ生成し、表示形式と方向ごとの名前空間分離を検証する。生成ルール試験は、通常直結と端監視経路の排他フラグ、Column/Icon判別、250ms遅延、押下中変数、key-up解除、条件付きランチャー、数値移動より後かつ汎用ワーカーより前の優先順位を検証する。1,000項目の専用Finderウィンドウを使う機能試験はListとColumnの両方で末端から先頭、先頭から末端への選択と縦スクロール処理を検証し、FinderがListのグループ見出しをAX rowとして公開する場合もファイル行を端として扱う。
+- Constraint: `finder_native_column_edge_wrap_experiment`は既定OFFとし、dogfoodへ自動的には有効化しない。Listの既定OFF状態も変更しない。採用前に実キーボードとKarabinerを通して、250ms後もrepeatが途切れないこと、上下端の循環、表示追従、key-up後のdriftなし、確定マーク時のfallbackを60Hzで機能確認し、120Hzで折り返し前後の滑らかさを最終評価する。一時監視は矢印key-up、Finder失焦点、または30秒で終了し、アイドル時の常駐プロセスを追加しない。
+
 ### 2026-07-18: Columnのマークなし縦移動をKarabiner直結矢印で試作する
 
 - Decision: `finder_native_column_hold_experiment=1`の時だけ、確定マークがないNormal ModeのカウントなしColumn `j/k`を、Karabinerの`repeat: true`付き上下矢印へ直接写像する。Focused UI Elementの`role_string == 'AXList'`を必須とし、`subrole_string == 'AXCollectionList'`を除外してIcon Viewへの誤適用を防ぐ。数値移動のmanipulatorを直結経路より前、既存の汎用ワーカー経路を後に置き、数値移動、Visual Mode、確定マーク付き移動は従来どおりワーカーへフォールバックする。
 - Reason: Columnの予測位置型AX長押しは1000項目でp50 32.510 steps/sまで改善したが、各反復のAX選択書き込みが律速となり、Karabiner直結Listのp50 95.756 steps/sに届かない。通常区間をFinder標準矢印へ任せれば、選択描画とスクロール追従をFinder自身のキーリピート経路で処理できる。
 - Evidence: 専用FinderウィンドウでFocused UI Elementを取得すると、Columnは`role=AXList`・subroleなし、Iconは`role=AXList`・`subrole=AXCollectionList`、Listは`role=AXOutline`だった。これによりKarabiner 16.1.0のAccessibility system variablesだけで3表示形式を区別できる。生成ルールの回帰試験はColumn直結経路の条件、上下矢印、数値移動より後かつ汎用ワーカーより前の優先順位を検証し、Karabiner公式lint、`make check`、隔離install試験が通過した。1000項目のColumn Viewを中央から物理`j/k`長押しした60Hz dogfoodでは、ユーザーがListと同程度の移動速度になったと確認した。同じウィンドウで`item-00500`から物理`5j`は`item-00505`を選択し、続く`s → j`は確定マーク`item-00505`と一時カーソル`item-00506`の2項目を表示選択として維持した。続く物理`Esc`はFinderの表示選択を0件にし、確定マークと移動アンカーの状態ファイルも空にした。速度の確認は主観評価であり、定量throughputや120Hzの描画評価ではない。
-- Constraint: 実験フラグは既定OFFとし、現在のdogfoodへ自動的には有効化しない。Karabinerの`accessibility.focused_ui_element.subrole_string`を使えるバージョンを必要とする。Column用の端監視はまだ追加せず、実験中の`j/k`はFinder標準と同じく列端で停止する。採用前に実キーボードで、単押し、100ms連打、長押し、上下スクロール、key-up後のdriftなし、Icon非適用、`s`/`v`/数値移動のfallbackを確認する。Columnの`h/l`とFinderの列公開待ちは変更しない。
+- Constraint: 実験フラグは既定OFFとし、現在のdogfoodへ自動的には有効化しない。Karabinerの`accessibility.focused_ui_element.subrole_string`を使えるバージョンを必要とする。Column用端監視は独立した既定OFFフラグと上記Decisionで扱い、端監視フラグが0の時はFinder標準と同じく列端で停止する。採用前に実キーボードで、単押し、100ms連打、長押し、上下スクロール、key-up後のdriftなし、Icon非適用、`s`/`v`/数値移動のfallbackを確認する。Columnの`h/l`とFinderの列公開待ちは変更しない。
 
 ### 2026-07-18: Karabiner直結List長押しの端監視を既定OFFの遅延実験へ分離する
 

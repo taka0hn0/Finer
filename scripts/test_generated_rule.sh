@@ -103,7 +103,8 @@ def clears_motion_count:
                 {"name":"finder_confirmed_marks_maybe_present","type":"variable_unless","value":1},
                 {"expression":$column_role_expression,"type":"expression_if"},
                 {"expression":$icon_subrole_expression,"type":"expression_unless"},
-                {"name":"finder_native_column_hold_experiment","type":"variable_if","value":1}
+                {"name":"finder_native_column_hold_experiment","type":"variable_if","value":1},
+                {"name":"finder_native_column_edge_wrap_experiment","type":"variable_unless","value":1}
             ]
         )
     ] | length == 1),
@@ -127,7 +128,92 @@ def clears_motion_count:
                 {"name":"finder_confirmed_marks_maybe_present","type":"variable_unless","value":1},
                 {"expression":$column_role_expression,"type":"expression_if"},
                 {"expression":$icon_subrole_expression,"type":"expression_unless"},
-                {"name":"finder_native_column_hold_experiment","type":"variable_if","value":1}
+                {"name":"finder_native_column_hold_experiment","type":"variable_if","value":1},
+                {"name":"finder_native_column_edge_wrap_experiment","type":"variable_unless","value":1}
+            ]
+        )
+    ] | length == 1),
+    ([
+        .rules[]
+        | select(.description == "Finer Navigation")
+        | .manipulators[]
+        | select(
+            .description == "Experimental Column native hold with delayed edge monitor: Map j to Down Arrow"
+            and .from == {"key_code":"j"}
+            and .parameters == {"basic.to_delayed_action_delay_milliseconds":250}
+            and .to == [
+                {"set_variable":{"name":"finder_native_column_j_pressed","value":1}},
+                {"key_code":"down_arrow","repeat":true}
+            ]
+            and .to_after_key_up == [
+                {"set_variable":{"name":"finder_native_column_j_pressed","value":0}}
+            ]
+            and .to_delayed_action == {
+                "to_if_invoked":[{
+                    "conditions":[{
+                        "name":"finder_native_column_j_pressed",
+                        "type":"variable_if",
+                        "value":1
+                    }],
+                    "shell_command":"exec $HOME/.local/libexec/finder-vim/finder_ax_step column-edge-monitor-start down >/dev/null 2>&1"
+                }]
+            }
+        )
+        | select(
+            .conditions == [
+                {
+                    "bundle_identifiers":["^com\\.apple\\.finder$"],
+                    "type":"frontmost_application_if"
+                },
+                {"expression":$text_expression,"type":"expression_unless"},
+                {"name":"finder_visual_mode","type":"variable_unless","value":1},
+                {"name":"finder_confirmed_marks_maybe_present","type":"variable_unless","value":1},
+                {"expression":$column_role_expression,"type":"expression_if"},
+                {"expression":$icon_subrole_expression,"type":"expression_unless"},
+                {"name":"finder_native_column_hold_experiment","type":"variable_if","value":1},
+                {"name":"finder_native_column_edge_wrap_experiment","type":"variable_if","value":1}
+            ]
+        )
+    ] | length == 1),
+    ([
+        .rules[]
+        | select(.description == "Finer Navigation")
+        | .manipulators[]
+        | select(
+            .description == "Experimental Column native hold with delayed edge monitor: Map k to Up Arrow"
+            and .from == {"key_code":"k"}
+            and .parameters == {"basic.to_delayed_action_delay_milliseconds":250}
+            and .to == [
+                {"set_variable":{"name":"finder_native_column_k_pressed","value":1}},
+                {"key_code":"up_arrow","repeat":true}
+            ]
+            and .to_after_key_up == [
+                {"set_variable":{"name":"finder_native_column_k_pressed","value":0}}
+            ]
+            and .to_delayed_action == {
+                "to_if_invoked":[{
+                    "conditions":[{
+                        "name":"finder_native_column_k_pressed",
+                        "type":"variable_if",
+                        "value":1
+                    }],
+                    "shell_command":"exec $HOME/.local/libexec/finder-vim/finder_ax_step column-edge-monitor-start up >/dev/null 2>&1"
+                }]
+            }
+        )
+        | select(
+            .conditions == [
+                {
+                    "bundle_identifiers":["^com\\.apple\\.finder$"],
+                    "type":"frontmost_application_if"
+                },
+                {"expression":$text_expression,"type":"expression_unless"},
+                {"name":"finder_visual_mode","type":"variable_unless","value":1},
+                {"name":"finder_confirmed_marks_maybe_present","type":"variable_unless","value":1},
+                {"expression":$column_role_expression,"type":"expression_if"},
+                {"expression":$icon_subrole_expression,"type":"expression_unless"},
+                {"name":"finder_native_column_hold_experiment","type":"variable_if","value":1},
+                {"name":"finder_native_column_edge_wrap_experiment","type":"variable_if","value":1}
             ]
         )
     ] | length == 1),
@@ -296,6 +382,30 @@ def clears_motion_count:
             | to_entries[]
             | select(.value.description == "Normal Mode: Map j to List wrap or Grid down with transient C worker")
             | .key][0]
+        and [.rules[]
+            | select(.description == "Finer Navigation")
+            | .manipulators
+            | to_entries[]
+            | select(.value.description == "Normal Mode: Move down by Finder motion count")
+            | .key][0]
+        < [.rules[]
+            | select(.description == "Finer Navigation")
+            | .manipulators
+            | to_entries[]
+            | select(.value.description == "Experimental Column native hold with delayed edge monitor: Map j to Down Arrow")
+            | .key][0]
+        and [.rules[]
+            | select(.description == "Finer Navigation")
+            | .manipulators
+            | to_entries[]
+            | select(.value.description == "Experimental Column native hold with delayed edge monitor: Map j to Down Arrow")
+            | .key][0]
+        < [.rules[]
+            | select(.description == "Finer Navigation")
+            | .manipulators
+            | to_entries[]
+            | select(.value.description == "Normal Mode: Map j to List wrap or Grid down with transient C worker")
+            | .key][0]
     ),
     (
         [.rules[]
@@ -303,6 +413,30 @@ def clears_motion_count:
             | .manipulators
             | to_entries[]
             | select(.value.description == "Experimental List native hold: Map k directly to Up Arrow")
+            | .key][0]
+        < [.rules[]
+            | select(.description == "Finer Navigation")
+            | .manipulators
+            | to_entries[]
+            | select(.value.description == "Normal Mode: Map k to List wrap or Grid up with transient C worker")
+            | .key][0]
+        and [.rules[]
+            | select(.description == "Finer Navigation")
+            | .manipulators
+            | to_entries[]
+            | select(.value.description == "Normal Mode: Move up by Finder motion count")
+            | .key][0]
+        < [.rules[]
+            | select(.description == "Finer Navigation")
+            | .manipulators
+            | to_entries[]
+            | select(.value.description == "Experimental Column native hold with delayed edge monitor: Map k to Up Arrow")
+            | .key][0]
+        and [.rules[]
+            | select(.description == "Finer Navigation")
+            | .manipulators
+            | to_entries[]
+            | select(.value.description == "Experimental Column native hold with delayed edge monitor: Map k to Up Arrow")
             | .key][0]
         < [.rules[]
             | select(.description == "Finer Navigation")

@@ -11,7 +11,7 @@ BASELINE_REF ?= 793a82c
 CANDIDATE_REF ?= HEAD
 VERSION ?=
 
-.PHONY: all build rules check-rules check clean install uninstall test-install dist test-dist benchmark-comparison-helpers benchmark-fixtures benchmark-realistic-fixtures benchmark-column benchmark-list benchmark-icon benchmark-views benchmark-column-realistic benchmark-list-realistic benchmark-icon-realistic benchmark-realistic-views benchmark-worker-timeout benchmark-hold benchmark-hold-realistic benchmark-hold-preflight benchmark-hold-realistic-preflight benchmark-taps benchmark-taps-realistic benchmark-taps-preflight benchmark-taps-realistic-preflight benchmark-visual-helper benchmark-column-visual benchmark-column-visual-realistic test-visual-latency-analyzer test-finder-navigation test-finder-selection
+.PHONY: all build rules check-rules check clean install uninstall test-install dist test-dist benchmark-comparison-helpers benchmark-fixtures benchmark-realistic-fixtures benchmark-column benchmark-list benchmark-icon benchmark-views benchmark-column-realistic benchmark-list-realistic benchmark-icon-realistic benchmark-realistic-views benchmark-worker-timeout benchmark-hold benchmark-hold-realistic benchmark-hold-preflight benchmark-hold-realistic-preflight benchmark-taps benchmark-taps-realistic benchmark-taps-preflight benchmark-taps-realistic-preflight benchmark-visual-helper benchmark-column-visual benchmark-column-visual-realistic test-visual-latency-analyzer test-finder-navigation test-finder-selection test-finder-edge-monitor
 
 all: build
 
@@ -45,6 +45,7 @@ $(VISUAL_CAPTURE_HELPER): tools/finer_visual_capture.m | $(BUILD_DIR)
 check: build check-rules
 	jq empty rules/generated/finder-vim.json
 	./scripts/test_generated_rule.sh
+	./scripts/test_edge_monitor.sh
 	./scripts/test_mark_state.sh
 	./scripts/test_tap_burst_headless.sh
 	./scripts/test_column_phase_summary.sh
@@ -186,6 +187,9 @@ test-finder-navigation: benchmark-fixtures
 
 test-finder-selection: build
 	./scripts/test_finder_selection.sh
+
+test-finder-edge-monitor: build benchmark-fixtures
+	./scripts/test_finder_edge_monitor.sh
 
 clean:
 	rm -rf $(BUILD_DIR)

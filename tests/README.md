@@ -8,6 +8,13 @@ separate Navigation and Utility Commands source modules, requires byte-for-byte
 snapshot equality, rejects invalid module descriptions and symlinked output,
 and verifies deterministic regeneration in an isolated directory.
 
+`make check` also runs the headless vertical-edge-monitor state tests. They
+verify two-observation edge confirmation, reset after leaving an edge, rearm
+only after departing the wrapped target, and distinct List/Column direction
+locks. The suite exercises pure state and lock self-test entry points rather
+than a live worker, so it does not open Finder or require a refresh-rate-
+specific display.
+
 Run `make test-install` for isolated packaging integration tests. It uses a
 temporary `HOME` (including a space in the path), never writes to the dogfood
 installation, and verifies repeat install/uninstall, backups, preflight failure,
@@ -82,3 +89,8 @@ command removes the displayed selection. Its List case also holds `j` while A
 and B are confirmed and checks that both marks remain visible, exercising the
 verified fallback rather than the unmarked fast path. The test uses isolated
 state files and closes every window it creates.
+
+Run `make test-finder-edge-monitor` to exercise the wrap-and-scroll action used
+by the delayed List and Column edge monitors. It opens dedicated windows on the
+1,000-item fixture and verifies both last-to-first and first-to-last transitions.
+The result is independent of display refresh rate and physical key repeat.
