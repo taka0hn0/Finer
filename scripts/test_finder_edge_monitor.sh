@@ -109,27 +109,27 @@ wait_for_path() {
 
 run_view_case() {
     local view="$1"
-    print -- "Testing Finder $view edge wrap action..."
+    print -- "Testing Finder $view default edge wrap action..."
     open_test_window "$view"
 
     run_helper last >/dev/null
     wait_for_path "$fixture_dir/item-00999.txt" \
         || fail "$view did not reach the last item"
     local wrapped_position
-    wrapped_position="$(run_helper edge-wrap-test "$view" down)"
+    wrapped_position="$(run_helper down-wrap)"
     [[ "$wrapped_position" =~ '^[1-9][0-9]*$' ]] \
         || fail "$view downward wrap action failed: $wrapped_position"
     wait_for_path "$fixture_dir/item-00000.txt" \
         || fail "$view did not wrap to the first item"
 
-    wrapped_position="$(run_helper edge-wrap-test "$view" up)"
+    wrapped_position="$(run_helper up-wrap)"
     [[ "$wrapped_position" =~ '^[1-9][0-9]*$' ]] \
         || fail "$view upward wrap action failed: $wrapped_position"
     wait_for_path "$fixture_dir/item-00999.txt" \
         || fail "$view did not wrap to the last item"
 
     close_test_window
-    print -- "Finder $view edge wrap action passed."
+    print -- "Finder $view default edge wrap action passed."
 }
 
 [[ -x "$helper" ]] || fail "missing executable helper: $helper"
@@ -141,4 +141,4 @@ for view in list column; do
     run_view_case "$view"
 done
 
-print -- "Finder edge monitor action regressions passed."
+print -- "Finder default edge wrap regressions passed."

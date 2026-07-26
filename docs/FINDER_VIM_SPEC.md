@@ -470,6 +470,7 @@ finder-vim/
 - Decision: Normal Modeの通常`j/k`は、2026-07-15方式を最適化したキャッシュ済みAX移動を既定とする。開始位置だけを読み、各反復はmoduloで求めた移動先だけをAX選択して、先頭と末尾を確実に循環する。`Shift+j/k`は確定マークなし・数値カウントなしのNormal Modeに限定したBoost Modeとし、KarabinerからFinder標準の上下矢印auto-repeatへ直接写像する。Boost Modeは端で停止し、循環させない。
 - Reason: Columnのネイティブ長押しは通常区間が高速で滑らかな一方、速すぎて狙った項目で止めにくい。さらにネイティブ長押しとAX端監視を組み合わせた100ms、50ms、完全矢印タップ候補はいずれも端から折り返すまでの明確な待機を解消できなかった。精密移動と高速移動を別入力へ分ければ、通常操作の停止精度と確実な循環を優先しながら、長距離移動時だけFinderネイティブ速度を明示的に選べる。
 - Constraint: 初期Boost修飾キーは片手で保持しやすくFinderのCommandショートカットを上書きしない`Shift`とする。将来の設定生成で変更可能にする。Boost Modeはテキスト入力、Visual Mode、確定マーク、数値移動へ介入しない。List、Column、Iconで通常`j/k`の単押し・長押し・循環・key-up後driftなしと、Boost Modeの速度・停止・端停止を確認する。旧Column端監視フラグは0に戻し、dogfood既定経路から外す。
+- Verification: `make test-finder-edge-monitor`は1000項目の専用List／Columnウィンドウで既定の`down-wrap`と`up-wrap`を直接実行し、末尾から先頭、先頭から末尾への選択と表示追従を確認する。既定OFFのColumn native Option+Arrow端監視実験はリリース挙動として扱わず、状態機械とlockのheadless試験だけを継続する。
 
 ### 2026-07-26: Column監視は100ms後に完全な矢印タップへ所有権を引き継ぐ
 

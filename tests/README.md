@@ -148,8 +148,10 @@ item, and requires the inline rename focus to remain after the long scroll has
 settled for another 500ms. It uses isolated fixture directories and closes only
 the Finder windows rooted inside those fixtures.
 
-Run `make test-finder-edge-monitor` to exercise the wrap-and-scroll action used
-by the delayed List edge monitor and the native Option+Arrow edge action used
-by the Column monitor. It opens dedicated windows on the 1,000-item fixture and
-verifies both last-to-first and first-to-last transitions. The result is
-independent of display refresh rate and physical key repeat.
+Run `make test-finder-edge-monitor` to exercise the default precise
+wrap-and-scroll actions used by List and Column navigation. It opens dedicated
+windows on the 1,000-item fixture and verifies both last-to-first and
+first-to-last transitions with `down-wrap` and `up-wrap`. The default-off
+native Option+Arrow edge-monitor experiment remains covered by its headless
+state and lock tests rather than being treated as release behavior. The result
+is independent of display refresh rate and physical key repeat.
