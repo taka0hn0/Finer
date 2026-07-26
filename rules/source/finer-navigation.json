@@ -45,6 +45,94 @@
         {
           "expression": "accessibility.focused_ui_element.role_string like 'AXText*'",
           "type": "expression_unless"
+        },
+        {
+          "name": "finder_visual_mode",
+          "type": "variable_unless",
+          "value": 1
+        },
+        {
+          "name": "finder_confirmed_marks_maybe_present",
+          "type": "variable_unless",
+          "value": 1
+        },
+        {
+          "expression": "finder_motion_count == 0",
+          "type": "expression_if"
+        }
+      ],
+      "description": "Boost Mode: Hold Shift+j for Finder-native Down Arrow",
+      "from": {
+        "key_code": "j",
+        "modifiers": {
+          "mandatory": [
+            "shift"
+          ]
+        }
+      },
+      "to": [
+        {
+          "key_code": "down_arrow",
+          "repeat": true
+        }
+      ],
+      "type": "basic"
+    },
+    {
+      "conditions": [
+        {
+          "bundle_identifiers": [
+            "^com\\.apple\\.finder$"
+          ],
+          "type": "frontmost_application_if"
+        },
+        {
+          "expression": "accessibility.focused_ui_element.role_string like 'AXText*'",
+          "type": "expression_unless"
+        },
+        {
+          "name": "finder_visual_mode",
+          "type": "variable_unless",
+          "value": 1
+        },
+        {
+          "name": "finder_confirmed_marks_maybe_present",
+          "type": "variable_unless",
+          "value": 1
+        },
+        {
+          "expression": "finder_motion_count == 0",
+          "type": "expression_if"
+        }
+      ],
+      "description": "Boost Mode: Hold Shift+k for Finder-native Up Arrow",
+      "from": {
+        "key_code": "k",
+        "modifiers": {
+          "mandatory": [
+            "shift"
+          ]
+        }
+      },
+      "to": [
+        {
+          "key_code": "up_arrow",
+          "repeat": true
+        }
+      ],
+      "type": "basic"
+    },
+    {
+      "conditions": [
+        {
+          "bundle_identifiers": [
+            "^com\\.apple\\.finder$"
+          ],
+          "type": "frontmost_application_if"
+        },
+        {
+          "expression": "accessibility.focused_ui_element.role_string like 'AXText*'",
+          "type": "expression_unless"
         }
       ],
       "description": "Normal/Visual Mode: Add 2 to Finder motion count",
@@ -4519,7 +4607,7 @@
         "key_code": "j"
       },
       "parameters": {
-        "basic.to_delayed_action_delay_milliseconds": 250
+        "basic.to_delayed_action_delay_milliseconds": 100
       },
       "to": [
         {
@@ -4539,6 +4627,9 @@
             "name": "finder_native_column_j_pressed",
             "value": 0
           }
+        },
+        {
+          "shell_command": "exec /usr/bin/truncate -s 0 $HOME/.local/state/finder-vim/finder_down_hold.txt"
         }
       ],
       "to_delayed_action": {
@@ -4603,7 +4694,7 @@
         "key_code": "k"
       },
       "parameters": {
-        "basic.to_delayed_action_delay_milliseconds": 250
+        "basic.to_delayed_action_delay_milliseconds": 100
       },
       "to": [
         {
@@ -4623,6 +4714,9 @@
             "name": "finder_native_column_k_pressed",
             "value": 0
           }
+        },
+        {
+          "shell_command": "exec /usr/bin/truncate -s 0 $HOME/.local/state/finder-vim/finder_up_hold.txt"
         }
       ],
       "to_delayed_action": {

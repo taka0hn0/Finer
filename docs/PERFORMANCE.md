@@ -49,13 +49,12 @@ The C burst worker follows these rules:
 - Recognize Finder's `AXCollectionList` Icon container separately from ordinary
   Column View `AXList` containers, and flatten its `AXSectionList` children once
   into the burst-local item array.
-- For an unmarked vertical hold in List View, post Finder-native arrow
-  auto-repeat events and leave ordinary selection drawing and scrolling to
-  Finder. Avoid AX selection readback until enough events could have reached a
-  boundary.
-- For an unmarked vertical hold in Column View, read the starting selection
-  once, advance a burst-local predicted index, and write only each destination.
-  Verify the real selection when the hold stops instead of after every repeat.
+- For a normal vertical hold in List or Column View, read the starting
+  selection once, advance a burst-local predicted index with the same modulo
+  rule at every directory size, and write only each destination. Verify the
+  real selection when the hold stops instead of after every repeat.
+- Map `Shift+j/k` Boost Mode directly to Finder-native arrow auto-repeat. It
+  does not start a worker, inspect AX state, or wrap at an edge.
 
 The target common-path cost is:
 
@@ -105,28 +104,25 @@ operation ignores the variable and retains the compiled default. The timeout
 matrix records process reuse across fixed tap gaps and the delay from a
 process's final command until its metrics flush and exit path begins.
 
-## Held vertical fast path
+## Precise hold and Boost Mode
 
-An unmarked `j` or `k` hold in List View uses Finder-native arrow auto-repeat
-events from an on-demand background process. Each repeat verifies the release
-token and compares the current frontmost PID with the Finder PID captured at
-startup. The common path does not read AX selection or manipulate the scroll
-bar, so Finder owns both selection rendering and ordinary viewport tracking.
+Normal `j/k` in List and Column View uses the precise AX path derived from the
+2026-07-15 implementation. The loop keeps the navigation item array and current
+index locally, calculates the next destination with modulo arithmetic, and
+schedules repeats on an absolute 8.333ms timeline with `mach_wait_until`. When
+an AX write misses a tick, it skips the expired tick instead of issuing a
+catch-up write. It reuses one mutable single-item selection array and verifies
+the real selection when the hold stops. This path wraps without a separate edge
+observer and checks the release token immediately before each write.
 
-Finer begins boundary probing only after the number of posted events could
-have reached the relevant edge from the starting index. It then reads the
-selected row once every six events. Two consecutive unchanged observations
-mean Finder has stopped at the edge. Finer posts key-up, selects the opposite
-selectable edge through AX, moves the vertical scroll position to that edge,
-and restarts the native repeat stream. The release token and frontmost PID are
-checked again immediately before this jump. Key release always posts key-up.
+`Shift+j/k` is Boost Mode. Karabiner maps it directly to Finder's repeating
+Arrow and starts no helper process. Finder owns selection rendering, viewport
+tracking, repeat speed, and stop-at-edge behavior. Boost is disabled in text
+input, Visual Mode, while confirmed marks may exist, and while a motion count
+is active.
 
-Column View retains the direct AX path as its stable fallback. That loop keeps
-the navigation item array and current index locally and schedules repeats on
-an absolute 8.333ms timeline with `mach_wait_until`. When an AX write misses a
-tick, it skips the expired tick instead of issuing a catch-up write. It reuses
-one mutable single-item selection array and verifies the real selection when
-the hold stops.
+The following native Column observer remains default-off diagnostic history,
+not the product path selected by normal `j/k` or Boost Mode.
 
 A default-off `finder_native_column_hold_experiment` maps uncounted, unmarked
 Normal Mode `j/k` directly to Finder's repeating arrow events. Karabiner limits
@@ -134,19 +130,77 @@ the path to a focused `AXList` without the `AXCollectionList` subrole, which
 distinguishes Column from Icon View on the measured host. Marked movement,
 Visual Mode, and counted motions continue to use the verified worker path. The
 default path keeps Finder's native stop-at-edge behavior. A second default-off
-`finder_native_column_edge_wrap_experiment` retains the repeating arrow and
-launches the same transient edge-state model used by the List prototype after
-250ms. It accepts only Column's `AXList`, uses a separate direction lock, and
-touches AX selection and scrolling only after two stable edge observations.
-Column edge wrapping and physical-input throughput remain adoption tests rather
-than established performance claims.
+`finder_native_column_edge_wrap_experiment` launches a transient edge worker
+after 100ms. The worker start creates its release token immediately before
+spawning, so no shell process precedes the direct Arrow on initial key-down.
+Once Karabiner's delayed action has passed its pressed-variable condition, the
+Column observer treats the token generation and captured frontmost Finder PID
+as its lifetime authority. It does not sample the synthetic Arrow through
+`CGEventSourceKeyState`, because that combined-session state can disappear
+while the physical `j/k` hold is still active. Physical key-up truncates the
+token, and a later same-direction hold writes a new generation that invalidates
+the predecessor. The new worker retries the same-direction monitor lock every
+2ms for at most 250ms so the invalidated process can release it. List keeps its
+existing Arrow-state lifetime check.
+After validating the token, frontmost Finder, and empty mark set, the Column
+worker releases the continuously held logical Arrow before creating its AX
+context. It then posts complete Arrow down/up taps every 16.667ms. This avoids
+asking Finder for synchronous AX state while an Arrow remains held, which took
+about 1.5 seconds in the 50ms-polling dogfood check even though ordinary native
+movement stayed fast. The worker does not build the generic navigation snapshot
+or copy the full `AXChildren` array. It retains only the nearest Column `AXList`,
+the captured Finder PID, and the previously selected child. Every 50ms it reads
+the one selected child. A changed child means Finder is still traversing; the
+same child means movement has stalled at the requested edge. The same rule is
+used for every directory size and in both directions. It does not read the
+item count, `AXIndex`, edge children, remaining distance, or scrollbar value.
+
+On a stall, the worker posts Finder's native `Option+Up Arrow` or
+`Option+Down Arrow` document-edge command and continues the same 16.667ms
+complete-Arrow tap loop. Immediately before every
+document-edge command it checks that the Finder PID captured at startup is
+still frontmost. Finder did
+not process an otherwise successful `CGEventPostToPid` Option+Arrow trial as a
+document-edge command, so the working frontmost-event path remains in use;
+global event monitors can therefore still observe this synthetic chord. A
+per-direction token communicates physical key release. Column edge wrapping
+and physical-input throughput remain adoption tests rather than established
+performance claims.
+
+The change targets the delay before that native chord. A diagnostic build
+observed generic Column context creation taking about 1.53s while Finder's
+native repeat was active. Once the old observer had confirmed the boundary, two
+first-wrap chord samples completed in about 36.1ms and 45.3ms; 24 later
+predicted wraps had a p95 chord-posting time of about 0.325ms. These small
+diagnostic samples identify the remaining initialization bottleneck but do not
+yet establish the physical end-to-end p95 target.
 
 The refresh-rate-independent integration test opens dedicated 1,000-item List
-and Column windows and invokes the monitor's actual wrap-and-scroll action at
-both boundaries. It verifies the resulting Finder selection path and requires
-the scroll action to succeed. List boundary discovery probes only a short edge
-prefix for selectable file rows so Finder group headings do not become wrap
-targets and startup work does not grow with directory size.
+and Column windows and invokes the monitor's actual edge action at both
+boundaries. It verifies the resulting Finder selection path: List uses the AX
+wrap-and-scroll action, while Column uses Finder's native Option+Arrow document
+edge action. List boundary discovery probes only a short edge prefix for
+selectable file rows so Finder group headings do not become wrap targets and
+startup work does not grow with directory size.
+
+The List monitor retains its distance-based probe schedule and avoids periodic
+AX reads while the selection cannot be near a boundary. Column deliberately
+uses the simpler fixed 50ms selected-child comparison instead. Earlier
+physical-key A/B checks found that broader 50ms polling across a 1,000-item
+Column could make native traversal feel slower. The current candidate retests
+that period with a lightweight context that reads only the selected child and
+keeps 100ms as the rollback baseline. Its ordinary-path throughput and wrap
+latency remain dogfood acceptance checks rather than assumed improvements.
+
+A trace of the direct-only candidate showed a successful AX wrap about 2.88s
+after monitor start and a selected first item throughout the remainder of the
+hold, but Finder displayed that jump only after key-up. Thus a held logical
+Arrow and an external AX jump cannot be treated as independent owners. The
+current candidate retains direct Karabiner movement until the first edge, then
+uses the established worker event loop for restart and later wraps. It also
+accepts the first boundary observation when Column selection and scroll edge
+agree, avoiding the extra stable sample. The worker lifetime is 300 seconds so
+long 1,000- and 10,000-item traversals can be exercised.
 
 In a subsequent 60Hz physical-key dogfood check with 1,000 items, the user
 reported that Column `j/k` hold speed felt comparable to the adopted List

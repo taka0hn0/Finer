@@ -2,6 +2,11 @@ import AppKit
 import ApplicationServices
 import Foundation
 
+private let axMenuItemModifierShift = 1 << 0
+private let axMenuItemModifierOption = 1 << 1
+private let axMenuItemModifierControl = 1 << 2
+private let axMenuItemModifierNoCommand = 1 << 3
+
 private enum MoveError: Error, CustomStringConvertible {
     case invalidArguments
     case finderIsNotFrontmost
@@ -10,13 +15,17 @@ private enum MoveError: Error, CustomStringConvertible {
     case unsupportedRole(String)
     case emptyContainer
     case missingSelectionURL
+    case menuAction
+    case renameAction
+    case folderCreation(String)
+    case createdFolderUnavailable
     case stateFile(String)
     case setAttribute(String, AXError)
 
     var description: String {
         switch self {
         case .invalidArguments:
-            return "Usage: finder_ax_move <down|up|visual-down|visual-up> <1...99> | <down-wrap|up-wrap|first|last|visual-start|visual-first|visual-last|toggle-mark|copy-absolute|copy-directory|copy-filename|copy-stem> | <hold-start|hold-repeat> <down|up>"
+            return "Usage: finder_ax_move <down|up|visual-down|visual-up> <1...99> | <down-wrap|up-wrap|first|last|visual-start|visual-first|visual-last|toggle-mark|copy-absolute|copy-directory|copy-filename|copy-stem|new-folder-current-level> | <hold-start|hold-repeat> <down|up>"
         case .finderIsNotFrontmost:
             return "Finder is not frontmost"
         case .accessibilityUnavailable:
@@ -29,6 +38,14 @@ private enum MoveError: Error, CustomStringConvertible {
             return "The focused Finder container is empty"
         case .missingSelectionURL:
             return "Could not read the selected Finder item URL"
+        case .menuAction:
+            return "Could not invoke Finder's New Folder menu action"
+        case .renameAction:
+            return "Could not invoke Finder's Rename menu action"
+        case let .folderCreation(message):
+            return "Could not create a new folder: \(message)"
+        case .createdFolderUnavailable:
+            return "Finder did not publish the newly created folder"
         case let .stateFile(message):
             return "Could not update Finder mark state: \(message)"
         case let .setAttribute(name, error):
@@ -60,6 +77,7 @@ private enum Command {
     case holdRepeat(Direction)
     case toggleMark
     case copy(CopyMode)
+    case newFolderAtSelectionLevel
 }
 
 private func attribute(_ element: AXUIElement, _ name: String) throws -> CFTypeRef {
@@ -110,6 +128,131 @@ private func setAttribute(_ element: AXUIElement, _ name: String, _ value: CFTyp
     }
 }
 
+private func integerAttribute(_ element: AXUIElement, _ name: String) -> Int? {
+    guard let value = try? attribute(element, name),
+          CFGetTypeID(value) == CFNumberGetTypeID() else {
+        return nil
+    }
+    return (value as? NSNumber)?.intValue
+}
+
+private func isNewFolderMenuItem(_ element: AXUIElement) -> Bool {
+    guard stringAttribute(element, kAXRoleAttribute) == kAXMenuItemRole else {
+        return false
+    }
+
+    let commandCharacter = stringAttribute(
+        element,
+        kAXMenuItemCmdCharAttribute
+    )?.uppercased()
+    let commandVirtualKey = integerAttribute(
+        element,
+        kAXMenuItemCmdVirtualKeyAttribute
+    )
+    guard commandCharacter == "N" || commandVirtualKey == 45 else {
+        return false
+    }
+
+    guard let modifiers = integerAttribute(
+        element,
+        kAXMenuItemCmdModifiersAttribute
+    ) else {
+        return false
+    }
+    return modifiers & axMenuItemModifierShift != 0
+        && modifiers & (
+            axMenuItemModifierOption
+                | axMenuItemModifierControl
+                | axMenuItemModifierNoCommand
+        ) == 0
+}
+
+private func newFolderMenuItem(
+    in element: AXUIElement,
+    depth: Int = 0
+) -> AXUIElement? {
+    if isNewFolderMenuItem(element) {
+        return element
+    }
+    guard depth < 5 else { return nil }
+    for child in elements(element, kAXChildrenAttribute) {
+        if let result = newFolderMenuItem(in: child, depth: depth + 1) {
+            return result
+        }
+    }
+    return nil
+}
+
+private func performNewFolderMenuAction(
+    finderElement: AXUIElement
+) throws {
+    guard let menuBarValue = try? attribute(
+              finderElement,
+              kAXMenuBarAttribute
+          ),
+          CFGetTypeID(menuBarValue) == AXUIElementGetTypeID(),
+          let menuItem = newFolderMenuItem(
+              in: menuBarValue as! AXUIElement
+          ),
+          AXUIElementPerformAction(
+              menuItem,
+              kAXPressAction as CFString
+          ) == .success else {
+        throw MoveError.menuAction
+    }
+}
+
+private func renameMenuItem(
+    in element: AXUIElement,
+    title: String,
+    depth: Int = 0
+) -> AXUIElement? {
+    if stringAttribute(element, kAXRoleAttribute) == kAXMenuItemRole,
+       stringAttribute(element, kAXTitleAttribute) == title {
+        return element
+    }
+    guard depth < 5 else { return nil }
+    for child in elements(element, kAXChildrenAttribute) {
+        if let result = renameMenuItem(
+            in: child,
+            title: title,
+            depth: depth + 1
+        ) {
+            return result
+        }
+    }
+    return nil
+}
+
+private func performRenameMenuAction(
+    finderElement: AXUIElement
+) throws {
+    let finderBundle = Bundle(
+        path: "/System/Library/CoreServices/Finder.app"
+    )
+    let title = finderBundle?.localizedString(
+        forKey: "OPI-Bm-bCw.title",
+        value: "Rename",
+        table: "MenuBar"
+    ) ?? "Rename"
+
+    guard let menuBarValue = try? attribute(
+              finderElement,
+              kAXMenuBarAttribute
+          ),
+          CFGetTypeID(menuBarValue) == AXUIElementGetTypeID(),
+          let menuItem = renameMenuItem(
+              in: menuBarValue as! AXUIElement,
+              title: title
+          ),
+          AXUIElementPerformAction(
+              menuItem,
+              kAXPressAction as CFString
+          ) == .success else {
+        throw MoveError.renameAction
+    }
+}
+
 private func pointAttribute(_ element: AXUIElement, _ name: String) -> CGPoint? {
     guard let value = try? attribute(element, name),
           CFGetTypeID(value) == AXValueGetTypeID() else { return nil }
@@ -125,10 +268,14 @@ private func descendantNavigationContainers(
     guard depth <= 12 else { return [] }
 
     let role = stringAttribute(element, kAXRoleAttribute) ?? ""
-    var containers: [(AXUIElement, String)] = []
     if role == kAXOutlineRole || role == kAXListRole || role == kAXGridRole {
-        containers.append((element, role))
+        // Navigation containers can expose thousands of rows as descendants.
+        // Their items cannot contain another Finder navigation pane, so stop
+        // here instead of walking every item during fallback discovery.
+        return [(element, role)]
     }
+
+    var containers: [(AXUIElement, String)] = []
     for child in elements(element, kAXChildrenAttribute) {
         containers.append(contentsOf: descendantNavigationContainers(from: child, depth: depth + 1))
     }
@@ -552,6 +699,417 @@ private func copySelectionInfo(
     return values.count
 }
 
+private func directlySelectedItems(
+    _ container: AXUIElement,
+    role: String
+) -> [AXUIElement] {
+    elements(
+        container,
+        role == kAXOutlineRole
+            ? kAXSelectedRowsAttribute
+            : kAXSelectedChildrenAttribute
+    )
+}
+
+private func selectedItemURL(
+    in container: AXUIElement,
+    role: String
+) -> URL? {
+    selectedItemWithURL(in: container, role: role)?.url
+}
+
+private func selectedItemWithURL(
+    in container: AXUIElement,
+    role: String
+) -> (item: AXUIElement, url: URL)? {
+    directlySelectedItems(container, role: role)
+        .reversed()
+        .compactMap { item in
+            urlAttribute(item).map { (item, $0) }
+        }
+        .first
+}
+
+private func selectedItemContext(
+    in finderElement: AXUIElement,
+    fallbackContainer: AXUIElement,
+    fallbackRole: String
+) -> (
+    container: AXUIElement,
+    role: String,
+    subrole: String,
+    item: AXUIElement,
+    url: URL
+)? {
+    if let selected = selectedItemWithURL(
+        in: fallbackContainer,
+        role: fallbackRole
+    ) {
+        return (
+            fallbackContainer,
+            fallbackRole,
+            stringAttribute(fallbackContainer, kAXSubroleAttribute) ?? "",
+            selected.item,
+            selected.url
+        )
+    }
+
+    if let windowValue = try? attribute(
+           finderElement,
+           kAXFocusedWindowAttribute
+       ),
+       CFGetTypeID(windowValue) == AXUIElementGetTypeID() {
+        let candidates = descendantNavigationContainers(
+            from: windowValue as! AXUIElement
+        ).compactMap { element, role -> (
+            container: AXUIElement,
+            role: String,
+            subrole: String,
+            item: AXUIElement,
+            url: URL,
+            xPosition: CGFloat
+        )? in
+            guard let selected = selectedItemWithURL(
+                      in: element,
+                      role: role
+                  ) else {
+                return nil
+            }
+            return (
+                element,
+                role,
+                stringAttribute(element, kAXSubroleAttribute) ?? "",
+                selected.item,
+                selected.url,
+                pointAttribute(element, kAXPositionAttribute)?.x ?? 0
+            )
+        }
+        if let best = candidates.max(by: {
+            $0.xPosition < $1.xPosition
+        }) {
+            return (
+                best.container,
+                best.role,
+                best.subrole,
+                best.item,
+                best.url
+            )
+        }
+    }
+    return nil
+}
+
+private func localFilePath(_ url: URL) -> String {
+    guard let pathURL = CFURLCreateFilePathURL(
+              kCFAllocatorDefault,
+              url as CFURL,
+              nil
+          ) else {
+        return url.standardizedFileURL.path
+    }
+    return (pathURL.takeRetainedValue() as URL)
+        .standardizedFileURL.path
+}
+
+private func itemDisplayName(
+    _ element: AXUIElement,
+    depth: Int = 0
+) -> String? {
+    let role = stringAttribute(element, kAXRoleAttribute)
+    if role == kAXTextFieldRole,
+       let value = stringAttribute(element, kAXValueAttribute),
+       !value.isEmpty {
+        return value
+    }
+    if let title = stringAttribute(element, kAXTitleAttribute),
+       !title.isEmpty {
+        return title
+    }
+    guard depth < 3 else { return nil }
+    for child in elements(element, kAXChildrenAttribute) {
+        if let name = itemDisplayName(child, depth: depth + 1) {
+            return name
+        }
+    }
+    return nil
+}
+
+private func createUntitledFolder(in parentURL: URL) throws -> URL {
+    let fileManager = FileManager.default
+    for suffix in 1...10_000 {
+        let name = suffix == 1
+            ? "untitled folder"
+            : "untitled folder \(suffix)"
+        let candidate = parentURL.appendingPathComponent(
+            name,
+            isDirectory: true
+        )
+        if fileManager.fileExists(atPath: candidate.path) {
+            continue
+        }
+
+        do {
+            try fileManager.createDirectory(
+                at: candidate,
+                withIntermediateDirectories: false
+            )
+            return candidate
+        } catch {
+            if fileManager.fileExists(atPath: candidate.path) {
+                continue
+            }
+            throw MoveError.folderCreation(error.localizedDescription)
+        }
+    }
+    throw MoveError.folderCreation(
+        "Could not choose an unused default name"
+    )
+}
+
+private func selectCreatedFolder(
+    _ createdURL: URL,
+    in container: AXUIElement,
+    role: String
+) throws {
+    let createdPath = localFilePath(createdURL)
+    let deadline = Date().addingTimeInterval(1.0)
+
+    repeat {
+        let directChildren = elements(container, kAXChildrenAttribute)
+        let items: [AXUIElement]
+        if role == kAXOutlineRole {
+            // Unlike normal movement, locating a uniquely named new folder
+            // does not need to validate every row as selectable first.
+            items = elements(container, kAXRowsAttribute)
+        } else if stringAttribute(
+            container,
+            kAXSubroleAttribute
+        ) == "AXCollectionList" {
+            items = directChildren.flatMap {
+                elements($0, kAXChildrenAttribute)
+            }
+        } else {
+            items = directChildren
+        }
+
+        var match: (item: AXUIElement, index: Int)?
+        for offset in 0..<((items.count + 1) / 2) {
+            let leadingIndex = offset
+            let trailingIndex = items.count - 1 - offset
+            for index in leadingIndex == trailingIndex
+                ? [leadingIndex]
+                : [leadingIndex, trailingIndex] {
+                guard let itemURL = urlAttribute(items[index]),
+                      localFilePath(itemURL) == createdPath else {
+                    continue
+                }
+                match = (items[index], index)
+                break
+            }
+            if match != nil { break }
+        }
+
+        if let match {
+            try setSelection(
+                [match.item],
+                in: container,
+                role: role,
+                allItems: items
+            )
+            _ = AXUIElementSetAttributeValue(
+                container,
+                kAXFocusedAttribute as CFString,
+                kCFBooleanTrue
+            )
+            scrollCreatedItemToVisible(
+                match.item,
+                index: match.index,
+                itemCount: items.count,
+                container: container
+            )
+            return
+        }
+        Thread.sleep(forTimeInterval: 0.01)
+    } while Date() < deadline
+
+    throw MoveError.createdFolderUnavailable
+}
+
+private func performScrollToVisible(
+    _ element: AXUIElement,
+    depth: Int = 0
+) -> Bool {
+    if AXUIElementPerformAction(
+        element,
+        "AXScrollToVisible" as CFString
+    ) == .success {
+        return true
+    }
+    guard depth < 3 else { return false }
+    for child in elements(element, kAXChildrenAttribute) {
+        if performScrollToVisible(child, depth: depth + 1) {
+            return true
+        }
+    }
+    return false
+}
+
+private func verticalScrollBar(
+    from container: AXUIElement
+) -> AXUIElement? {
+    var current = container
+    for _ in 0..<8 {
+        if let value = try? attribute(
+               current,
+               kAXVerticalScrollBarAttribute
+           ),
+           CFGetTypeID(value) == AXUIElementGetTypeID() {
+            return (value as! AXUIElement)
+        }
+        guard let parentValue = try? attribute(
+                  current,
+                  kAXParentAttribute
+              ),
+              CFGetTypeID(parentValue) == AXUIElementGetTypeID() else {
+            return nil
+        }
+        current = parentValue as! AXUIElement
+    }
+    return nil
+}
+
+private func scrollCreatedItemToVisible(
+    _ item: AXUIElement,
+    index: Int,
+    itemCount: Int,
+    container: AXUIElement
+) {
+    if performScrollToVisible(item) {
+        return
+    }
+
+    guard itemCount > 1,
+          let scrollBar = verticalScrollBar(from: container) else {
+        return
+    }
+    let position = NSNumber(
+        value: Double(index) / Double(itemCount - 1)
+    )
+    guard AXUIElementSetAttributeValue(
+              scrollBar,
+              kAXValueAttribute as CFString,
+              position
+          ) == .success else {
+        return
+    }
+    Thread.sleep(forTimeInterval: 0.01)
+    _ = performScrollToVisible(item)
+}
+
+private func revealCreatedFolderUsingWorkspace(
+    _ createdURL: URL,
+    finderElement: AXUIElement,
+    fallbackContainer: AXUIElement,
+    fallbackRole: String
+) -> Bool {
+    NSWorkspace.shared.activateFileViewerSelecting([createdURL])
+    let createdName = createdURL.lastPathComponent
+    let deadline = Date().addingTimeInterval(0.5)
+
+    repeat {
+        if let selected = selectedItemWithURL(
+               in: fallbackContainer,
+               role: fallbackRole
+           ),
+           itemDisplayName(selected.item) == createdName {
+            _ = performScrollToVisible(selected.item)
+            return true
+        }
+
+        if let windowValue = try? attribute(
+               finderElement,
+               kAXFocusedWindowAttribute
+           ),
+           CFGetTypeID(windowValue) == AXUIElementGetTypeID() {
+            let matches = descendantNavigationContainers(
+                from: windowValue as! AXUIElement
+            ).compactMap { element, role -> (
+                item: AXUIElement,
+                xPosition: CGFloat
+            )? in
+                guard let selected = selectedItemWithURL(
+                          in: element,
+                          role: role
+                      ),
+                      itemDisplayName(selected.item) == createdName else {
+                    return nil
+                }
+                return (
+                    selected.item,
+                    pointAttribute(
+                        element,
+                        kAXPositionAttribute
+                    )?.x ?? 0
+                )
+            }
+            if let match = matches.max(by: {
+                $0.xPosition < $1.xPosition
+            }) {
+                _ = performScrollToVisible(match.item)
+                return true
+            }
+        }
+
+        Thread.sleep(forTimeInterval: 0.01)
+    } while Date() < deadline
+
+    return false
+}
+
+private func createNewFolderAtSelectionLevel(
+    finder: NSRunningApplication,
+    finderElement: AXUIElement,
+    container: AXUIElement,
+    role: String
+) throws -> Int {
+    let selection = selectedItemContext(
+        in: finderElement,
+        fallbackContainer: container,
+        fallbackRole: role
+    )
+
+    guard let selection else {
+        guard finder.isActive else {
+            throw MoveError.finderIsNotFrontmost
+        }
+        try performNewFolderMenuAction(finderElement: finderElement)
+        return 0
+    }
+
+    let selectedURL = URL(fileURLWithPath: localFilePath(selection.url))
+    let createdURL = try createUntitledFolder(
+        in: selectedURL.deletingLastPathComponent()
+    )
+    if !revealCreatedFolderUsingWorkspace(
+        createdURL,
+        finderElement: finderElement,
+        fallbackContainer: selection.container,
+        fallbackRole: selection.role
+    ) {
+        try selectCreatedFolder(
+            createdURL,
+            in: selection.container,
+            role: selection.role
+        )
+    }
+
+    guard finder.isActive else {
+        throw MoveError.finderIsNotFrontmost
+    }
+    try performRenameMenuAction(finderElement: finderElement)
+    return 0
+}
+
 private func targetIndex(
     currentIndex: Int?,
     itemCount: Int,
@@ -814,6 +1372,8 @@ private func run() throws -> Int {
         command = .visualEdge(.last)
     } else if arguments.count == 1, arguments[0] == "toggle-mark" {
         command = .toggleMark
+    } else if arguments.count == 1, arguments[0] == "new-folder-current-level" {
+        command = .newFolderAtSelectionLevel
     } else if arguments.count == 1, let mode = CopyMode(rawValue: arguments[0]) {
         command = .copy(mode)
     } else if arguments.count == 1, arguments[0] == "down-wrap" {
@@ -938,6 +1498,13 @@ private func run() throws -> Int {
         return try toggleCurrentMark(container, role: role)
     case let .copy(mode):
         return try copySelectionInfo(mode, container: container, role: role)
+    case .newFolderAtSelectionLevel:
+        return try createNewFolderAtSelectionLevel(
+            finder: finder,
+            finderElement: finderElement,
+            container: container,
+            role: role
+        )
     }
 }
 

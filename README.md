@@ -30,11 +30,18 @@ macOS Accessibility and Karabiner-Elements.
 
 ## Selection behavior
 
+- Normal Modeの`j`/`k`は、キャッシュしたFinder項目を1件ずつ正確に
+  選択し、先頭と末尾で循環します。
+- `Shift+j`/`Shift+k`はBoost Modeです。Finder標準の高速な矢印長押しを
+  そのまま使い、端では停止します。
 - `s` toggles a confirmed mark. Confirmed marks remain visibly selected while
   the current position moves with `h`/`j`/`k`/`l`.
 - The moving current position is transient. When confirmed marks exist,
   `y`/`x`/`d` act only on those marks, not on the transient position.
 - With no confirmed marks, `y`/`x`/`d` act on the current Finder selection.
+- `n` creates a folder beside the selected item. `Shift+n` keeps Finder's
+  active-target behavior, which creates inside a selected directory in Column
+  View.
 - `Esc` clears the displayed selection in one press, including from Visual
   Mode.
 

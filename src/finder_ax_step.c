@@ -125,6 +125,15 @@ static size_t metrics_record_count;
 static size_t metrics_dropped_records;
 extern char **environ;
 
+#ifdef FINER_EDGE_TRACE
+static int edge_trace_fd = -1;
+#define EDGE_TRACE(...) do { \
+    if (edge_trace_fd >= 0) dprintf(edge_trace_fd, __VA_ARGS__); \
+} while (0)
+#else
+#define EDGE_TRACE(...) ((void)0)
+#endif
+
 static uint64_t monotonic_nanoseconds(void);
 static uint64_t counter_delta(uint64_t end, uint64_t start);
 static CFStringRef copy_navigation_item_url_string(
@@ -1410,13 +1419,15 @@ static bool uses_descendant_selection(
     return descendant;
 }
 
-static bool post_key_event(
+static bool post_key_event_with_flags(
     CGKeyCode key_code,
     bool key_down,
-    bool autorepeat
+    bool autorepeat,
+    CGEventFlags flags
 ) {
     CGEventRef event = CGEventCreateKeyboardEvent(NULL, key_code, key_down);
     if (!event) return false;
+    if (flags != 0) CGEventSetFlags(event, flags);
     if (autorepeat) {
         CGEventSetIntegerValueField(event, kCGKeyboardEventAutorepeat, 1);
     }
@@ -1426,10 +1437,55 @@ static bool post_key_event(
     return true;
 }
 
+static bool post_key_event(
+    CGKeyCode key_code,
+    bool key_down,
+    bool autorepeat
+) {
+    return post_key_event_with_flags(key_code, key_down, autorepeat, 0);
+}
+
 static bool post_key_code(CGKeyCode key_code) {
     bool key_down_posted = post_key_event(key_code, true, false);
     bool key_up_posted = post_key_event(key_code, false, false);
     return key_down_posted && key_up_posted;
+}
+
+static bool post_key_code_with_flags(
+    CGKeyCode key_code,
+    CGEventFlags flags
+) {
+    bool key_down_posted = post_key_event_with_flags(
+        key_code,
+        true,
+        false,
+        flags
+    );
+    bool key_up_posted = post_key_event_with_flags(
+        key_code,
+        false,
+        false,
+        flags
+    );
+    return key_down_posted && key_up_posted;
+}
+
+static bool post_column_vertical_wrap_chord(
+    pid_t finder_pid,
+    direction_t direction
+) {
+    // Finder ignores the same synthetic chord when delivered with
+    // CGEventPostToPid. Keep the native global event path, but close the
+    // focus-switch race as far as possible by checking the captured Finder
+    // process immediately before posting the down/up pair.
+    if (!process_is_frontmost(finder_pid)) return false;
+    CGKeyCode destination_edge_key = direction == direction_down
+        ? kVK_UpArrow
+        : kVK_DownArrow;
+    return post_key_code_with_flags(
+        destination_edge_key,
+        kCGEventFlagMaskAlternate
+    );
 }
 
 static bool menu_item_has_deselect_shortcut(AXUIElementRef element) {
@@ -1695,6 +1751,13 @@ static CFIndex selectable_vertical_edge_index(
     if (count <= 0) return -1;
 
     CFIndex index = last ? count - 1 : 0;
+    if (context->role == navigation_list) {
+        // Column AXList children are the selectable entries themselves. URL
+        // descent exists only to skip group headings in List AXOutline rows;
+        // doing it here can block behind Finder's native repeat for seconds.
+        return index;
+    }
+
     CFIndex step = last ? -1 : 1;
     // Finder can expose group headings as AXOutline rows. Inspect only a small
     // edge prefix so monitor startup remains independent of directory size.
@@ -1738,13 +1801,10 @@ static CFIndex wrap_vertical_edge(
     bool last = direction == direction_up;
     CFIndex position = select_vertical_edge(context, last);
     if (position <= 0) return 0;
-    if (!scroll_vertical_selection_to_edge(
-            context,
-            position - 1,
-            last
-        )) {
-        return 0;
-    }
+    // Finder can apply the AX selection before its Column scroll hierarchy is
+    // writable. Request the edge scroll, but keep the successful selection as
+    // the source of truth; the still-held native arrow then owns visibility.
+    scroll_vertical_selection_to_edge(context, position - 1, last);
     return position;
 }
 
@@ -3282,6 +3342,10 @@ static int run_hold_start(direction_t direction) {
     return enqueued && token_written ? 0 : 1;
 }
 
+static int run_hold_token_start(direction_t direction) {
+    return write_hold_token(direction) ? 0 : 1;
+}
+
 static bool hold_token_matches(
     int token_fd,
     const char *initial_token,
@@ -3317,6 +3381,18 @@ static useconds_t fast_ax_hold_interval_microseconds(void) {
     return (useconds_t)parsed;
 }
 
+static useconds_t column_owned_hold_interval_microseconds(void) {
+    const char *override = getenv("FINDER_VIM_HOLD_INTERVAL_US");
+    if (override && override[0] != '\0') {
+        return fast_ax_hold_interval_microseconds();
+    }
+    return 16667;
+}
+
+static useconds_t column_selection_probe_interval_microseconds(void) {
+    return 50000;
+}
+
 static uint64_t mach_ticks_for_microseconds(useconds_t microseconds) {
     mach_timebase_info_data_t timebase;
     if (mach_timebase_info(&timebase) != KERN_SUCCESS
@@ -3340,7 +3416,7 @@ static bool mark_state_is_empty(void) {
 
 static bool native_list_hold_enabled(void) {
     const char *value = getenv("FINDER_VIM_HOLD_LIST_NATIVE");
-    return !value || strcmp(value, "0") != 0;
+    return value && strcmp(value, "0") != 0;
 }
 
 static bool supports_native_list_hold(
@@ -3965,7 +4041,7 @@ static int run_hold_repeat(direction_t direction) {
     }
 
     CFIndex last_position = 0;
-    double deadline = monotonic_seconds() + 30.0;
+    double deadline = monotonic_seconds() + 300.0;
     if (supports_native_list_hold(&context, direction)) {
         last_position = run_native_list_hold_repeat(
             &context,
@@ -4030,7 +4106,6 @@ static int run_hold_repeat(direction_t direction) {
 typedef struct {
     CFIndex previous;
     unsigned stable_observations;
-    bool awaiting_departure;
 } vertical_edge_monitor_state_t;
 
 static void vertical_edge_monitor_state_create(
@@ -4043,17 +4118,8 @@ static void vertical_edge_monitor_state_create(
 static bool vertical_edge_monitor_observe(
     vertical_edge_monitor_state_t *state,
     CFIndex current,
-    CFIndex boundary,
-    CFIndex wrapped_target
+    CFIndex boundary
 ) {
-    if (state->awaiting_departure) {
-        // Do not allow a one-item or stalled view to bounce repeatedly.
-        // Native repeat must first move away from the wrapped edge.
-        if (current != wrapped_target) state->awaiting_departure = false;
-        state->previous = current;
-        return false;
-    }
-
     if (current == boundary) {
         state->stable_observations = state->previous == current
             ? state->stable_observations + 1
@@ -4071,44 +4137,65 @@ static void vertical_edge_monitor_mark_wrapped(
     vertical_edge_monitor_state_t *state,
     CFIndex wrapped_target
 ) {
-    state->awaiting_departure = true;
     state->stable_observations = 0;
     state->previous = wrapped_target;
+}
+
+static uint64_t vertical_edge_probe_delay_microseconds(
+    CFIndex current,
+    CFIndex boundary
+) {
+    const CFIndex near_edge_items = 12;
+    const uint64_t fastest_step_microseconds = 8333;
+    CFIndex distance = current > boundary
+        ? current - boundary
+        : boundary - current;
+    if (distance <= near_edge_items) return fastest_step_microseconds;
+    return (uint64_t)(distance - near_edge_items)
+        * fastest_step_microseconds;
 }
 
 static int run_vertical_edge_monitor_state_self_test(void) {
     vertical_edge_monitor_state_t state;
     vertical_edge_monitor_state_create(&state);
 
-    if (vertical_edge_monitor_observe(&state, 4, 9, 0)
-        || vertical_edge_monitor_observe(&state, 9, 9, 0)
-        || !vertical_edge_monitor_observe(&state, 9, 9, 0)) {
+    if (vertical_edge_monitor_observe(&state, 4, 9)
+        || vertical_edge_monitor_observe(&state, 9, 9)
+        || !vertical_edge_monitor_observe(&state, 9, 9)) {
         fprintf(stderr, "edge monitor self-test: stable boundary failed\n");
         return 1;
     }
 
     vertical_edge_monitor_mark_wrapped(&state, 0);
-    if (vertical_edge_monitor_observe(&state, 0, 9, 0)
-        || !state.awaiting_departure
-        || vertical_edge_monitor_observe(&state, 1, 9, 0)
-        || state.awaiting_departure) {
+    if (vertical_edge_monitor_observe(&state, 0, 9)
+        || state.stable_observations != 0
+        || vertical_edge_monitor_observe(&state, 1, 9)
+        || state.stable_observations != 0) {
         fprintf(stderr, "edge monitor self-test: rearm failed\n");
         return 1;
     }
 
-    if (vertical_edge_monitor_observe(&state, 9, 9, 0)
-        || vertical_edge_monitor_observe(&state, 8, 9, 0)
-        || vertical_edge_monitor_observe(&state, 9, 9, 0)
-        || !vertical_edge_monitor_observe(&state, 9, 9, 0)) {
+    if (vertical_edge_monitor_observe(&state, 9, 9)
+        || vertical_edge_monitor_observe(&state, 8, 9)
+        || vertical_edge_monitor_observe(&state, 9, 9)
+        || !vertical_edge_monitor_observe(&state, 9, 9)) {
         fprintf(stderr, "edge monitor self-test: reset failed\n");
         return 1;
     }
 
     vertical_edge_monitor_state_create(&state);
-    if (vertical_edge_monitor_observe(&state, 3, 0, 9)
-        || vertical_edge_monitor_observe(&state, 0, 0, 9)
-        || !vertical_edge_monitor_observe(&state, 0, 0, 9)) {
+    if (vertical_edge_monitor_observe(&state, 3, 0)
+        || vertical_edge_monitor_observe(&state, 0, 0)
+        || !vertical_edge_monitor_observe(&state, 0, 0)) {
         fprintf(stderr, "edge monitor self-test: reverse boundary failed\n");
+        return 1;
+    }
+
+    if (vertical_edge_probe_delay_microseconds(0, 0) != 8333
+        || vertical_edge_probe_delay_microseconds(12, 0) != 8333
+        || vertical_edge_probe_delay_microseconds(112, 0) != 833300
+        || vertical_edge_probe_delay_microseconds(0, 112) != 833300) {
+        fprintf(stderr, "edge monitor self-test: probe delay failed\n");
         return 1;
     }
 
@@ -4136,6 +4223,54 @@ static int open_vertical_edge_monitor_lock(
     state_path(path, sizeof(path), name);
     return open(path, O_CREAT | O_RDWR, 0600);
 }
+
+static bool acquire_vertical_edge_monitor_lock(
+    int lock_fd,
+    bool allow_previous_column_handoff
+) {
+    double deadline = monotonic_seconds() + 0.25;
+    for (;;) {
+        if (flock(lock_fd, LOCK_EX | LOCK_NB) == 0) return true;
+        if (errno != EWOULDBLOCK && errno != EAGAIN && errno != EINTR) {
+            return false;
+        }
+        if (!allow_previous_column_handoff
+            || monotonic_seconds() >= deadline) {
+            return false;
+        }
+        usleep(2000);
+    }
+}
+
+#ifdef FINER_EDGE_TRACE
+static void open_edge_trace(
+    edge_monitor_view_t view,
+    direction_t direction
+) {
+    char path[PATH_MAX];
+    char name[96];
+    snprintf(
+        name,
+        sizeof(name),
+        "finder_%s_%s_edge_monitor_trace.tsv",
+        view == edge_monitor_list_view ? "list" : "column",
+        direction == direction_down ? "down" : "up"
+    );
+    state_path(path, sizeof(path), name);
+    edge_trace_fd = open(path, O_CREAT | O_WRONLY | O_APPEND, 0600);
+    if (edge_trace_fd < 0) return;
+    dprintf(
+        edge_trace_fd,
+        "start\tt=%.6f\tpid=%ld\tview=%d\tdirection=%d\tarrow=%d\n",
+        monotonic_seconds(),
+        (long)getpid(),
+        view,
+        direction,
+        arrow_key_is_down(direction)
+    );
+}
+
+#endif
 
 static int run_vertical_edge_monitor_lock_self_test(void) {
     const edge_monitor_view_t views[] = {
@@ -4165,8 +4300,487 @@ static int run_vertical_edge_monitor_lock_self_test(void) {
         }
     }
 
+    int previous_fd = open_vertical_edge_monitor_lock(
+        edge_monitor_column_view,
+        direction_down
+    );
+    if (previous_fd < 0
+        || !acquire_vertical_edge_monitor_lock(previous_fd, false)) {
+        if (previous_fd >= 0) close(previous_fd);
+        fprintf(stderr, "edge monitor lock self-test: setup failed\n");
+        return 1;
+    }
+
+    pid_t child = fork();
+    if (child < 0) {
+        flock(previous_fd, LOCK_UN);
+        close(previous_fd);
+        fprintf(stderr, "edge monitor lock self-test: fork failed\n");
+        return 1;
+    }
+    if (child == 0) {
+        int next_fd = open_vertical_edge_monitor_lock(
+            edge_monitor_column_view,
+            direction_down
+        );
+        bool acquired = next_fd >= 0
+            && acquire_vertical_edge_monitor_lock(next_fd, true);
+        if (acquired) flock(next_fd, LOCK_UN);
+        if (next_fd >= 0) close(next_fd);
+        _exit(acquired ? 0 : 1);
+    }
+
+    usleep(20000);
+    flock(previous_fd, LOCK_UN);
+    close(previous_fd);
+    int child_status = 0;
+    if (waitpid(child, &child_status, 0) != child
+        || !WIFEXITED(child_status)
+        || WEXITSTATUS(child_status) != 0) {
+        fprintf(stderr, "edge monitor lock self-test: handoff failed\n");
+        return 1;
+    }
+
     printf("Vertical edge monitor lock tests passed.\n");
     return 0;
+}
+
+static bool wait_for_vertical_edge_delay(
+    const navigation_context_t *context,
+    direction_t direction,
+    uint64_t remaining_microseconds,
+    double deadline
+) {
+    while (remaining_microseconds > 0) {
+        if (!arrow_key_is_down(direction)
+            || !process_is_frontmost(context->finder_pid)) {
+            return false;
+        }
+
+        double deadline_seconds = deadline - monotonic_seconds();
+        if (deadline_seconds <= 0) return false;
+        uint64_t deadline_microseconds = (uint64_t)(
+            deadline_seconds * 1000000.0
+        );
+        uint64_t chunk = remaining_microseconds;
+        if (chunk > 50000) chunk = 50000;
+        if (chunk > deadline_microseconds) chunk = deadline_microseconds;
+        if (chunk == 0) return false;
+        usleep((useconds_t)chunk);
+        remaining_microseconds -= chunk;
+    }
+    return true;
+}
+
+static bool wait_for_vertical_edge_probe(
+    const navigation_context_t *context,
+    direction_t direction,
+    CFIndex current,
+    CFIndex boundary,
+    bool viewport_near_boundary,
+    bool boundary_mismatch,
+    double deadline
+) {
+    uint64_t delay_microseconds = boundary_mismatch
+        ? 50000
+        : viewport_near_boundary
+            ? 8333
+            : vertical_edge_probe_delay_microseconds(current, boundary);
+    return wait_for_vertical_edge_delay(
+        context,
+        direction,
+        delay_microseconds,
+        deadline
+    );
+}
+
+static bool vertical_viewport_near_boundary(
+    const navigation_context_t *context,
+    direction_t direction,
+    bool *available
+) {
+    CFStringRef visible_attribute = context->role == navigation_outline
+        ? kAXVisibleRowsAttribute
+        : kAXVisibleChildrenAttribute;
+    CFArrayRef visible = copy_array_attribute(
+        context->container,
+        visible_attribute
+    );
+    if (visible) {
+        CFIndex item_count = CFArrayGetCount(context->items);
+        CFIndex visible_count = CFArrayGetCount(visible);
+        CFRelease(visible);
+        if (item_count > 0 && visible_count >= item_count) {
+            // Finder leaves a non-scrollable bar at value 0.0 when every item
+            // fits in the viewport.  In that case either document boundary is
+            // also a visible viewport boundary, so the selected edge item is
+            // sufficient corroboration for wrapping.
+            *available = true;
+            return true;
+        }
+    }
+
+    double value = 0;
+    *available = vertical_scroll_value(context, &value);
+    if (!*available) return false;
+    return direction == direction_down ? value >= 0.98 : value <= 0.02;
+}
+
+typedef struct {
+    AXUIElementRef container;
+    pid_t finder_pid;
+} column_edge_context_t;
+
+typedef struct {
+    CFTypeRef previous;
+} column_selection_stall_state_t;
+
+static void column_selection_stall_state_create(
+    column_selection_stall_state_t *state
+) {
+    memset(state, 0, sizeof(*state));
+}
+
+static void column_selection_stall_state_release(
+    column_selection_stall_state_t *state
+) {
+    if (state->previous) CFRelease(state->previous);
+    memset(state, 0, sizeof(*state));
+}
+
+static bool column_selection_stall_state_observe(
+    column_selection_stall_state_t *state,
+    CFTypeRef current
+) {
+    if (!current) return false;
+    bool stalled = state->previous && CFEqual(state->previous, current);
+    if (!stalled) {
+        if (state->previous) CFRelease(state->previous);
+        state->previous = CFRetain(current);
+    }
+    return stalled;
+}
+
+static int run_column_selection_stall_state_self_test(void) {
+    column_selection_stall_state_t state;
+    column_selection_stall_state_create(&state);
+    bool failed = column_selection_stall_state_observe(&state, CFSTR("A"))
+        || column_selection_stall_state_observe(&state, CFSTR("B"))
+        || !column_selection_stall_state_observe(&state, CFSTR("B"))
+        || column_selection_stall_state_observe(&state, CFSTR("C"))
+        || !column_selection_stall_state_observe(&state, CFSTR("C"))
+        || column_selection_probe_interval_microseconds() != 50000;
+    column_selection_stall_state_release(&state);
+    if (failed) {
+        fprintf(stderr, "edge monitor self-test: Column stall state failed\n");
+        return 1;
+    }
+    printf("Column selection stall state tests passed.\n");
+    return 0;
+}
+
+static AXUIElementRef copy_direct_column_child(
+    AXUIElementRef element,
+    AXUIElementRef container
+) {
+    AXUIElementRef current = (AXUIElementRef)CFRetain(element);
+    for (int depth = 0; depth < 8; ++depth) {
+        AXUIElementRef parent = copy_ax_element_attribute(
+            current,
+            kAXParentAttribute
+        );
+        if (!parent) {
+            CFRelease(current);
+            return NULL;
+        }
+        if (CFEqual(parent, container)) {
+            CFRelease(parent);
+            return current;
+        }
+        CFRelease(current);
+        current = parent;
+    }
+    CFRelease(current);
+    return NULL;
+}
+
+static AXUIElementRef copy_selected_column_child(
+    AXUIElementRef container
+) {
+    CFArrayRef selected = copy_array_attribute(
+        container,
+        kAXSelectedChildrenAttribute
+    );
+    if (!selected || CFArrayGetCount(selected) == 0) {
+        if (selected) CFRelease(selected);
+        return NULL;
+    }
+    AXUIElementRef selected_element =
+        (AXUIElementRef)CFArrayGetValueAtIndex(selected, 0);
+    AXUIElementRef child = copy_direct_column_child(
+        selected_element,
+        container
+    );
+    CFRelease(selected);
+    return child;
+}
+
+static void column_edge_context_release(column_edge_context_t *context) {
+    if (context->container) CFRelease(context->container);
+    memset(context, 0, sizeof(*context));
+}
+
+static bool column_edge_context_create(
+    column_edge_context_t *context
+) {
+    memset(context, 0, sizeof(*context));
+    AXUIElementRef application = NULL;
+    if (!finder_is_frontmost(&context->finder_pid, &application)) {
+        return false;
+    }
+
+    CFTypeRef focused = copy_attribute(
+        application,
+        kAXFocusedUIElementAttribute
+    );
+    CFRelease(application);
+    if (!focused || CFGetTypeID(focused) != AXUIElementGetTypeID()) {
+        if (focused) CFRelease(focused);
+        return false;
+    }
+
+    navigation_role_t role;
+    context->container = copy_nearest_navigation_container(
+        (AXUIElementRef)focused,
+        &role
+    );
+    CFRelease(focused);
+    if (!context->container || role != navigation_list) {
+        column_edge_context_release(context);
+        return false;
+    }
+    return true;
+}
+
+static bool post_column_vertical_wrap(
+    const column_edge_context_t *context,
+    direction_t direction,
+    int movement_lock_fd
+) {
+    if (movement_lock_fd >= 0) {
+        flock(movement_lock_fd, LOCK_EX);
+    }
+    bool wrapped = post_column_vertical_wrap_chord(
+        context->finder_pid,
+        direction
+    );
+    if (movement_lock_fd >= 0) {
+        flock(movement_lock_fd, LOCK_UN);
+    }
+    return wrapped;
+}
+
+static int run_owned_column_tap_repeat(
+    const column_edge_context_t *context,
+    direction_t direction,
+    int token_fd,
+    const char *initial_token,
+    ssize_t initial_token_length,
+    column_selection_stall_state_t *stall_state,
+    double deadline,
+    int movement_lock_fd
+) {
+    useconds_t interval = column_owned_hold_interval_microseconds();
+    uint64_t interval_ticks = mach_ticks_for_microseconds(interval);
+    uint64_t probe_ticks = mach_ticks_for_microseconds(
+        column_selection_probe_interval_microseconds()
+    );
+    uint64_t next_step = mach_absolute_time();
+    uint64_t next_probe = next_step + probe_ticks;
+    CGKeyCode key_code = arrow_key_code(direction);
+    int result = 0;
+
+    while (monotonic_seconds() < deadline) {
+        uint64_t now = mach_absolute_time();
+        if (now < next_step) mach_wait_until(next_step);
+        if (monotonic_seconds() >= deadline
+            || !hold_token_matches(
+                token_fd,
+                initial_token,
+                initial_token_length
+            )
+            || !process_is_frontmost(context->finder_pid)) {
+            break;
+        }
+
+        if (movement_lock_fd >= 0) {
+            flock(movement_lock_fd, LOCK_EX);
+        }
+        bool posted = post_key_code(key_code);
+        if (movement_lock_fd >= 0) {
+            flock(movement_lock_fd, LOCK_UN);
+        }
+        if (!posted) {
+            result = 1;
+            break;
+        }
+
+        bool wrapped = false;
+        if (mach_absolute_time() >= next_probe) {
+            AXUIElementRef current = copy_selected_column_child(
+                context->container
+            );
+            bool stalled = current
+                && column_selection_stall_state_observe(
+                    stall_state,
+                    current
+                );
+            if (current) CFRelease(current);
+            EDGE_TRACE(
+                "observe\tt=%.6f\tkind=column-stall\tstalled=%d\n",
+                monotonic_seconds(),
+                stalled
+            );
+
+            if (stalled) {
+                bool token_current = hold_token_matches(
+                    token_fd,
+                    initial_token,
+                    initial_token_length
+                );
+                bool finder_frontmost = process_is_frontmost(
+                    context->finder_pid
+                );
+                bool marks_empty = mark_state_is_empty();
+                if (!token_current || !finder_frontmost || !marks_empty) {
+                    break;
+                }
+                wrapped = post_column_vertical_wrap(
+                    context,
+                    direction,
+                    movement_lock_fd
+                );
+                if (!wrapped) {
+                    result = 1;
+                    break;
+                }
+                EDGE_TRACE(
+                    "wrapped\tt=%.6f\tkind=column-stall\n",
+                    monotonic_seconds()
+                );
+            }
+            next_probe = mach_absolute_time() + probe_ticks;
+        }
+
+        if (wrapped) {
+            next_step = mach_absolute_time() + interval_ticks;
+            continue;
+        }
+        next_step += interval_ticks;
+        uint64_t finished = mach_absolute_time();
+        if (finished >= next_step) {
+            uint64_t missed =
+                (finished - next_step) / interval_ticks + 1;
+            next_step += missed * interval_ticks;
+        }
+    }
+    return result;
+}
+
+static int run_lightweight_column_edge_monitor(
+    direction_t direction,
+    int token_fd,
+    const char *initial_token,
+    ssize_t initial_token_length,
+    int movement_lock_fd
+) {
+    pid_t initial_finder_pid = 0;
+    if (!hold_token_matches(
+            token_fd,
+            initial_token,
+            initial_token_length
+        )
+        || !finder_is_frontmost(&initial_finder_pid, NULL)
+        || !mark_state_is_empty()) {
+        return 0;
+    }
+
+    // The direct Karabiner Arrow gives the first 100ms native response. Take
+    // ownership before asking Finder for AX state: a continuously held Arrow
+    // can keep synchronous selected-child reads blocked for more than a
+    // second. Complete taps leave a gap for Finder to service the lightweight
+    // AX request while preserving a 60Hz movement cadence.
+    if (movement_lock_fd >= 0) {
+        flock(movement_lock_fd, LOCK_EX);
+    }
+    bool released = post_key_event(
+        arrow_key_code(direction),
+        false,
+        false
+    );
+    if (movement_lock_fd >= 0) {
+        flock(movement_lock_fd, LOCK_UN);
+    }
+    if (!released) return 1;
+
+    column_edge_context_t context;
+    EDGE_TRACE(
+        "context-start\tt=%.6f\tkind=column-stall\n",
+        monotonic_seconds()
+    );
+    bool context_created = column_edge_context_create(&context);
+    EDGE_TRACE(
+        "context-finish\tt=%.6f\tkind=column-stall\n",
+        monotonic_seconds()
+    );
+    if (!context_created) {
+        EDGE_TRACE(
+            "exit\tt=%.6f\treason=column-context\n",
+            monotonic_seconds()
+        );
+        return 1;
+    }
+    if (context.finder_pid != initial_finder_pid
+        || !hold_token_matches(
+            token_fd,
+            initial_token,
+            initial_token_length
+        )
+        || !mark_state_is_empty()) {
+        column_edge_context_release(&context);
+        return 0;
+    }
+
+    double deadline = monotonic_seconds() + 300.0;
+    column_selection_stall_state_t stall_state;
+    column_selection_stall_state_create(&stall_state);
+    EDGE_TRACE(
+        "selection-seed-start\tt=%.6f\tkind=column-stall\n",
+        monotonic_seconds()
+    );
+    AXUIElementRef current = copy_selected_column_child(context.container);
+    EDGE_TRACE(
+        "selection-seed-finish\tt=%.6f\tkind=column-stall\n",
+        monotonic_seconds()
+    );
+    if (current) {
+        column_selection_stall_state_observe(&stall_state, current);
+        CFRelease(current);
+    }
+    int result = run_owned_column_tap_repeat(
+        &context,
+        direction,
+        token_fd,
+        initial_token,
+        initial_token_length,
+        &stall_state,
+        deadline,
+        movement_lock_fd
+    );
+
+    column_selection_stall_state_release(&stall_state);
+    column_edge_context_release(&context);
+    return result;
 }
 
 static int run_vertical_edge_monitor_worker(
@@ -4177,41 +4791,100 @@ static int run_vertical_edge_monitor_worker(
 
     int monitor_lock_fd = open_vertical_edge_monitor_lock(view, direction);
     if (monitor_lock_fd < 0) return 1;
-    if (flock(monitor_lock_fd, LOCK_EX | LOCK_NB) != 0) {
+    if (!acquire_vertical_edge_monitor_lock(
+            monitor_lock_fd,
+            view == edge_monitor_column_view
+        )) {
+        int lock_error = errno;
         close(monitor_lock_fd);
-        return errno == EWOULDBLOCK || errno == EAGAIN ? 0 : 1;
+        return lock_error == EWOULDBLOCK
+                || lock_error == EAGAIN
+                || lock_error == EINTR
+            ? 0
+            : 1;
     }
+
+#ifdef FINER_EDGE_TRACE
+    open_edge_trace(view, direction);
+#endif
 
     int result = 0;
     int movement_lock_fd = -1;
+    int token_fd = -1;
+    char initial_token[64];
+    ssize_t initial_token_length = 0;
     navigation_context_t context;
     bool context_created = false;
 
-    // The monitor is launched after Karabiner's delayed-action threshold. If
-    // the remapped arrow is no longer down, the physical j/k was released and
-    // there is no edge work to perform.
-    if (!arrow_key_is_down(direction)) goto cleanup;
+    // List retains its synthetic Arrow lifetime check. Column is launched only
+    // after Karabiner's pressed-variable delayed condition and uses the
+    // generation token written by monitor-start as its lifetime authority.
+    if (view == edge_monitor_list_view
+        && !arrow_key_is_down(direction)) {
+        EDGE_TRACE("exit\tt=%.6f\treason=arrow-up-at-start\n", monotonic_seconds());
+        goto cleanup;
+    }
     if (!AXIsProcessTrusted()) {
+        EDGE_TRACE("exit\tt=%.6f\treason=ax-untrusted\n", monotonic_seconds());
         result = 1;
         goto cleanup;
     }
 
+    if (view == edge_monitor_column_view) {
+        char path[PATH_MAX];
+        token_path(path, sizeof(path), direction);
+        token_fd = open(path, O_RDONLY);
+        if (token_fd < 0) {
+            EDGE_TRACE("exit\tt=%.6f\treason=token-open\n", monotonic_seconds());
+            goto cleanup;
+        }
+        initial_token_length = read_token(
+            token_fd,
+            initial_token,
+            sizeof(initial_token)
+        );
+        if (initial_token_length <= 0) {
+            EDGE_TRACE("exit\tt=%.6f\treason=token-empty\n", monotonic_seconds());
+            goto cleanup;
+        }
+    }
+
     movement_lock_fd = open_movement_lock();
-    if (movement_lock_fd >= 0) flock(movement_lock_fd, LOCK_EX);
+    if (view == edge_monitor_column_view) {
+        result = run_lightweight_column_edge_monitor(
+            direction,
+            token_fd,
+            initial_token,
+            initial_token_length,
+            movement_lock_fd
+        );
+        goto cleanup;
+    }
+
+    EDGE_TRACE("context-start\tt=%.6f\n", monotonic_seconds());
+    // This builds a read-only AX snapshot. Finder's direct Arrow traversal is
+    // outside the Finer movement lock anyway, so taking the exclusive lock
+    // here cannot make the snapshot atomic and can starve the observer behind
+    // another short-lived worker. Writes at the actual wrap remain locked.
     context_created = navigation_context_create(&context);
-    if (movement_lock_fd >= 0) flock(movement_lock_fd, LOCK_UN);
+    EDGE_TRACE("context-finish\tt=%.6f\n", monotonic_seconds());
     if (!context_created) {
+        EDGE_TRACE("exit\tt=%.6f\treason=context-create\n", monotonic_seconds());
         result = 1;
         goto cleanup;
     }
 
     CFIndex item_count = CFArrayGetCount(context.items);
-    navigation_role_t expected_role = view == edge_monitor_list_view
-        ? navigation_outline
-        : navigation_list;
-    if (context.role != expected_role
+    if (context.role != navigation_outline
         || item_count < 2
         || !mark_state_is_empty()) {
+        EDGE_TRACE(
+            "exit\tt=%.6f\treason=context-guard\trole=%d\texpected=%d\titems=%ld\n",
+            monotonic_seconds(),
+            context.role,
+            navigation_outline,
+            item_count
+        );
         goto cleanup;
     }
 
@@ -4220,13 +4893,27 @@ static int run_vertical_edge_monitor_worker(
     CFIndex boundary = direction == direction_down ? last : first;
     CFIndex wrapped_target = direction == direction_down ? first : last;
     if (first < 0 || last < 0 || first == last) goto cleanup;
+    EDGE_TRACE(
+        "context\tt=%.6f\titems=%ld\tfirst=%ld\tlast=%ld\tboundary=%ld\ttarget=%ld\n",
+        monotonic_seconds(),
+        item_count,
+        first,
+        last,
+        boundary,
+        wrapped_target
+    );
     vertical_edge_monitor_state_t monitor_state;
     vertical_edge_monitor_state_create(&monitor_state);
-    double deadline = monotonic_seconds() + 30.0;
+    // A 1,000-item Column can take more than 30 seconds with Finder's actual
+    // repeat cadence. Keep a safety cap, but make it long enough for a full
+    // 10,000-item traversal while still ending immediately on key-up or focus
+    // loss.
+    double deadline = monotonic_seconds() + 300.0;
 
     while (monotonic_seconds() < deadline) {
         if (!arrow_key_is_down(direction)
             || !process_is_frontmost(context.finder_pid)) {
+            EDGE_TRACE("exit\tt=%.6f\treason=release-or-focus\n", monotonic_seconds());
             break;
         }
 
@@ -4236,38 +4923,77 @@ static int run_vertical_edge_monitor_worker(
             continue;
         }
 
-        bool was_awaiting_departure = monitor_state.awaiting_departure;
+        CFIndex distance = current > boundary
+            ? current - boundary
+            : boundary - current;
+        bool viewport_available = false;
+        bool viewport_near_boundary = false;
+        if (current == boundary || distance > 12) {
+            viewport_near_boundary = vertical_viewport_near_boundary(
+                &context,
+                direction,
+                &viewport_available
+            );
+        }
+        bool boundary_mismatch = current == boundary
+            && viewport_available
+            && !viewport_near_boundary;
+        CFIndex observed = boundary_mismatch
+            ? direction == direction_down ? boundary - 1 : boundary + 1
+            : current;
+
         bool should_wrap = vertical_edge_monitor_observe(
             &monitor_state,
-            current,
-            boundary,
-            wrapped_target
+            observed,
+            boundary
         );
-        if (was_awaiting_departure) {
-            usleep(8333);
-            continue;
-        }
+        EDGE_TRACE(
+            "observe\tt=%.6f\tcurrent=%ld\tobserved=%ld\tboundary=%ld\tviewport_available=%d\tviewport_near=%d\tmismatch=%d\tstable=%u\twrap=%d\n",
+            monotonic_seconds(),
+            current,
+            observed,
+            boundary,
+            viewport_available,
+            viewport_near_boundary,
+            boundary_mismatch,
+            monitor_state.stable_observations,
+            should_wrap
+        );
         if (should_wrap) {
-            if (!arrow_key_is_down(direction)
-                || !process_is_frontmost(context.finder_pid)
-                || !mark_state_is_empty()) {
+            bool arrow_held = arrow_key_is_down(direction);
+            bool finder_frontmost = process_is_frontmost(context.finder_pid);
+            bool marks_empty = mark_state_is_empty();
+            EDGE_TRACE(
+                "guard\tt=%.6f\tarrow=%d\tfrontmost=%d\tmarks_empty=%d\n",
+                monotonic_seconds(),
+                arrow_held,
+                finder_frontmost,
+                marks_empty
+            );
+            if (!arrow_held
+                || !finder_frontmost
+                || !marks_empty) {
                 break;
             }
 
+            CFIndex wrapped_position = 0;
             if (movement_lock_fd >= 0) {
                 flock(movement_lock_fd, LOCK_EX);
             }
             CFIndex confirmed = current_index(&context);
-            CFIndex wrapped_position = 0;
             if (confirmed == boundary
                 && arrow_key_is_down(direction)
                 && process_is_frontmost(context.finder_pid)) {
-                wrapped_position = wrap_vertical_edge(&context, direction);
+                wrapped_position = wrap_vertical_edge(
+                    &context,
+                    direction
+                );
             }
             if (movement_lock_fd >= 0) {
                 flock(movement_lock_fd, LOCK_UN);
             }
             if (wrapped_position == 0) {
+                EDGE_TRACE("exit\tt=%.6f\treason=wrap-failed\n", monotonic_seconds());
                 result = 1;
                 break;
             }
@@ -4276,20 +5002,57 @@ static int run_vertical_edge_monitor_worker(
                 &monitor_state,
                 wrapped_target
             );
-            usleep(8333);
+            EDGE_TRACE(
+                "wrapped\tt=%.6f\tposition=%ld\tnext_delay_us=%llu\n",
+                monotonic_seconds(),
+                wrapped_position,
+                (unsigned long long)vertical_edge_probe_delay_microseconds(
+                    wrapped_target,
+                    boundary
+                )
+            );
+            // Do not read Finder selection immediately after the AX jump.
+            // Let the still-held native Arrow own the entire next traversal,
+            // and wait until even a conservative 120-steps/s stream could be
+            // near the opposite boundary before asking Finder again.
+            if (!wait_for_vertical_edge_delay(
+                    &context,
+                    direction,
+                    vertical_edge_probe_delay_microseconds(
+                        wrapped_target,
+                        boundary
+                    ),
+                    deadline
+                )) {
+                break;
+            }
             continue;
         }
 
-        CFIndex distance = direction == direction_down
-            ? boundary - current
-            : current - boundary;
-        if (distance < 0) distance = 0;
-        // Keep AX traffic low across the normal native-repeat path, then probe
-        // at roughly one 120 Hz frame only when the selection is near an edge.
-        usleep(distance <= 12 ? 8333 : 50000);
+        // No AX readback can be useful before even a 120-steps/s repeat could
+        // reach the near-edge window. Sleep in short chunks so key release and
+        // Finder focus are still noticed promptly, then recalculate from one
+        // fresh selection observation. This keeps ordinary native movement
+        // free of periodic Finder AX contention.
+        if (!wait_for_vertical_edge_probe(
+                &context,
+                direction,
+                current,
+                boundary,
+                viewport_near_boundary,
+                boundary_mismatch,
+                deadline
+            )) {
+            break;
+        }
     }
 
 cleanup:
+    EDGE_TRACE("cleanup\tt=%.6f\tresult=%d\n", monotonic_seconds(), result);
+#ifdef FINER_EDGE_TRACE
+    if (edge_trace_fd >= 0) close(edge_trace_fd);
+#endif
+    if (token_fd >= 0) close(token_fd);
     if (movement_lock_fd >= 0) close(movement_lock_fd);
     if (context_created) navigation_context_release(&context);
     flock(monitor_lock_fd, LOCK_UN);
@@ -4323,17 +5086,41 @@ static int run_vertical_edge_wrap_test(
         &context,
         direction == direction_down
     );
+    CFIndex current = current_index(&context);
+    bool marks_empty = mark_state_is_empty();
     if (context.role != expected_role
         || item_count < 2
-        || !mark_state_is_empty()
-        || current_index(&context) != boundary) {
+        || !marks_empty
+        || current != boundary) {
+        fprintf(
+            stderr,
+            "edge-wrap-test: role=%d expected=%d items=%ld current=%ld boundary=%ld marks_empty=%d\n",
+            context.role,
+            expected_role,
+            item_count,
+            current,
+            boundary,
+            marks_empty
+        );
         goto cleanup;
     }
 
-    CFIndex position = wrap_vertical_edge(&context, direction);
+    CFIndex position;
+    if (view == edge_monitor_column_view) {
+        CFIndex target = direction == direction_down ? 0 : item_count - 1;
+        position = post_column_vertical_wrap_chord(
+            context.finder_pid,
+            direction
+        )
+            ? target + 1
+            : 0;
+    } else {
+        position = wrap_vertical_edge(&context, direction);
+    }
     // Grouped List views may expose a non-selectable heading at an edge, so
     // the AX array position is not necessarily 1 or item_count. The Finder
-    // integration test verifies the selected file path after this action.
+    // integration test verifies the selected file path after either the List
+    // AX action or the Column native Option+Arrow action.
     if (position <= 0) goto cleanup;
     printf("%ld\n", position);
     result = 0;
@@ -4352,6 +5139,17 @@ static bool spawn_vertical_edge_monitor(
     direction_t direction
 ) {
     if (direction != direction_down && direction != direction_up) return false;
+
+    // Karabiner reliably launches this command after its hold threshold, but
+    // a separate shell command in the initial key-down action is not a safe
+    // hand-off point: the worker can otherwise observe an empty token and
+    // exit before it ever inspects Finder.  Create the generation token here,
+    // immediately before the Column monitor is spawned.  Key-up still
+    // truncates the same file, so the takeover repeat stops with physical j/k.
+    if (view == edge_monitor_column_view
+        && !write_hold_token(direction)) {
+        return false;
+    }
 
     const char *direction_value = direction == direction_down ? "down" : "up";
     const char *worker_command = view == edge_monitor_list_view
@@ -4463,7 +5261,10 @@ int main(int argc, char **argv) {
     }
 
     if (argc == 2 && strcmp(argv[1], "edge-monitor-self-test") == 0) {
-        return run_vertical_edge_monitor_state_self_test();
+        int result = run_vertical_edge_monitor_state_self_test();
+        return result == 0
+            ? run_column_selection_stall_state_self_test()
+            : result;
     }
 
     if (argc == 2 && strcmp(argv[1], "edge-monitor-lock-self-test") == 0) {
@@ -4582,6 +5383,9 @@ int main(int argc, char **argv) {
             ) ? 0 : 1;
         }
         if (strcmp(argv[1], "hold-start") == 0) return run_hold_start(direction);
+        if (strcmp(argv[1], "hold-token-start") == 0) {
+            return run_hold_token_start(direction);
+        }
         if (strcmp(argv[1], "hold-repeat") == 0) {
             if (!AXIsProcessTrusted()) {
                 fprintf(stderr, "finder_ax_step: Accessibility access is unavailable\n");
@@ -4594,7 +5398,7 @@ int main(int argc, char **argv) {
     fprintf(
         stderr,
         "Usage: finder_ax_step <clear-selection|toggle-mark|edge-monitor-self-test|edge-monitor-lock-self-test|first|last|down-wrap|up-wrap|left-wrap|right-wrap> | "
-        "<hold-start|hold-repeat> <down|up|left|right> | "
+        "<hold-start|hold-token-start|hold-repeat> <down|up|left|right> | "
         "<list-edge-monitor-start|column-edge-monitor-start> <down|up> | "
         "edge-wrap-test <list|column> <down|up>\n"
     );

@@ -12,6 +12,7 @@ clear_visual_state_command='exec /usr/bin/truncate -s 0 $HOME/.local/state/finde
 clear_selection_command='$HOME/.local/libexec/finder-vim/finder_ax_step clear-selection >/dev/null 2>&1; exec /usr/bin/truncate -s 0 $HOME/.local/state/finder-vim/finder_marks.txt $HOME/.local/state/finder-vim/finder_navigation_anchor.txt $HOME/.local/state/finder-vim/finder_visual_anchor.txt'
 visual_start_command='$HOME/.local/libexec/finder-vim/finder_ax_move visual-start >/dev/null 2>&1; exec /usr/bin/truncate -s 0 $HOME/.local/state/finder-vim/finder_marks.txt $HOME/.local/state/finder-vim/finder_navigation_anchor.txt'
 copy_marks_command='$HOME/.local/libexec/finder-vim/finder_action_marked.sh copy >/dev/null 2>&1; exec /usr/bin/truncate -s 0 $HOME/.local/state/finder-vim/finder_marks.txt $HOME/.local/state/finder-vim/finder_navigation_anchor.txt'
+new_folder_current_level_command='exec $HOME/.local/libexec/finder-vim/finder_ax_move new-folder-current-level >/dev/null 2>&1'
 
 jq -e \
     --arg text_expression "$text_expression" \
@@ -22,7 +23,8 @@ jq -e \
     --arg clear_visual_state_command "$clear_visual_state_command" \
     --arg clear_selection_command "$clear_selection_command" \
     --arg visual_start_command "$visual_start_command" \
-    --arg copy_marks_command "$copy_marks_command" '
+    --arg copy_marks_command "$copy_marks_command" \
+    --arg new_folder_current_level_command "$new_folder_current_level_command" '
 def finder_normal_conditions:
     ([.conditions[] | select(
         .type == "frontmost_application_if"
@@ -85,6 +87,90 @@ def clears_motion_count:
     ] | length == 1),
     ([
         .rules[]
+        | select(.description == "Finer Utility Commands")
+        | .manipulators[]
+        | select(
+            .description == "Normal Mode: Press n to create a new folder beside the selected item"
+            and .from == {"key_code":"n"}
+            and .to == [{"shell_command":$new_folder_current_level_command}]
+            and (.conditions | length == 3)
+            and finder_normal_conditions
+        )
+    ] | length == 1),
+    ([
+        .rules[]
+        | select(.description == "Finer Utility Commands")
+        | .manipulators[]
+        | select(
+            .description == "Normal Mode: Press Shift+n to create a new folder at Finder'\''s active target"
+            and .from == {
+                "key_code":"n",
+                "modifiers":{
+                    "mandatory":["shift"],
+                    "optional":["caps_lock"]
+                }
+            }
+            and .to == [{"key_code":"n","modifiers":["command","shift"]}]
+            and (.conditions | length == 3)
+            and finder_normal_conditions
+        )
+    ] | length == 1),
+    ([
+        .rules[]
+        | select(.description == "Finer Utility Commands")
+        | [.manipulators[] | select(
+            .description == "Normal Mode: Press n to create a new folder beside the selected item"
+            or .description == "Normal Mode: Press Shift+n to create a new folder at Finder'\''s active target"
+        )]
+    ] | all(length == 2)),
+    ([
+        .rules[]
+        | select(.description == "Finer Navigation")
+        | .manipulators[]
+        | select(
+            .description == "Boost Mode: Hold Shift+j for Finder-native Down Arrow"
+            and .from == {
+                "key_code":"j",
+                "modifiers":{"mandatory":["shift"]}
+            }
+            and .to == [{"key_code":"down_arrow","repeat":true}]
+            and .conditions == [
+                {
+                    "bundle_identifiers":["^com\\.apple\\.finder$"],
+                    "type":"frontmost_application_if"
+                },
+                {"expression":$text_expression,"type":"expression_unless"},
+                {"name":"finder_visual_mode","type":"variable_unless","value":1},
+                {"name":"finder_confirmed_marks_maybe_present","type":"variable_unless","value":1},
+                {"expression":"finder_motion_count == 0","type":"expression_if"}
+            ]
+        )
+    ] | length == 1),
+    ([
+        .rules[]
+        | select(.description == "Finer Navigation")
+        | .manipulators[]
+        | select(
+            .description == "Boost Mode: Hold Shift+k for Finder-native Up Arrow"
+            and .from == {
+                "key_code":"k",
+                "modifiers":{"mandatory":["shift"]}
+            }
+            and .to == [{"key_code":"up_arrow","repeat":true}]
+            and .conditions == [
+                {
+                    "bundle_identifiers":["^com\\.apple\\.finder$"],
+                    "type":"frontmost_application_if"
+                },
+                {"expression":$text_expression,"type":"expression_unless"},
+                {"name":"finder_visual_mode","type":"variable_unless","value":1},
+                {"name":"finder_confirmed_marks_maybe_present","type":"variable_unless","value":1},
+                {"expression":"finder_motion_count == 0","type":"expression_if"}
+            ]
+        )
+    ] | length == 1),
+    ([
+        .rules[]
         | select(.description == "Finer Navigation")
         | .manipulators[]
         | select(
@@ -140,13 +226,14 @@ def clears_motion_count:
         | select(
             .description == "Experimental Column native hold with delayed edge monitor: Map j to Down Arrow"
             and .from == {"key_code":"j"}
-            and .parameters == {"basic.to_delayed_action_delay_milliseconds":250}
+            and .parameters == {"basic.to_delayed_action_delay_milliseconds":100}
             and .to == [
                 {"set_variable":{"name":"finder_native_column_j_pressed","value":1}},
                 {"key_code":"down_arrow","repeat":true}
             ]
             and .to_after_key_up == [
-                {"set_variable":{"name":"finder_native_column_j_pressed","value":0}}
+                {"set_variable":{"name":"finder_native_column_j_pressed","value":0}},
+                {"shell_command":"exec /usr/bin/truncate -s 0 $HOME/.local/state/finder-vim/finder_down_hold.txt"}
             ]
             and .to_delayed_action == {
                 "to_if_invoked":[{
@@ -182,13 +269,14 @@ def clears_motion_count:
         | select(
             .description == "Experimental Column native hold with delayed edge monitor: Map k to Up Arrow"
             and .from == {"key_code":"k"}
-            and .parameters == {"basic.to_delayed_action_delay_milliseconds":250}
+            and .parameters == {"basic.to_delayed_action_delay_milliseconds":100}
             and .to == [
                 {"set_variable":{"name":"finder_native_column_k_pressed","value":1}},
                 {"key_code":"up_arrow","repeat":true}
             ]
             and .to_after_key_up == [
-                {"set_variable":{"name":"finder_native_column_k_pressed","value":0}}
+                {"set_variable":{"name":"finder_native_column_k_pressed","value":0}},
+                {"shell_command":"exec /usr/bin/truncate -s 0 $HOME/.local/state/finder-vim/finder_up_hold.txt"}
             ]
             and .to_delayed_action == {
                 "to_if_invoked":[{

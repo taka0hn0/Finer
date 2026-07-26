@@ -534,9 +534,46 @@
               "value": 1
             }
           ],
-          "description": "Normal Mode: Press n to create a new folder",
+          "description": "Normal Mode: Press n to create a new folder beside the selected item",
           "from": {
             "key_code": "n"
+          },
+          "to": [
+            {
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_move new-folder-current-level >/dev/null 2>&1"
+            }
+          ],
+          "type": "basic"
+        },
+        {
+          "conditions": [
+            {
+              "bundle_identifiers": [
+                "^com\\.apple\\.finder$"
+              ],
+              "type": "frontmost_application_if"
+            },
+            {
+              "expression": "accessibility.focused_ui_element.role_string like 'AXText*'",
+              "type": "expression_unless"
+            },
+            {
+              "name": "finder_visual_mode",
+              "type": "variable_unless",
+              "value": 1
+            }
+          ],
+          "description": "Normal Mode: Press Shift+n to create a new folder at Finder's active target",
+          "from": {
+            "key_code": "n",
+            "modifiers": {
+              "mandatory": [
+                "shift"
+              ],
+              "optional": [
+                "caps_lock"
+              ]
+            }
           },
           "to": [
             {
@@ -616,6 +653,94 @@
                 "expression": "system.now.milliseconds + 1500",
                 "name": "finder_motion_count_expiration"
               }
+            }
+          ],
+          "type": "basic"
+        },
+        {
+          "conditions": [
+            {
+              "bundle_identifiers": [
+                "^com\\.apple\\.finder$"
+              ],
+              "type": "frontmost_application_if"
+            },
+            {
+              "expression": "accessibility.focused_ui_element.role_string like 'AXText*'",
+              "type": "expression_unless"
+            },
+            {
+              "name": "finder_visual_mode",
+              "type": "variable_unless",
+              "value": 1
+            },
+            {
+              "name": "finder_confirmed_marks_maybe_present",
+              "type": "variable_unless",
+              "value": 1
+            },
+            {
+              "expression": "finder_motion_count == 0",
+              "type": "expression_if"
+            }
+          ],
+          "description": "Boost Mode: Hold Shift+j for Finder-native Down Arrow",
+          "from": {
+            "key_code": "j",
+            "modifiers": {
+              "mandatory": [
+                "shift"
+              ]
+            }
+          },
+          "to": [
+            {
+              "key_code": "down_arrow",
+              "repeat": true
+            }
+          ],
+          "type": "basic"
+        },
+        {
+          "conditions": [
+            {
+              "bundle_identifiers": [
+                "^com\\.apple\\.finder$"
+              ],
+              "type": "frontmost_application_if"
+            },
+            {
+              "expression": "accessibility.focused_ui_element.role_string like 'AXText*'",
+              "type": "expression_unless"
+            },
+            {
+              "name": "finder_visual_mode",
+              "type": "variable_unless",
+              "value": 1
+            },
+            {
+              "name": "finder_confirmed_marks_maybe_present",
+              "type": "variable_unless",
+              "value": 1
+            },
+            {
+              "expression": "finder_motion_count == 0",
+              "type": "expression_if"
+            }
+          ],
+          "description": "Boost Mode: Hold Shift+k for Finder-native Up Arrow",
+          "from": {
+            "key_code": "k",
+            "modifiers": {
+              "mandatory": [
+                "shift"
+              ]
+            }
+          },
+          "to": [
+            {
+              "key_code": "up_arrow",
+              "repeat": true
             }
           ],
           "type": "basic"
@@ -5105,7 +5230,7 @@
             "key_code": "j"
           },
           "parameters": {
-            "basic.to_delayed_action_delay_milliseconds": 250
+            "basic.to_delayed_action_delay_milliseconds": 100
           },
           "to": [
             {
@@ -5125,6 +5250,9 @@
                 "name": "finder_native_column_j_pressed",
                 "value": 0
               }
+            },
+            {
+              "shell_command": "exec /usr/bin/truncate -s 0 $HOME/.local/state/finder-vim/finder_down_hold.txt"
             }
           ],
           "to_delayed_action": {
@@ -5189,7 +5317,7 @@
             "key_code": "k"
           },
           "parameters": {
-            "basic.to_delayed_action_delay_milliseconds": 250
+            "basic.to_delayed_action_delay_milliseconds": 100
           },
           "to": [
             {
@@ -5209,6 +5337,9 @@
                 "name": "finder_native_column_k_pressed",
                 "value": 0
               }
+            },
+            {
+              "shell_command": "exec /usr/bin/truncate -s 0 $HOME/.local/state/finder-vim/finder_up_hold.txt"
             }
           ],
           "to_delayed_action": {

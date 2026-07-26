@@ -9,11 +9,45 @@ snapshot equality, rejects invalid module descriptions and symlinked output,
 and verifies deterministic regeneration in an isolated directory.
 
 `make check` also runs the headless vertical-edge-monitor state tests. They
-verify two-observation edge confirmation, reset after leaving an edge, rearm
-only after departing the wrapped target, and distinct List/Column direction
-locks. The suite exercises pure state and lock self-test entry points rather
-than a live worker, so it does not open Finder or require a refresh-rate-
-specific display.
+verify two-observation edge confirmation, reset after leaving an edge, reset
+after a completed wrap, and distinct List/Column direction locks. They also
+verify the List distance-based AX probe delay in both directions. The separate
+Column state test verifies that a changed selection continues traversal and an
+identical consecutive selection triggers the item-count-independent stall
+path.
+The suite exercises pure state and lock self-test entry points rather than a
+live worker, so it does not open Finder or require a refresh-rate-specific
+display.
+The lock self-test also forks a predecessor and successor for the same Column
+direction, releases the predecessor after 20ms, and requires the successor's
+bounded 2ms retry loop to acquire the lock. This covers repeated physical
+holds without relying on a live Finder window.
+
+Generated-rule regression tests also verify that the experimental Column edge
+path keeps the direct Arrow last in the initial action list, clears its
+direction-specific physical-hold token on key-up, and launches the edge
+observer only after the 100ms delay. The observer start creates the token
+immediately before spawning its worker, rather than adding a process launch in
+front of every direct Arrow key-down.
+
+The generated-rule tests also require exactly one `Shift+j` and one `Shift+k`
+Boost mapping. They must send unmodified Finder-native Down/Up Arrow repeat,
+apply only in Normal Mode with no confirmed marks or motion count, and start no
+helper process. The default unmodified `j/k` mappings continue to use the
+token-controlled transient worker and precise AX wrap path.
+
+New-folder mapping checks require one view-independent `n` helper that creates
+beside the selected item, and preserve Finder's active-target behavior as an
+exact `Shift+n` mapping.
+
+The Column worker uses a dedicated lightweight context containing only the
+nearest Column `AXList` and Finder PID. At the 100ms handoff it releases the
+continuously held logical Arrow before reading AX state, then sends complete
+Arrow down/up taps every 16.667ms. It compares one selected child every 50ms
+and does not read the item count, edge range, `AXIndex`, remaining distance,
+or scrollbar value. Finder's physical scrolling and the timing of the
+Arrow-to-Option+Arrow handoff are covered by the Column dogfood check because
+they cannot be represented by the UI-independent self-test.
 
 Run `make test-install` for isolated packaging integration tests. It uses a
 temporary `HOME` (including a space in the path), never writes to the dogfood
@@ -91,6 +125,7 @@ verified fallback rather than the unmarked fast path. The test uses isolated
 state files and closes every window it creates.
 
 Run `make test-finder-edge-monitor` to exercise the wrap-and-scroll action used
-by the delayed List and Column edge monitors. It opens dedicated windows on the
-1,000-item fixture and verifies both last-to-first and first-to-last transitions.
-The result is independent of display refresh rate and physical key repeat.
+by the delayed List edge monitor and the native Option+Arrow edge action used
+by the Column monitor. It opens dedicated windows on the 1,000-item fixture and
+verifies both last-to-first and first-to-last transitions. The result is
+independent of display refresh rate and physical key repeat.
