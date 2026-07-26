@@ -160,7 +160,82 @@ run_view_case() {
     print -- "Finder $view $case_name new folder passed."
 }
 
+run_list_nested_case() {
+    local fixture_dir="$test_root/list-nested"
+    local parent_dir="$fixture_dir/00000-parent"
+    local child_file="$parent_dir/00000-child.txt"
+    mkdir -p "$parent_dir"
+    touch "$child_file" "$fixture_dir/sibling.txt"
+
+    print -- "Testing Finder list nested-child new folder..."
+    open_test_window "$fixture_dir" "$parent_dir" list
+    /usr/bin/osascript \
+        -e 'tell application "System Events"' \
+        -e 'tell process "Finder"' \
+        -e 'key code 124' \
+        -e 'delay 0.2' \
+        -e 'key code 125' \
+        -e 'end tell' \
+        -e 'end tell'
+    sleep 0.2
+
+    local nested_selection
+    nested_selection="$(selected_path || true)"
+    [[ "${nested_selection%/}" == "$child_file" ]] \
+        || fail "list nested setup did not select the child: $nested_selection"
+
+    local window_count_before
+    window_count_before="$(finder_window_count)"
+    "$helper" new-folder-current-level >/dev/null
+
+    local created_dir=""
+    local actual_selection=""
+    local actual_role=""
+    for _ in {1..100}; do
+        created_dir="$(
+            find "$parent_dir" \
+                -mindepth 1 \
+                -maxdepth 1 \
+                -type d \
+                -print \
+                -quit
+        )"
+        actual_selection="$(selected_path || true)"
+        actual_role="$(focused_role || true)"
+        if [[ -n "$created_dir"
+            && "${actual_selection%/}" == "$created_dir"
+            && "$actual_role" == "AXTextField" ]]; then
+            break
+        fi
+        sleep 0.02
+    done
+
+    [[ -n "$created_dir" ]] \
+        || fail "list nested child did not create inside its parent"
+    [[ "${actual_selection%/}" == "$created_dir" ]] \
+        || fail "list nested child did not select the created folder: $actual_selection"
+    [[ "$actual_role" == "AXTextField" ]] \
+        || fail "list nested child did not begin inline rename: $actual_role"
+    [[ -z "$(
+        find "$fixture_dir" \
+            -mindepth 1 \
+            -maxdepth 1 \
+            -type d \
+            ! -name 00000-parent \
+            -print \
+            -quit
+    )" ]] || fail "list nested child created at the window root"
+    [[ "$(finder_window_count)" == "$window_count_before" ]] \
+        || fail "list nested child opened a new Finder window"
+
+    close_test_windows
+    sleep 0.5
+    print -- "Finder list nested-child new folder passed."
+}
+
 [[ -x "$helper" ]] || fail "missing executable helper: $helper"
+
+run_list_nested_case
 
 for view in ${(z)${FINDER_VIM_NEW_FOLDER_LARGE_VIEWS:-list column icon}}; do
     case "$view" in

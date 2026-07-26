@@ -139,6 +139,10 @@ same-window contract. It selects a directory in dedicated List, Column, and
 Icon windows, then verifies that the new folder is created beside that
 directory rather than inside it, that no Finder window is added, and that the
 new item is selected with an `AXTextField` focused for inline rename. The test
+expands a directory in List View, selects its nested child file, and requires
+the new folder to appear beside that child inside the expanded directory
+rather than at the Finder window root. The nested path remains in the same
+List window and must also enter inline rename. The test
 also creates 1,000-item fixtures for all three views, starts from the first
 item, and requires the inline rename focus to remain after the long scroll has
 settled for another 500ms. It uses isolated fixture directories and closes only

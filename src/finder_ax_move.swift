@@ -1166,7 +1166,24 @@ private func createNewFolderAtSelectionLevel(
     let selectedAttribute = selection.role == kAXOutlineRole
         ? kAXSelectedRowsAttribute
         : kAXSelectedChildrenAttribute
-    if let menuItem = finderNewFolderMenuItem(
+    let selectedDisclosureLevel = integerAttribute(
+        selection.item,
+        kAXDisclosureLevelAttribute
+    )
+    let baseDisclosureLevel = selection.role == kAXOutlineRole
+        ? elements(
+            selection.container,
+            kAXRowsAttribute
+        ).compactMap { row -> Int? in
+            guard urlAttribute(row) != nil else { return nil }
+            return integerAttribute(row, kAXDisclosureLevelAttribute)
+        }.min()
+        : nil
+    let isNestedListItem = selectedDisclosureLevel != nil
+        && baseDisclosureLevel != nil
+        && selectedDisclosureLevel! > baseDisclosureLevel!
+    if !isNestedListItem,
+       let menuItem = finderNewFolderMenuItem(
            finderElement: finderElement
        ) {
         do {
