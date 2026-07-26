@@ -151,6 +151,36 @@ wait_for_marks() {
     return 1
 }
 
+wait_for_anchor() {
+    local expected="$1"
+    local actual=""
+    for _ in {1..100}; do
+        actual="$(
+            awk -F '\t' 'NF == 3 { print $3 }' "$anchor_file" \
+                | sed '/^$/d' \
+                | xargs -n1 basename 2>/dev/null \
+                | tail -n 1
+        )"
+        [[ "$actual" == "$expected" ]] && return 0
+        sleep 0.02
+    done
+    print -u2 -- "expected anchor=$expected actual=$actual"
+    return 1
+}
+
+select_fixture_item() {
+    local name="$1"
+    activate_test_window
+    /usr/bin/osascript \
+        -e 'on run argv' \
+        -e 'set itemPath to item 1 of argv' \
+        -e 'tell application "Finder"' \
+        -e 'set selection to {POSIX file itemPath as alias}' \
+        -e 'end tell' \
+        -e 'end run' -- "$fixture_dir/$name" >/dev/null
+    wait_for_selection "$name"
+}
+
 reset_state() {
     run_helper clear-selection >/dev/null
     sleep 0.2
@@ -160,9 +190,96 @@ reset_state() {
     : > "$cut_file"
 }
 
+run_mark_order_case() {
+    local view="$1"
+    local start_name="$2"
+    local motion="$3"
+    shift 3
+    local expected_marks=""
+
+    reset_state
+    select_fixture_item "$start_name" \
+        || fail "$view could not select $start_name for mark-order test"
+
+    for name in "$@"; do
+        if [[ "$name" != "$start_name" ]]; then
+            run_helper hold-start "$motion"
+        fi
+        run_helper toggle-mark
+        expected_marks="$(
+            {
+                [[ -n "$expected_marks" ]] && print -r -- "$expected_marks" | tr ',' '\n'
+                print -r -- "$name"
+            } | sort | paste -sd, -
+        )"
+        wait_for_marks "$expected_marks" \
+            || fail "$view did not retain mark state for order $*"
+        wait_for_selection "$expected_marks" \
+            || fail "$view did not retain visible selection for order $*"
+        wait_for_anchor "$name" \
+            || fail "$view did not anchor the last mark for order $*"
+    done
+}
+
+run_alternating_mark_order_case() {
+    local view="$1"
+    local forward="$2"
+    local reverse="$3"
+
+    reset_state
+    select_fixture_item "01-B.txt" \
+        || fail "$view could not select B for alternating mark-order test"
+
+    run_helper toggle-mark
+    wait_for_marks "01-B.txt" \
+        || fail "$view did not mark B in alternating order"
+    wait_for_selection "01-B.txt" \
+        || fail "$view did not display B in alternating order"
+    wait_for_anchor "01-B.txt" \
+        || fail "$view did not anchor B in alternating order"
+
+    run_helper hold-start "$forward"
+    run_helper hold-start "$forward"
+    wait_for_selection "01-B.txt,03-D.txt" \
+        || fail "$view did not move from B to D with B retained"
+    run_helper toggle-mark
+    wait_for_marks "01-B.txt,03-D.txt" \
+        || fail "$view did not mark D after B"
+    wait_for_selection "01-B.txt,03-D.txt" \
+        || fail "$view did not display B and D"
+    wait_for_anchor "03-D.txt" \
+        || fail "$view did not anchor D after B"
+
+    run_helper hold-start "$reverse"
+    run_helper hold-start "$reverse"
+    run_helper hold-start "$reverse"
+    wait_for_selection "00-A.txt,01-B.txt,03-D.txt" \
+        || fail "$view did not move from D to A with B and D retained"
+    run_helper toggle-mark
+    wait_for_marks "00-A.txt,01-B.txt,03-D.txt" \
+        || fail "$view did not mark A after B and D"
+    wait_for_selection "00-A.txt,01-B.txt,03-D.txt" \
+        || fail "$view did not display A, B, and D"
+    wait_for_anchor "00-A.txt" \
+        || fail "$view did not anchor A after D"
+
+    run_helper hold-start "$forward"
+    run_helper hold-start "$forward"
+    wait_for_selection "00-A.txt,01-B.txt,02-C.txt,03-D.txt" \
+        || fail "$view did not move from A to C with all marks retained"
+    run_helper toggle-mark
+    wait_for_marks "00-A.txt,01-B.txt,02-C.txt,03-D.txt" \
+        || fail "$view did not mark C in alternating order"
+    wait_for_selection "00-A.txt,01-B.txt,02-C.txt,03-D.txt" \
+        || fail "$view did not display all alternating marks"
+    wait_for_anchor "02-C.txt" \
+        || fail "$view did not anchor C after A"
+}
+
 run_view_case() {
     local view="$1"
     local direction="$2"
+    local reverse_direction="$3"
     print -- "Testing Finder $view selection..."
     open_test_window "$view"
 
@@ -212,6 +329,17 @@ run_view_case() {
             || fail "marked hold lost a confirmed selection: $held_selection"
     fi
 
+    run_mark_order_case \
+        "$view" \
+        "03-D.txt" \
+        "$reverse_direction" \
+        "03-D.txt" "02-C.txt" "01-B.txt" "00-A.txt"
+
+    run_alternating_mark_order_case \
+        "$view" \
+        "$direction" \
+        "$reverse_direction"
+
     reset_state
     if [[ "$view" == column ]]; then
         wait_for_fixture_items_cleared \
@@ -228,8 +356,8 @@ run_view_case() {
 
 for view in ${(z)${FINDER_VIM_SELECTION_VIEWS:-list column icon}}; do
     case "$view" in
-        list|column) run_view_case "$view" down ;;
-        icon) run_view_case "$view" right ;;
+        list|column) run_view_case "$view" down up ;;
+        icon) run_view_case "$view" right left ;;
         *) fail "unsupported view: $view" ;;
     esac
 done

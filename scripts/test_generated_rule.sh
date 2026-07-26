@@ -92,7 +92,21 @@ def clears_motion_count:
         | select(
             .description == "Normal Mode: Press n to create a new folder beside the selected item"
             and .from == {"key_code":"n"}
-            and .to == [{"shell_command":$new_folder_current_level_command}]
+            and .to == [{
+                "set_variable":{
+                    "name":"finder_new_folder_key_pressed",
+                    "value":1
+                }
+            }]
+            and .to_after_key_up == [
+                {
+                    "set_variable":{
+                        "name":"finder_new_folder_key_pressed",
+                        "value":0
+                    }
+                },
+                {"shell_command":$new_folder_current_level_command}
+            ]
             and (.conditions | length == 3)
             and finder_normal_conditions
         )
@@ -146,6 +160,15 @@ def clears_motion_count:
             ]
         )
     ] | length == 1),
+    ([
+        .rules[]
+        | select(.description == "Finer Navigation")
+        | .manipulators[]
+        | select(
+            .from == {"key_code":"d"}
+            and finder_normal_conditions
+        )
+    ] | length == 2),
     ([
         .rules[]
         | select(.description == "Finer Navigation")
@@ -646,6 +669,21 @@ def clears_motion_count:
         | select(.description == "Finer Navigation")
         | .manipulators[]
         | select(
+            .description == "Visual Mode: Move selection to Trash with d and return to Normal Mode"
+            and .from == {"key_code":"d"}
+            and .to[0] == {
+                "key_code":"delete_or_backspace",
+                "modifiers":["command"],
+                "repeat":false
+            }
+            and finder_visual_conditions
+        )
+    ] | length == 1),
+    ([
+        .rules[]
+        | select(.description == "Finer Navigation")
+        | .manipulators[]
+        | select(
             (.description // "")
                 | test("^Normal/Visual Mode: Add [0-9] to Finder motion count$")
         )
@@ -838,9 +876,36 @@ def clears_motion_count:
         | select(.description == "Finer Navigation")
         | .manipulators[]
         | select(
-            .description == "Normal Mode: Trash confirmed marks, or selection when no marks exist, with d"
+            .description == "Normal Mode: Move Finder selection to Trash with native d"
+            and .from == {"key_code":"d"}
+            and .to == [{
+                "key_code":"delete_or_backspace",
+                "modifiers":["command"],
+                "repeat":false
+            }]
+            and ([.conditions[] | select(
+                .name == "finder_confirmed_marks_maybe_present"
+                and .type == "variable_unless"
+                and .value == 1
+            )] | length == 1)
+            and (.conditions | length == 4)
+            and finder_normal_conditions
+        )
+    ] | length == 1),
+    ([
+        .rules[]
+        | select(.description == "Finer Navigation")
+        | .manipulators[]
+        | select(
+            .description == "Normal Mode: Move confirmed marks to Trash with d"
             and .from == {"key_code":"d"}
             and .to == [{"shell_command":"exec $HOME/.local/libexec/finder-vim/finder_action_marked.sh delete >/dev/null 2>&1"}]
+            and ([.conditions[] | select(
+                .name == "finder_confirmed_marks_maybe_present"
+                and .type == "variable_if"
+                and .value == 1
+            )] | length == 1)
+            and (.conditions | length == 4)
             and finder_normal_conditions
         )
     ] | length == 1),

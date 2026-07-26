@@ -537,6 +537,20 @@
       },
       "to": [
         {
+          "set_variable": {
+            "name": "finder_new_folder_key_pressed",
+            "value": 1
+          }
+        }
+      ],
+      "to_after_key_up": [
+        {
+          "set_variable": {
+            "name": "finder_new_folder_key_pressed",
+            "value": 0
+          }
+        },
+        {
           "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_move new-folder-current-level >/dev/null 2>&1"
         }
       ],

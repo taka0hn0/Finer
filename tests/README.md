@@ -37,8 +37,16 @@ helper process. The default unmodified `j/k` mappings continue to use the
 token-controlled transient worker and precise AX wrap path.
 
 New-folder mapping checks require one view-independent `n` helper that creates
-beside the selected item, and preserve Finder's active-target behavior as an
-exact `Shift+n` mapping.
+beside the selected item. Normal `n` may only mark its key-down state; key-up
+must clear that state before starting the helper once, so Finder's inline
+rename field never overlaps the original physical key press. The checks also
+preserve Finder's active-target behavior as an exact `Shift+n` mapping.
+
+Normal Mode `d` mapping checks require a process-free, non-repeating
+`Command+Delete` path when confirmed marks are not known to exist. A separate
+guarded path keeps the marked-action helper when `s` may have established
+confirmed marks, so the transient cursor is not included. Visual Mode deletion
+is also required to be non-repeating.
 
 The Column worker uses a dedicated lightweight context containing only the
 nearest Column `AXList` and Finder PID. At the 100ms handoff it releases the
@@ -119,10 +127,22 @@ Run `make test-finder-selection` for the confirmed-mark selection model. It
 opens dedicated List, Column, and Icon windows and verifies that A remains
 visible after moving to B, that A and B remain visible after moving to C, that
 C is still transient and excluded from the copy target, and that one clear
-command removes the displayed selection. Its List case also holds `j` while A
-and B are confirmed and checks that both marks remain visible, exercising the
-verified fallback rather than the unmarked fast path. The test uses isolated
-state files and closes every window it creates.
+command removes the displayed selection. It marks four items from bottom to
+top and in the alternating order `B -> D -> A -> C`, checking the persisted
+marks, visible selection, and last-mark anchor after every `s`. Its List case
+also holds `j` while A and B are confirmed and checks that both marks remain
+visible, exercising the verified fallback rather than the unmarked fast path.
+The test uses isolated state files and closes every window it creates.
+
+Run `make test-finder-new-folder` for the Normal Mode `n` target and
+same-window contract. It selects a directory in dedicated List, Column, and
+Icon windows, then verifies that the new folder is created beside that
+directory rather than inside it, that no Finder window is added, and that the
+new item is selected with an `AXTextField` focused for inline rename. The test
+also creates 1,000-item fixtures for all three views, starts from the first
+item, and requires the inline rename focus to remain after the long scroll has
+settled for another 500ms. It uses isolated fixture directories and closes only
+the Finder windows rooted inside those fixtures.
 
 Run `make test-finder-edge-monitor` to exercise the wrap-and-scroll action used
 by the delayed List edge monitor and the native Option+Arrow edge action used

@@ -183,16 +183,24 @@ private func newFolderMenuItem(
     return nil
 }
 
-private func performNewFolderMenuAction(
+private func finderNewFolderMenuItem(
     finderElement: AXUIElement
-) throws {
+) -> AXUIElement? {
     guard let menuBarValue = try? attribute(
               finderElement,
               kAXMenuBarAttribute
           ),
-          CFGetTypeID(menuBarValue) == AXUIElementGetTypeID(),
-          let menuItem = newFolderMenuItem(
-              in: menuBarValue as! AXUIElement
+          CFGetTypeID(menuBarValue) == AXUIElementGetTypeID() else {
+        return nil
+    }
+    return newFolderMenuItem(in: menuBarValue as! AXUIElement)
+}
+
+private func performNewFolderMenuAction(
+    finderElement: AXUIElement
+) throws {
+    guard let menuItem = finderNewFolderMenuItem(
+              finderElement: finderElement
           ),
           AXUIElementPerformAction(
               menuItem,
@@ -259,6 +267,14 @@ private func pointAttribute(_ element: AXUIElement, _ name: String) -> CGPoint? 
     var point = CGPoint.zero
     guard AXValueGetValue(value as! AXValue, .cgPoint, &point) else { return nil }
     return point
+}
+
+private func sizeAttribute(_ element: AXUIElement, _ name: String) -> CGSize? {
+    guard let value = try? attribute(element, name),
+          CFGetTypeID(value) == AXValueGetTypeID() else { return nil }
+    var size = CGSize.zero
+    guard AXValueGetValue(value as! AXValue, .cgSize, &size) else { return nil }
+    return size
 }
 
 private func descendantNavigationContainers(
@@ -387,8 +403,18 @@ private func visualAnchorFileURL() -> URL {
         .appendingPathComponent(".local/state/finder-vim/finder_visual_anchor.txt")
 }
 
-private func navigationItemURLString(_ item: AXUIElement) -> String? {
-    urlAttribute(item)?.absoluteString
+private func navigationItemMatchesURL(
+    _ item: AXUIElement,
+    expectedURLString: String
+) -> Bool {
+    guard let itemURL = urlAttribute(item) else { return false }
+    if itemURL.absoluteString == expectedURLString {
+        return true
+    }
+    guard let expectedURL = URL(string: expectedURLString) else {
+        return false
+    }
+    return localFilePath(itemURL) == localFilePath(expectedURL)
 }
 
 private func navigationItemIndex(
@@ -445,11 +471,17 @@ private func takeNavigationAnchor(in items: [AXUIElement]) -> Int? {
           let record = parseNavigationAnchor(contents) else { return nil }
 
     if items.indices.contains(record.indexHint),
-       navigationItemURLString(items[record.indexHint]) == record.itemURL {
+       navigationItemMatchesURL(
+           items[record.indexHint],
+           expectedURLString: record.itemURL
+       ) {
         return record.indexHint
     }
     return items.firstIndex {
-        navigationItemURLString($0) == record.itemURL
+        navigationItemMatchesURL(
+            $0,
+            expectedURLString: record.itemURL
+        )
     }
 }
 
@@ -872,6 +904,7 @@ private func selectCreatedFolder(
     role: String
 ) throws {
     let createdPath = localFilePath(createdURL)
+    let createdName = createdURL.lastPathComponent
     let deadline = Date().addingTimeInterval(1.0)
 
     repeat {
@@ -899,12 +932,16 @@ private func selectCreatedFolder(
             for index in leadingIndex == trailingIndex
                 ? [leadingIndex]
                 : [leadingIndex, trailingIndex] {
-                guard let itemURL = urlAttribute(items[index]),
-                      localFilePath(itemURL) == createdPath else {
-                    continue
+                let item = items[index]
+                if itemDisplayName(item) == createdName {
+                    match = (item, index)
+                    break
                 }
-                match = (items[index], index)
-                break
+                if let itemURL = urlAttribute(item),
+                   localFilePath(itemURL) == createdPath {
+                    match = (item, index)
+                    break
+                }
             }
             if match != nil { break }
         }
@@ -1006,64 +1043,104 @@ private func scrollCreatedItemToVisible(
     _ = performScrollToVisible(item)
 }
 
-private func revealCreatedFolderUsingWorkspace(
-    _ createdURL: URL,
-    finderElement: AXUIElement,
-    fallbackContainer: AXUIElement,
-    fallbackRole: String
+private func finderFocusedElementRole(
+    _ finderElement: AXUIElement
+) -> String? {
+    guard let focusedValue = try? attribute(
+              finderElement,
+              kAXFocusedUIElementAttribute
+          ),
+          CFGetTypeID(focusedValue) == AXUIElementGetTypeID() else {
+        return nil
+    }
+    return stringAttribute(
+        focusedValue as! AXUIElement,
+        kAXRoleAttribute
+    )
+}
+
+private func finderFocusedElementIsTextInput(
+    _ finderElement: AXUIElement
 ) -> Bool {
-    NSWorkspace.shared.activateFileViewerSelecting([createdURL])
-    let createdName = createdURL.lastPathComponent
-    let deadline = Date().addingTimeInterval(0.5)
+    (finderFocusedElementRole(finderElement) ?? "").hasPrefix("AXText")
+}
+
+private func stabilizeNativeNewFolderEditing(
+    previousURL: URL,
+    container: AXUIElement,
+    role: String,
+    finderElement: AXUIElement
+) {
+    let previousPath = localFilePath(previousURL)
+    let selectionDeadline = Date().addingTimeInterval(0.75)
+    var createdItem: AXUIElement?
 
     repeat {
         if let selected = selectedItemWithURL(
-               in: fallbackContainer,
-               role: fallbackRole
+               in: container,
+               role: role
            ),
-           itemDisplayName(selected.item) == createdName {
-            _ = performScrollToVisible(selected.item)
-            return true
+           localFilePath(selected.url) != previousPath {
+            createdItem = selected.item
+            break
+        }
+        Thread.sleep(forTimeInterval: 0.005)
+    } while Date() < selectionDeadline
+
+    guard let createdItem else { return }
+    _ = performScrollToVisible(createdItem)
+
+    let stabilityDeadline = Date().addingTimeInterval(0.75)
+    var previousPosition: CGPoint?
+    var stableVisibleSamples = 0
+
+    repeat {
+        guard let itemPosition = pointAttribute(
+                  createdItem,
+                  kAXPositionAttribute
+              ),
+              let itemSize = sizeAttribute(
+                  createdItem,
+                  kAXSizeAttribute
+              ),
+              let containerPosition = pointAttribute(
+                  container,
+                  kAXPositionAttribute
+              ),
+              let containerSize = sizeAttribute(
+                  container,
+                  kAXSizeAttribute
+              ) else {
+            break
         }
 
-        if let windowValue = try? attribute(
-               finderElement,
-               kAXFocusedWindowAttribute
-           ),
-           CFGetTypeID(windowValue) == AXUIElementGetTypeID() {
-            let matches = descendantNavigationContainers(
-                from: windowValue as! AXUIElement
-            ).compactMap { element, role -> (
-                item: AXUIElement,
-                xPosition: CGFloat
-            )? in
-                guard let selected = selectedItemWithURL(
-                          in: element,
-                          role: role
-                      ),
-                      itemDisplayName(selected.item) == createdName else {
-                    return nil
-                }
-                return (
-                    selected.item,
-                    pointAttribute(
-                        element,
-                        kAXPositionAttribute
-                    )?.x ?? 0
-                )
-            }
-            if let match = matches.max(by: {
-                $0.xPosition < $1.xPosition
-            }) {
-                _ = performScrollToVisible(match.item)
-                return true
-            }
-        }
+        let itemFrame = CGRect(
+            origin: itemPosition,
+            size: itemSize
+        )
+        let containerFrame = CGRect(
+            origin: containerPosition,
+            size: containerSize
+        )
+        let isVisible = itemFrame.intersects(containerFrame)
+        let isStable = previousPosition.map {
+            abs($0.x - itemPosition.x) < 0.5
+                && abs($0.y - itemPosition.y) < 0.5
+        } ?? false
 
+        stableVisibleSamples = isVisible && isStable
+            ? stableVisibleSamples + 1
+            : 0
+        previousPosition = itemPosition
+        if stableVisibleSamples >= 3 {
+            break
+        }
         Thread.sleep(forTimeInterval: 0.01)
-    } while Date() < deadline
+    } while Date() < stabilityDeadline
 
-    return false
+    if !finderFocusedElementIsTextInput(finderElement) {
+        try? performRenameMenuAction(finderElement: finderElement)
+    }
 }
 
 private func createNewFolderAtSelectionLevel(
@@ -1086,22 +1163,58 @@ private func createNewFolderAtSelectionLevel(
         return 0
     }
 
+    let selectedAttribute = selection.role == kAXOutlineRole
+        ? kAXSelectedRowsAttribute
+        : kAXSelectedChildrenAttribute
+    if let menuItem = finderNewFolderMenuItem(
+           finderElement: finderElement
+       ) {
+        do {
+            try setAttribute(
+                selection.container,
+                selectedAttribute,
+                [] as CFArray
+            )
+            try setAttribute(
+                selection.container,
+                kAXFocusedAttribute,
+                kCFBooleanTrue
+            )
+            guard AXUIElementPerformAction(
+                      menuItem,
+                      kAXPressAction as CFString
+                  ) == .success else {
+                throw MoveError.menuAction
+            }
+            stabilizeNativeNewFolderEditing(
+                previousURL: selection.url,
+                container: selection.container,
+                role: selection.role,
+                finderElement: finderElement
+            )
+            return 0
+        } catch {
+            try? setSelection(
+                [selection.item],
+                in: selection.container,
+                role: selection.role,
+                allItems: [selection.item]
+            )
+        }
+    }
+
     let selectedURL = URL(fileURLWithPath: localFilePath(selection.url))
     let createdURL = try createUntitledFolder(
         in: selectedURL.deletingLastPathComponent()
     )
-    if !revealCreatedFolderUsingWorkspace(
+    NSWorkspace.shared.noteFileSystemChanged(
+        createdURL.deletingLastPathComponent().path
+    )
+    try selectCreatedFolder(
         createdURL,
-        finderElement: finderElement,
-        fallbackContainer: selection.container,
-        fallbackRole: selection.role
-    ) {
-        try selectCreatedFolder(
-            createdURL,
-            in: selection.container,
-            role: selection.role
-        )
-    }
+        in: selection.container,
+        role: selection.role
+    )
 
     guard finder.isActive else {
         throw MoveError.finderIsNotFrontmost

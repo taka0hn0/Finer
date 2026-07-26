@@ -5249,7 +5249,8 @@
           "key_code": "delete_or_backspace",
           "modifiers": [
             "command"
-          ]
+          ],
+          "repeat": false
         },
         {
           "set_variable": {
@@ -5461,9 +5462,52 @@
           "name": "finder_visual_mode",
           "type": "variable_unless",
           "value": 1
+        },
+        {
+          "name": "finder_confirmed_marks_maybe_present",
+          "type": "variable_unless",
+          "value": 1
         }
       ],
-      "description": "Normal Mode: Trash confirmed marks, or selection when no marks exist, with d",
+      "description": "Normal Mode: Move Finder selection to Trash with native d",
+      "from": {
+        "key_code": "d"
+      },
+      "to": [
+        {
+          "key_code": "delete_or_backspace",
+          "modifiers": [
+            "command"
+          ],
+          "repeat": false
+        }
+      ],
+      "type": "basic"
+    },
+    {
+      "conditions": [
+        {
+          "bundle_identifiers": [
+            "^com\\.apple\\.finder$"
+          ],
+          "type": "frontmost_application_if"
+        },
+        {
+          "expression": "accessibility.focused_ui_element.role_string like 'AXText*'",
+          "type": "expression_unless"
+        },
+        {
+          "name": "finder_visual_mode",
+          "type": "variable_unless",
+          "value": 1
+        },
+        {
+          "name": "finder_confirmed_marks_maybe_present",
+          "type": "variable_if",
+          "value": 1
+        }
+      ],
+      "description": "Normal Mode: Move confirmed marks to Trash with d",
       "from": {
         "key_code": "d"
       },
