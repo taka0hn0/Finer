@@ -34,6 +34,7 @@ fi
 
 window_id=""
 grouping_changed=false
+date_group_dir=""
 
 activate_test_window() {
     typeset -a activate_script=(
@@ -72,6 +73,14 @@ restore_grouping() {
     grouping_changed=false
 }
 
+cleanup() {
+    close_test_window
+    if [[ -n "$date_group_dir" ]]; then
+        rm -rf "$date_group_dir"
+        date_group_dir=""
+    fi
+}
+
 close_test_window() {
     if [[ -z "$window_id" ]]; then
         return
@@ -108,6 +117,8 @@ open_test_window() {
         -e 'if viewName is "list" then'
         -e 'set current view of testWindow to list view'
         -e 'set sort column of list view options of testWindow to name column'
+        -e 'else if viewName is "column" then'
+        -e 'set current view of testWindow to column view'
         -e 'else'
         -e 'set current view of testWindow to icon view'
         -e 'set arrangement of icon view options of testWindow to arranged by name'
@@ -128,7 +139,6 @@ open_test_window() {
 }
 
 selected_path() {
-    activate_test_window
     /usr/bin/osascript \
         -e 'tell application "Finder"' \
         -e 'set selectedItems to get selection' \
@@ -143,9 +153,9 @@ send_step() {
     sleep 1
 }
 
-trap close_test_window EXIT
-trap 'close_test_window; exit 130' INT
-trap 'close_test_window; exit 143' TERM
+trap cleanup EXIT
+trap 'cleanup; exit 130' INT
+trap 'cleanup; exit 143' TERM
 
 mixed_dir="$fixture_root/items-10"
 if [[ ! -f "$mixed_dir/00-start.txt"
@@ -189,6 +199,63 @@ if [[ ! "$grouped_repeat_result" =~ '^[1-9][0-9]*$'
 fi
 close_test_window
 
+date_group_dir="$(mktemp -d "$fixture_root/date-groups.XXXXXX")"
+touch "$date_group_dir/00-old.txt" "$date_group_dir/01-middle.txt" \
+    "$date_group_dir/02-new.txt"
+touch -t 202401010000 "$date_group_dir/00-old.txt"
+touch -t 202501010000 "$date_group_dir/01-middle.txt"
+touch -t 202601010000 "$date_group_dir/02-new.txt"
+
+open_test_window column "$date_group_dir" 00-old.txt
+grouping_changed=true
+send_group_shortcut 5
+"$helper" first >/dev/null
+sleep 0.2
+column_grouped_first="$(selected_path 2>/dev/null || true)"
+for ((step = 0; step < 6; ++step)); do
+    "$helper" hold-start down
+    sleep 0.1
+    column_grouped_step_path="$(selected_path 2>/dev/null || true)"
+    if [[ "$column_grouped_step_path" != "$date_group_dir"/* ]]; then
+        print -u2 -- "Grouped Date Column View step selected a heading: step=$step path=$column_grouped_step_path"
+        exit 1
+    fi
+done
+"$helper" first >/dev/null
+"$helper" count-move down 1 >/dev/null
+sleep 0.2
+column_grouped_second="$(selected_path 2>/dev/null || true)"
+"$helper" last >/dev/null
+sleep 0.2
+column_grouped_last="$(selected_path 2>/dev/null || true)"
+if [[ "$column_grouped_first" != "$date_group_dir"/*
+    || "$column_grouped_second" != "$date_group_dir"/*
+    || "$column_grouped_last" != "$date_group_dir"/*
+    || "$column_grouped_first" == "$column_grouped_second" ]]; then
+    print -u2 -- "Grouped Date Column View regression failed: first=$column_grouped_first second=$column_grouped_second last=$column_grouped_last"
+    exit 1
+fi
+
+"$helper" first >/dev/null
+"$helper" hold-start down
+sleep 0.1
+(
+    sleep 0.4
+    truncate -s 0 "$HOME/.local/state/finder-vim/finder_down_hold.txt"
+) &
+column_grouped_stopper_pid=$!
+column_grouped_repeat_result="$("$helper" hold-repeat down)"
+wait "$column_grouped_stopper_pid"
+column_grouped_held_path="$(selected_path 2>/dev/null || true)"
+if [[ ! "$column_grouped_repeat_result" =~ '^[1-9][0-9]*$'
+    || "$column_grouped_held_path" != "$date_group_dir"/* ]]; then
+    print -u2 -- "Grouped Date held Column View regression failed: result=$column_grouped_repeat_result path=$column_grouped_held_path"
+    exit 1
+fi
+close_test_window
+rm -rf "$date_group_dir"
+date_group_dir=""
+
 list_dir="$fixture_root/items-10/01-A"
 open_test_window list "$list_dir" item-00000.txt
 "$helper" hold-start down
@@ -211,6 +278,7 @@ close_test_window
 open_test_window icon "$list_dir" item-00000.txt
 for ((step = 0; step < 10; ++step)); do
     "$helper" hold-start right
+    sleep 0.1
 done
 sleep 2
 icon_forward="$(selected_path)"

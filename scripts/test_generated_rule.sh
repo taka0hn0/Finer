@@ -67,6 +67,18 @@ def exact_visual_count_commands($direction):
         }]
     }]);
 
+def exact_normal_count_commands($direction):
+    ([.to[] | select(.shell_command? != null) | {
+        shell_command,
+        conditions
+    }]) == ([range(1; 100) as $count | {
+        shell_command: ("exec $HOME/.local/libexec/finder-vim/finder_ax_step count-move \($direction) \($count) >/dev/null 2>&1"),
+        conditions: [{
+            expression: ("finder_motion_count == \($count)"),
+            type: "expression_if"
+        }]
+    }]);
+
 def clears_motion_count:
     .to[-2:] == [
         {"set_variable":{"name":"finder_motion_count","value":0}},
@@ -660,8 +672,13 @@ def clears_motion_count:
                 and .value == 1
             )] | length == 1)
             and ([.to[] | select(.shell_command? != null)] | length == 99)
-            and ([.to[] | select(.shell_command? != null) | .shell_command]
-                | all(contains("finder_ax_move visual-") | not))
+            and exact_normal_count_commands(
+                if .description
+                    == "Normal Mode: Move down by Finder motion count"
+                then "down"
+                else "up"
+                end
+            )
         )
     ] | length == 2),
     ([

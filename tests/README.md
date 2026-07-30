@@ -118,10 +118,11 @@ Finder rectangle and still excludes physical input and Karabiner evaluation.
 Run `make test-finder-navigation` for functional regressions that do not belong
 in the latency matrix. It covers grouped mixed-content List View wrap, a
 held grouped List movement whose final selection must remain a fixture item, a
-one-second ungrouped List movement, and Icon View forward/reverse row wrap. The
-test temporarily changes grouping only on its dedicated Finder window and
-restores the original Finder grouping criterion and enabled state before
-closing it.
+Date-grouped Column View whose headings must be skipped by first/last,
+counted movement, and held movement, a one-second ungrouped List movement, and
+Icon View forward/reverse row wrap. The test temporarily changes grouping only
+on its dedicated Finder window and restores the original Finder grouping
+criterion and enabled state before closing it.
 
 Run `make test-finder-selection` for the confirmed-mark selection model. It
 opens dedicated List, Column, and Icon windows and verifies that A remains
@@ -151,7 +152,17 @@ the Finder windows rooted inside those fixtures.
 Run `make test-finder-edge-monitor` to exercise the default precise
 wrap-and-scroll actions used by List and Column navigation. It opens dedicated
 windows on the 1,000-item fixture and verifies both last-to-first and
-first-to-last transitions with `down-wrap` and `up-wrap`. The default-off
+first-to-last transitions with `down-wrap` and `up-wrap`. It also checks that
+the navigation content's vertical scroll value reaches the corresponding
+leading or trailing range after each wrap. The List assertions additionally
+compare the selected item URL with the URLs in Finder's actual `AXVisibleRows`;
+AX element identity is not used because Finder can expose different proxies for
+the same row. The List case also checks C-backed `5j`/`5k`, then starts held
+repeats from both document edges without reaching a wrap and requires the
+viewport to follow the selected row in both directions. It then starts held
+repeats near both edges, crosses each boundary, and requires the selected path,
+scroll value, and actual visible rows to move to the same opposite range.
+The default-off
 native Option+Arrow edge-monitor experiment remains covered by its headless
 state and lock tests rather than being treated as release behavior. The result
 is independent of display refresh rate and physical key repeat.
