@@ -12,6 +12,7 @@ source_rule="$repo_root/rules/generated/finder-vim.json"
 typeset -a sources=(
     "$build_dir/finder_ax_step"
     "$build_dir/finder_ax_move"
+    "$build_dir/finer_jump"
     "$repo_root/scripts/finder_action_marked.sh"
     "$repo_root/scripts/finder_paste.sh"
     "$source_rule"
@@ -19,11 +20,12 @@ typeset -a sources=(
 typeset -a destinations=(
     "$libexec_dir/finder_ax_step"
     "$libexec_dir/finder_ax_move"
+    "$libexec_dir/finer_jump"
     "$libexec_dir/finder_action_marked.sh"
     "$libexec_dir/finder_paste.sh"
     "$rule_file"
 )
-typeset -a modes=(0755 0755 0755 0755 0644)
+typeset -a modes=(0755 0755 0755 0755 0755 0644)
 typeset -a state_names=(
     finder_marks.txt
     finder_navigation_anchor.txt
@@ -61,7 +63,8 @@ for ((index = 1; index <= ${#sources[@]}; ++index)); do
         fail "missing source artifact: $source_file"
     fi
 done
-for helper in "$build_dir/finder_ax_step" "$build_dir/finder_ax_move"; do
+for helper in "$build_dir/finder_ax_step" "$build_dir/finder_ax_move" \
+    "$build_dir/finer_jump"; do
     if [[ ! -x "$helper" ]]; then
         fail "build artifact is not executable: $helper"
     fi

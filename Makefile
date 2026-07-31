@@ -4,6 +4,7 @@ BUILD_DIR := .build
 MODULE_CACHE := $(BUILD_DIR)/swift-module-cache
 C_HELPER := $(BUILD_DIR)/finder_ax_step
 SWIFT_HELPER := $(BUILD_DIR)/finder_ax_move
+JUMP_HELPER := $(BUILD_DIR)/finer_jump
 VISUAL_CAPTURE_HELPER := $(BUILD_DIR)/finer_visual_capture
 ITERATIONS ?= 10
 COUNTS ?= 10 1000 10000
@@ -15,7 +16,7 @@ VERSION ?=
 
 all: build
 
-build: $(C_HELPER) $(SWIFT_HELPER)
+build: $(C_HELPER) $(SWIFT_HELPER) $(JUMP_HELPER)
 
 rules:
 	./scripts/generate_rules.sh
@@ -37,6 +38,11 @@ $(SWIFT_HELPER): src/finder_ax_move.swift | $(BUILD_DIR)
 		-framework AppKit -framework ApplicationServices \
 		$< -o $@
 
+$(JUMP_HELPER): src/finer_jump.swift | $(BUILD_DIR)
+	xcrun swiftc -O -module-cache-path $(MODULE_CACHE) \
+		-framework AppKit \
+		$< -o $@
+
 $(VISUAL_CAPTURE_HELPER): tools/finer_visual_capture.m | $(BUILD_DIR)
 	xcrun clang -fobjc-arc -O2 -Wall -Wextra -Werror \
 		-framework AppKit -framework ApplicationServices \
@@ -45,6 +51,7 @@ $(VISUAL_CAPTURE_HELPER): tools/finer_visual_capture.m | $(BUILD_DIR)
 check: build check-rules
 	jq empty rules/generated/finder-vim.json
 	./scripts/test_generated_rule.sh
+	./scripts/test_finer_jump.sh
 	./scripts/test_edge_monitor.sh
 	./scripts/test_mark_state.sh
 	./scripts/test_tap_burst_headless.sh

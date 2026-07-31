@@ -32,6 +32,8 @@ The project is currently pre-alpha and has not published a tagged release.
   extracted-artifact build/install verification.
 - Separate source modules for the Navigation and Utility Commands Karabiner
   rules, with deterministic generation and CI drift detection.
+- An on-demand `z` folder and file palette, combining zoxide folder history
+  with Spotlight file results and same-window Finder selection.
 
 ### Changed
 

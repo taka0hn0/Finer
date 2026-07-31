@@ -17,6 +17,9 @@ private enum MoveError: Error, CustomStringConvertible {
     case missingSelectionURL
     case menuAction
     case renameAction
+    case jumpMenuAction
+    case jumpSheet
+    case jumpConfirmation
     case folderCreation(String)
     case createdFolderUnavailable
     case stateFile(String)
@@ -25,7 +28,7 @@ private enum MoveError: Error, CustomStringConvertible {
     var description: String {
         switch self {
         case .invalidArguments:
-            return "Usage: finder_ax_move <down|up|visual-down|visual-up> <1...99> | <down-wrap|up-wrap|first|last|visual-start|visual-first|visual-last|toggle-mark|copy-absolute|copy-directory|copy-filename|copy-stem|new-folder-current-level> | <hold-start|hold-repeat> <down|up>"
+            return "Usage: finder_ax_move <down|up|visual-down|visual-up> <1...99> | jump-to <directory> | reveal-file <file> | <down-wrap|up-wrap|first|last|visual-start|visual-first|visual-last|toggle-mark|copy-absolute|copy-directory|copy-filename|copy-stem|new-folder-current-level> | <hold-start|hold-repeat> <down|up>"
         case .finderIsNotFrontmost:
             return "Finder is not frontmost"
         case .accessibilityUnavailable:
@@ -42,6 +45,12 @@ private enum MoveError: Error, CustomStringConvertible {
             return "Could not invoke Finder's New Folder menu action"
         case .renameAction:
             return "Could not invoke Finder's Rename menu action"
+        case .jumpMenuAction:
+            return "Could not invoke Finder's Go to Folder menu action"
+        case .jumpSheet:
+            return "Finder did not publish the Go to Folder sheet"
+        case .jumpConfirmation:
+            return "Finder did not navigate to the requested item"
         case let .folderCreation(message):
             return "Could not create a new folder: \(message)"
         case .createdFolderUnavailable:
@@ -78,6 +87,8 @@ private enum Command {
     case toggleMark
     case copy(CopyMode)
     case newFolderAtSelectionLevel
+    case jumpTo(String)
+    case revealFile(String)
 }
 
 private func attribute(_ element: AXUIElement, _ name: String) throws -> CFTypeRef {
@@ -259,6 +270,293 @@ private func performRenameMenuAction(
           ) == .success else {
         throw MoveError.renameAction
     }
+}
+
+private func isGoToFolderMenuItem(_ element: AXUIElement) -> Bool {
+    guard stringAttribute(element, kAXRoleAttribute) == kAXMenuItemRole else {
+        return false
+    }
+
+    let commandCharacter = stringAttribute(
+        element,
+        kAXMenuItemCmdCharAttribute
+    )?.uppercased()
+    let commandVirtualKey = integerAttribute(
+        element,
+        kAXMenuItemCmdVirtualKeyAttribute
+    )
+    guard commandCharacter == "G" || commandVirtualKey == 5 else {
+        return false
+    }
+
+    guard let modifiers = integerAttribute(
+        element,
+        kAXMenuItemCmdModifiersAttribute
+    ) else {
+        return false
+    }
+    return modifiers & axMenuItemModifierShift != 0
+        && modifiers & (
+            axMenuItemModifierOption
+                | axMenuItemModifierControl
+                | axMenuItemModifierNoCommand
+        ) == 0
+}
+
+private func goToFolderMenuItem(
+    in element: AXUIElement,
+    depth: Int = 0
+) -> AXUIElement? {
+    if isGoToFolderMenuItem(element) {
+        return element
+    }
+    guard depth < 5 else { return nil }
+    for child in elements(element, kAXChildrenAttribute) {
+        if let result = goToFolderMenuItem(in: child, depth: depth + 1) {
+            return result
+        }
+    }
+    return nil
+}
+
+private func descendantTextField(
+    in element: AXUIElement,
+    depth: Int = 0
+) -> AXUIElement? {
+    if stringAttribute(element, kAXRoleAttribute) == kAXTextFieldRole {
+        return element
+    }
+    guard depth < 6 else { return nil }
+    for child in elements(element, kAXChildrenAttribute) {
+        if let result = descendantTextField(in: child, depth: depth + 1) {
+            return result
+        }
+    }
+    return nil
+}
+
+private func ancestor(
+    from element: AXUIElement,
+    role expectedRole: String
+) -> AXUIElement? {
+    var current = element
+    for _ in 0..<8 {
+        if stringAttribute(current, kAXRoleAttribute) == expectedRole {
+            return current
+        }
+        guard let parentValue = try? attribute(
+                  current,
+                  kAXParentAttribute
+              ),
+              CFGetTypeID(parentValue) == AXUIElementGetTypeID() else {
+            return nil
+        }
+        current = parentValue as! AXUIElement
+    }
+    return nil
+}
+
+private func focusedSheet(
+    finderElement: AXUIElement,
+    frontWindow: AXUIElement
+) -> AXUIElement? {
+    if let focusedWindowValue = try? attribute(
+        finderElement,
+        kAXFocusedWindowAttribute
+    ), CFGetTypeID(focusedWindowValue) == AXUIElementGetTypeID() {
+        let focusedWindow = focusedWindowValue as! AXUIElement
+        if stringAttribute(focusedWindow, kAXRoleAttribute) == "AXSheet" {
+            return focusedWindow
+        }
+    }
+
+    if let focusedValue = try? attribute(
+        finderElement,
+        kAXFocusedUIElementAttribute
+    ), CFGetTypeID(focusedValue) == AXUIElementGetTypeID(),
+       let sheet = ancestor(
+           from: focusedValue as! AXUIElement,
+           role: "AXSheet"
+       ) {
+        return sheet
+    }
+    return elements(frontWindow, "AXSheets").first
+}
+
+private func waitUntil(
+    timeout: TimeInterval,
+    interval: TimeInterval = 0.01,
+    condition: () -> Bool
+) -> Bool {
+    let deadline = Date().addingTimeInterval(timeout)
+    repeat {
+        if condition() {
+            return true
+        }
+        Thread.sleep(forTimeInterval: interval)
+    } while Date() < deadline
+    return condition()
+}
+
+private func postReturn(to processIdentifier: pid_t) -> Bool {
+    guard let source = CGEventSource(stateID: .hidSystemState),
+          let keyDown = CGEvent(
+              keyboardEventSource: source,
+              virtualKey: 36,
+              keyDown: true
+          ),
+          let keyUp = CGEvent(
+              keyboardEventSource: source,
+              virtualKey: 36,
+              keyDown: false
+          ) else {
+        return false
+    }
+    keyDown.postToPid(processIdentifier)
+    keyUp.postToPid(processIdentifier)
+    return true
+}
+
+private func jumpToFolderDirectly(_ path: String) -> Bool {
+    let script = """
+    on run argv
+        set destinationPath to item 1 of argv
+        tell application "/System/Library/CoreServices/Finder.app"
+            if (count of Finder windows) is 0 then error "No Finder window"
+            set destinationFolder to POSIX file destinationPath as alias
+            set target of front Finder window to destinationFolder
+            activate
+        end tell
+    end run
+    """
+    let process = Process()
+    process.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
+    process.arguments = ["-e", script, path]
+    process.standardOutput = FileHandle.nullDevice
+    process.standardError = FileHandle.nullDevice
+    do {
+        try process.run()
+        process.waitUntilExit()
+        return process.terminationStatus == 0
+    } catch {
+        return false
+    }
+}
+
+private func revealFileDirectly(_ path: String) -> Bool {
+    let parentPath = URL(fileURLWithPath: path)
+        .deletingLastPathComponent().path
+    let script = """
+    on run argv
+        set destinationPath to item 1 of argv
+        set selectedPath to item 2 of argv
+        tell application "/System/Library/CoreServices/Finder.app"
+            if (count of Finder windows) is 0 then error "No Finder window"
+            set destinationFolder to POSIX file destinationPath as alias
+            set selectedFile to POSIX file selectedPath as alias
+            set target of front Finder window to destinationFolder
+            set selection to {selectedFile}
+            activate
+        end tell
+    end run
+    """
+    let process = Process()
+    process.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
+    process.arguments = ["-e", script, parentPath, path]
+    process.standardOutput = FileHandle.nullDevice
+    process.standardError = FileHandle.nullDevice
+    do {
+        try process.run()
+        process.waitUntilExit()
+        return process.terminationStatus == 0
+    } catch {
+        return false
+    }
+}
+
+private func jumpToFolder(
+    _ path: String,
+    finder: NSRunningApplication,
+    finderElement: AXUIElement,
+    expectsDirectory: Bool = true
+) throws -> Int {
+    var isDirectory: ObjCBool = false
+    guard FileManager.default.fileExists(
+        atPath: path,
+        isDirectory: &isDirectory
+    ), isDirectory.boolValue == expectsDirectory else {
+        throw MoveError.invalidArguments
+    }
+
+    guard let windowValue = try? attribute(
+              finderElement,
+              kAXFocusedWindowAttribute
+          ),
+          CFGetTypeID(windowValue) == AXUIElementGetTypeID() else {
+        throw MoveError.jumpSheet
+    }
+    let frontWindow = windowValue as! AXUIElement
+
+    _ = finder.activate()
+    guard waitUntil(timeout: 0.75, interval: 0.005, condition: {
+        finder.isActive
+    }) else {
+        throw MoveError.finderIsNotFrontmost
+    }
+
+    guard let menuBarValue = try? attribute(
+              finderElement,
+              kAXMenuBarAttribute
+          ),
+          CFGetTypeID(menuBarValue) == AXUIElementGetTypeID(),
+          let menuItem = goToFolderMenuItem(
+              in: menuBarValue as! AXUIElement
+          ),
+          AXUIElementPerformAction(
+              menuItem,
+              kAXPressAction as CFString
+          ) == .success else {
+        throw MoveError.jumpMenuAction
+    }
+
+    var sheet: AXUIElement?
+    var pathField: AXUIElement?
+    guard waitUntil(timeout: 1.0, condition: {
+        guard let candidate = focusedSheet(
+            finderElement: finderElement,
+            frontWindow: frontWindow
+        ),
+        let field = descendantTextField(in: candidate) else {
+            return false
+        }
+        sheet = candidate
+        pathField = field
+        return true
+    }), let sheet, let pathField else {
+        throw MoveError.jumpSheet
+    }
+
+    try setAttribute(
+        pathField,
+        kAXValueAttribute,
+        path as CFString
+    )
+    guard finder.isActive, postReturn(to: finder.processIdentifier) else {
+        throw MoveError.jumpConfirmation
+    }
+
+    guard waitUntil(timeout: 1.5, condition: {
+        guard let currentSheet = focusedSheet(
+            finderElement: finderElement,
+            frontWindow: frontWindow
+        ) else {
+            return true
+        }
+        return !CFEqual(currentSheet, sheet)
+    }) else {
+        throw MoveError.jumpConfirmation
+    }
+    return 0
 }
 
 private func pointAttribute(_ element: AXUIElement, _ name: String) -> CGPoint? {
@@ -1504,6 +1802,10 @@ private func run() throws -> Int {
         command = .toggleMark
     } else if arguments.count == 1, arguments[0] == "new-folder-current-level" {
         command = .newFolderAtSelectionLevel
+    } else if arguments.count == 2, arguments[0] == "jump-to" {
+        command = .jumpTo(arguments[1])
+    } else if arguments.count == 2, arguments[0] == "reveal-file" {
+        command = .revealFile(arguments[1])
     } else if arguments.count == 1, let mode = CopyMode(rawValue: arguments[0]) {
         command = .copy(mode)
     } else if arguments.count == 1, arguments[0] == "down-wrap" {
@@ -1542,10 +1844,60 @@ private func run() throws -> Int {
         repeatToken = ""
     }
 
-    guard AXIsProcessTrusted() else { throw MoveError.accessibilityUnavailable }
     guard let finder = NSRunningApplication.runningApplications(
         withBundleIdentifier: "com.apple.finder"
-    ).first, finder.isActive else {
+    ).first else {
+        throw MoveError.finderIsNotFrontmost
+    }
+    if case let .jumpTo(path) = command {
+        var isDirectory: ObjCBool = false
+        guard FileManager.default.fileExists(
+            atPath: path,
+            isDirectory: &isDirectory
+        ), isDirectory.boolValue else {
+            throw MoveError.invalidArguments
+        }
+        if jumpToFolderDirectly(path) {
+            return 0
+        }
+        guard AXIsProcessTrusted() else {
+            throw MoveError.accessibilityUnavailable
+        }
+        let finderElement = AXUIElementCreateApplication(
+            finder.processIdentifier
+        )
+        return try jumpToFolder(
+            path,
+            finder: finder,
+            finderElement: finderElement
+        )
+    }
+    if case let .revealFile(path) = command {
+        var isDirectory: ObjCBool = false
+        guard FileManager.default.fileExists(
+            atPath: path,
+            isDirectory: &isDirectory
+        ), !isDirectory.boolValue else {
+            throw MoveError.invalidArguments
+        }
+        if revealFileDirectly(path) {
+            return 0
+        }
+        guard AXIsProcessTrusted() else {
+            throw MoveError.accessibilityUnavailable
+        }
+        let finderElement = AXUIElementCreateApplication(
+            finder.processIdentifier
+        )
+        return try jumpToFolder(
+            path,
+            finder: finder,
+            finderElement: finderElement,
+            expectsDirectory: false
+        )
+    }
+    guard AXIsProcessTrusted() else { throw MoveError.accessibilityUnavailable }
+    guard finder.isActive else {
         throw MoveError.finderIsNotFrontmost
     }
 
@@ -1635,6 +1987,8 @@ private func run() throws -> Int {
             container: container,
             role: role
         )
+    case .jumpTo, .revealFile:
+        throw MoveError.invalidArguments
     }
 }
 

@@ -23,6 +23,14 @@ direction, releases the predecessor after 20ms, and requires the successor's
 bounded 2ms retry loop to acquire the lock. This covers repeated physical
 holds without relying on a live Finder window.
 
+The headless `finer_jump` suite injects fake zoxide and Spotlight executables
+and verifies folder frecency, folder/file basename priority, path matches,
+multi-token filtering, directory exclusion from file results, combined
+ranking, and clean source-unavailable errors. It also injects a fake
+`finder_ax_move` and requires folder navigation and file reveal to delegate
+the exact path through `jump-to` and `reveal-file`. It does not open the
+palette or Finder.
+
 Generated-rule regression tests also verify that the experimental Column edge
 path keeps the direct Arrow last in the initial action list, clears its
 direction-specific physical-hold token on key-up, and launches the edge

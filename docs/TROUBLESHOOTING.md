@@ -7,6 +7,8 @@ environment details listed at the end of this document when reporting a bug.
 
 1. Install and configure Karabiner-Elements.
 2. Confirm the Xcode Command Line Tools, `jq`, and `ripgrep` are available.
+   Install `zoxide` as well if you want ranked folder history in the `z`
+   palette. File search uses the built-in Spotlight index.
 3. Run `make check`.
 4. Run `make install`.
 5. Open Karabiner-Elements Settings > Complex Modifications.
@@ -63,7 +65,34 @@ Also verify the installed helpers exist:
 ```sh
 ls -l ~/.local/libexec/finder-vim/finder_ax_step
 ls -l ~/.local/libexec/finder-vim/finder_ax_move
+ls -l ~/.local/libexec/finder-vim/finer_jump
 ```
+
+## `z` does not open, find files, or navigate
+
+Confirm zoxide is installed and has learned at least one directory:
+
+```sh
+zoxide query --list --score
+```
+
+zoxide is optional for file results. File search begins after two characters
+and searches the current user's home directory through the macOS Spotlight
+index. If a known file does not appear, confirm Spotlight can find it:
+
+```sh
+mdfind -onlyin "$HOME" -name 'part of the file name'
+```
+
+Folder and file jumping use the same Accessibility fallback helper as the
+other Finer operations. They do not require a separate Finder Automation
+permission. If search works but `Return` does not move Finder or select a file,
+reinstall the current helpers and verify Accessibility remains enabled for
+Finer.
+
+After an update, reinstall Finer and replace the enabled Utility Commands rule
+if pressing `z` does nothing. `Esc` should close the palette without moving
+Finder.
 
 ## List View folders do not expand with `l`
 

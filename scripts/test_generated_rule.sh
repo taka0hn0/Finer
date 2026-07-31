@@ -13,6 +13,7 @@ clear_selection_command='$HOME/.local/libexec/finder-vim/finder_ax_step clear-se
 visual_start_command='$HOME/.local/libexec/finder-vim/finder_ax_move visual-start >/dev/null 2>&1; exec /usr/bin/truncate -s 0 $HOME/.local/state/finder-vim/finder_marks.txt $HOME/.local/state/finder-vim/finder_navigation_anchor.txt'
 copy_marks_command='$HOME/.local/libexec/finder-vim/finder_action_marked.sh copy >/dev/null 2>&1; exec /usr/bin/truncate -s 0 $HOME/.local/state/finder-vim/finder_marks.txt $HOME/.local/state/finder-vim/finder_navigation_anchor.txt'
 new_folder_current_level_command='exec $HOME/.local/libexec/finder-vim/finder_ax_move new-folder-current-level >/dev/null 2>&1'
+jump_command='exec $HOME/.local/libexec/finder-vim/finer_jump >/dev/null 2>&1'
 
 jq -e \
     --arg text_expression "$text_expression" \
@@ -24,7 +25,8 @@ jq -e \
     --arg clear_selection_command "$clear_selection_command" \
     --arg visual_start_command "$visual_start_command" \
     --arg copy_marks_command "$copy_marks_command" \
-    --arg new_folder_current_level_command "$new_folder_current_level_command" '
+    --arg new_folder_current_level_command "$new_folder_current_level_command" \
+    --arg jump_command "$jump_command" '
 def finder_normal_conditions:
     ([.conditions[] | select(
         .type == "frontmost_application_if"
@@ -86,6 +88,18 @@ def clears_motion_count:
     ];
 
 [
+    ([
+        .rules[]
+        | select(.description == "Finer Utility Commands")
+        | .manipulators[]
+        | select(
+            .description == "Normal Mode: Press z to jump to a zoxide folder"
+            and .from == {"key_code":"z"}
+            and .to == [{"shell_command":$jump_command}]
+            and (.conditions | length == 3)
+            and finder_normal_conditions
+        )
+    ] | length == 1),
     ([
         .rules[]
         | select(.description == "Finer Utility Commands")
