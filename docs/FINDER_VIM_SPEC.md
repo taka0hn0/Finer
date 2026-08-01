@@ -1,7 +1,7 @@
 # Finer 要件定義・基本設計
 
 - Status: Draft 0.1
-- Last updated: 2026-07-31
+- Last updated: 2026-08-02
 - Source of truth: This document
 
 ## 1. 目的
@@ -256,9 +256,21 @@ Columnの停止判定間隔は項目数や表示領域に応じて変えない�
 
 Normal Modeの`z`は、独立したネイティブAppKit helperをその場で起動する。helperは起動時に`zoxide query --list --score`を1回だけ実行し、取得した候補の以後の絞り込みと順位付けをプロセス内メモリで行う。入力ごとにzoxideやFinderへ問い合わせない。
 
+パレットは820pt幅とし、検索欄には1行表示の標準`NSTextField`、18ptのプロポーショナルシステムフォント、32ptの高さを使う。狭い英字を連続入力しても`i`、`j`などを視認でき、長い検索語と候補パスにも十分な横幅を確保する。専用`NSSearchField`の虫眼鏡と消去ボタンより、全文字を欠けずに表示することを優先する。
+
+候補アイコンは`NSWorkspace.shared.icon(forFile:)`から取得し、Finderと同じフォルダ色、ファイル種類、カスタムアイコンを表示する。表示したパスだけを最大128件のプロセス内キャッシュへ保持し、パレット終了時に破棄する。画像アセット、永続キャッシュ、常駐アイコンサービスは追加しない。パレット表示中の物理`Command+A`はKarabinerで`F19`へ変換し、helperが検索欄の全文字列を選択する。helperへ通常の`Command+A`が直接届く環境でも同じ全選択を行う。
+
 ファイル候補は、空検索でホーム全体を列挙しない。前後の空白を除いた検索語が2文字以上になった時だけ、75msの短いdebounce後にmacOS標準の`mdfind`をホームディレクトリへ1回実行する。入力が変化した場合は古いSpotlight検索を終了し、完了済みの最新検索から実在する非ディレクトリ項目を最大200件だけ保持する。zoxide候補とSpotlight候補は同じbasename・パスの複数トークン順位付けへ統合し、パレットが閉じた後に検索プロセスを残さない。Spotlightのシステム索引を再利用し、Finer独自の常駐インデクサーやファイル履歴データベースは作らない。
 
-フォルダ決定時はパレットプロセスからFinderのfront windowのtargetをApple Eventで直接変更し、Finderのパス入力画面を表示せずに同じウィンドウを移動する。ファイル決定時は同じfront windowのtargetを親フォルダへ変更し、Finderのselectionを対象ファイルへ設定する。別の移動helperを経由しないことで、`Return`から移動までのプロセス起動を1段に抑える。移動が完了するまでパレットを表示して旧Finder画面が露出する待ち時間を作らず、完了直後にパレットを隠す。Apple Eventを利用できない環境では既存のAccessibility helperへパスを渡し、ショートカット属性からFinder標準の`Command+Shift+G`メニュー項目を特定して`AXPress`し、同じfront windowに表示された「フォルダへ移動」シートへフォルダまたはファイルのパスを入力して確定する。このため、移動機能そのものはAutomation権限に依存しない。移動成功後だけ、フォルダ候補ではそのパス、ファイル候補では親フォルダを`zoxide add`へ渡して利用履歴を更新する。`Esc`、移動成功、ウィンドウを閉じた時にhelperを終了し、パレットを使っていない時はプロセス、ポーリング、メモリを残さない。入力ソース切替による一時的なアプリ非アクティブ化ではパレットを自動非表示にせず、切替後は検索欄へフォーカスを戻す。IMEなど別プロセスが生成した`Esc`と切替直後の`Esc`はパレット終了として扱わず、物理入力由来の明示的な`Esc`だけを終了操作にする。`Delete`は常に検索欄の編集へ渡す。既存の`/`によるFinder標準検索は変更しない。
+フォルダ決定時はパレットプロセスからFinderのfront windowのtargetをApple Eventで直接変更し、Finderのパス入力画面を表示せずに同じウィンドウを移動する。ファイル決定時は同じfront windowのtargetを親フォルダへ変更し、Finderのselectionを対象ファイルへ設定する。別の移動helperを経由しないことで、`Return`から移動までのプロセス起動を1段に抑える。移動が完了するまでパレットを表示して旧Finder画面が露出する待ち時間を作らず、完了直後にパレットを隠す。Apple Eventを利用できない環境では既存のAccessibility helperへパスを渡し、ショートカット属性からFinder標準の`Command+Shift+G`メニュー項目を特定して`AXPress`し、同じfront windowに表示された「フォルダへ移動」シートへフォルダまたはファイルのパスを入力して確定する。このため、移動機能そのものはAutomation権限に依存しない。移動成功後だけ、フォルダ候補ではそのパス、ファイル候補では親フォルダを`zoxide add`へ渡して利用履歴を更新する。`Esc`、移動成功、ウィンドウを閉じた時にhelperを終了し、パレットを使っていない時はプロセス、ポーリング、メモリを残さない。
+
+`z`を受けたKarabiner manipulatorはhelper起動前に`finer_jump_active=1`を設定する。生成する全Finer manipulatorは同変数が1でないことを共通条件に持ち、パレット表示中はFinder向けFinerマッピングだけを停止して、文字、IMEの未確定入力、`Delete`を検索欄へそのまま渡す。helperを待つ短命なshellが終了直後にKarabiner CLIで変数を0へ戻し、Finder操作を復帰させる。Finer外の入力ソース切替など、ユーザーが別に設定したKarabiner ruleは停止しない。
+
+入力ソース変更通知では、その通知内で検索欄の状態を即時に1回確認したうえで、50ms後にもフォールバック確認を1回行う。field editorがすでに存在してパネルがkey windowなら何もしない。実際にアプリが非activeならその時だけ`NSApp.activate`し、パネルまたはfield editorを失っている場合だけ検索欄へ戻す。これにより、単独Command直後の文字を「入力ソース切替 → 通常文字」と連続送信するKarabiner設定でも、後続文字より先にパレットを入力先へ戻す。field editorがIMEの未確定文字列を持つ間は、`Return`、上下、`Esc`を含む全key-downをFiner独自処理より先にAppKitへ渡す。最初の`Return`は日本語変換の確定に使い、未確定文字列がなくなった後の次の`Return`だけを候補決定として扱う。
+
+パレット表示中の物理`Esc`は、Karabinerで他のmanipulatorによる変更を受けていない元イベントに限り、`F20`の目印と元の`Esc`の2イベントへ変換する。helperは100ms以内に目印を受けた`Esc`だけを明示的な終了操作として扱い、目印のない`Esc`は終了させず消費する。IME未確定文字列がある時は、目印を消去して元の`Esc`をAppKitへ渡し、変換キャンセルを優先する。これにより、IMEや入力ソース切替が生成した合成`Esc`を、イベント送信元PIDや入力ソース通知からの固定時間で推測しない。`Delete`は常に検索欄の編集へ渡す。既存の`/`によるFinder標準検索は変更しない。
+
+AppKitが入力ソース切替やfield editorの更新中に問い合わせる「最後のウィンドウが閉じた後の自動終了」には応じない。パレットのプロセス終了は、物理`Esc`または候補決定から明示的に行う。これにより一時的なウィンドウ状態を終了意思と誤認しない。パネルはcloseableではなく、閉じるボタンを表示しない。
 
 ## 7. 禁止事項
 
@@ -461,6 +473,55 @@ finder-vim/
   - 受け入れ条件: 短いListと1000項目Listの上下それぞれで、長押し中の方向切替を20回以上行って大ジャンプ0、表示追従あり、key-up後drift 0とする。
 
 ## 16. Decision Log
+
+### 2026-08-02: `z`候補にFinderネイティブアイコンを使い、Command-Aを保持する
+
+- Decision: 各候補は`NSWorkspace.shared.icon(forFile:)`でFinderネイティブアイコンを取得し、パス単位・最大128件の`NSCache`へ保持する。パレット表示中だけ有効な先頭側Karabiner manipulatorで未変更の物理`Command+A`を`F19`へ変換し、helperは`F19`または直接届いた`Command+A`で検索欄を全選択する。
+- Reason: SF Symbolsの単色アイコンより、Finderと同じ青いフォルダ、ファイル種類別アイコン、カスタムアイコンの方が候補を視覚的に判別しやすい。さらにユーザーのCommand単押し入力切替ruleは高速なCommandと文字の組み合わせを入力ソース切替＋通常文字へ変換し得るため、AppKit標準の全選択だけに依存すると`Command+A`が安定しない。
+- Constraint: アイコンはtable viewが表示を要求した項目だけ取得する。キャッシュは128件を上限とするプロセス内メモリだけで、永続ファイル、事前走査、常駐処理を追加しない。専用`F19`は`finer_jump_active=1`かつKarabinerで未変更の元イベントに限定し、通常のFinderや他アプリの`Command+A`へ影響させない。
+- Verification: フォルダ、Swift、PDF、画像などがFinderと同じアイコンで表示され、スクロールで同じ候補を再表示しても動作が引っかからないこと、検索文字列の途中でも`Command+A`が全文字を選択すること、パレット終了後は他アプリの`Command+A`が通常どおりであることをdogfoodで確認する。生成ルールでは専用manipulatorが1件だけ存在し、`finer_jump_active=1`、`event_changed_if=false`、`F19`の組み合わせを検証する。
+
+### 2026-08-02: `z`検索欄の狭い英字を判別しやすくする
+
+- Decision: パレット幅を700ptから820ptへ広げ、検索欄は32pt高の1行表示とし、検索文字には18ptのプロポーショナルシステムフォントを使う。入力欄は`NSSearchField`ではなく標準`NSTextField`を使う。
+- Reason: 実画面へ`j i ji ij`を入力して比較したところ、大きいフォントを設定した`NSSearchField`は小文字`j`のdescenderを切り落とし、残った点と縦棒が`i`と同じ形に見えた。標準`NSTextField`では`j i g p q y`の全descenderが欄内に表示された。
+- Constraint: 専用検索セルの虫眼鏡と消去ボタンは表示しない。消去は通常の`Delete`で行う。候補の行高、順位付け、入力処理、IME処理、常駐性は変更しない。カスタム描画や固定フォント名を導入せず、AppKit標準部品と現在のmacOS標準フォントを使う。
+- Verification: 英数入力で`j i g p q y`を表示して各文字とdescenderを判別できること、検索文字の下側に過剰な空白がないこと、日本語の未確定文字列が32ptの欄内で欠けないこと、長い候補パスの表示領域が従来より狭くならないことを実画面で確認する。
+
+### 2026-08-02: `z`パレットは明示操作だけで終了する
+
+- Decision: `finer_jump_active=1`の間だけ有効なKarabiner manipulatorで、他のmanipulatorによる変更を受けていない物理`Esc`を`F20`の目印と元の`Esc`へ変換する。AppKit helperは目印から100ms以内の`Esc`だけをパレット終了として扱い、目印なしの`Esc`は消費する。IME未確定文字列がある場合は目印を破棄し、元の`Esc`をAppKitへ渡して変換だけをキャンセルする。AppKitのlast-window自動終了要求は無視し、候補決定または物理`Esc`だけから明示的に終了する。
+- Reason: 物理`Esc`を押していない実機ログで、(1)入力ソース切替後に`F20`と`Esc`が14ms間隔で届いて明示終了と誤認した経路と、(2)キーイベントや`cancelOperation`なしで`applicationShouldTerminateAfterLastWindowClosed`が呼ばれた経路を別々に確認した。後者は左Command単独で再現し、終了を無視したストレス試験中にも左右Command切替と日本語入力の各所で十数回発生した。IME通知順、送信元PID、固定待機時間、AppKitの一時的なウィンドウ数はいずれもユーザーの終了意思を表さない。
+- Constraint: 目印用`F20`はパレット表示中かつ未変更の元`Esc`だけから生成し、他アプリや通常のFinder操作へ影響させない。パレット専用manipulatorには、他の全Finer manipulatorへ付ける`variable_unless finer_jump_active=1`を追加しない。helper終了後は既存の待機shellが変数を0へ戻す。物理`Esc`の目印と元イベントは連続送信し、100msを超えて遅延した目印を後続の合成`Esc`へ流用しない。パネルはcloseableにせず、終了口を物理`Esc`と候補決定に限定する。
+- Verification: 生成ルールでパレット専用`Esc`が1件だけあり、`F20`、`Esc`の順序、`variable_if finer_jump_active=1`、`event_changed_if=false`を検証する。helperのheadless試験で、目印なし、期限内、二重消費、期限切れ、明示クリアを検証する。dogfoodでは左Command単独後に3秒維持し、左右Commandを5往復した後に日本語変換、`Return`確定、`Delete`、英数入力を続けても閉じないこと、物理`Esc`では即時に閉じることを確認した。未確定文字列中の最初の物理`Esc`は変換だけを解除し、その後の物理`Esc`でパレットが閉じることも確認する。
+
+### 2026-08-02: 入力ソース切替と同時に検索欄を即時復帰する
+
+- Decision: 入力ソース変更通知では切替時刻の記録後、冪等な`restoreSearchFocus()`を同期実行し、50ms後にも同じ関数をフォールバックとして1回だけ呼ぶ。復帰関数はパネルがkey windowかつfield editorが存在すれば何もせず、`NSApp.isActive == false`の時だけアプリをactivateする。
+- Reason: 現在有効なCommand単押し入力切替ruleは、高速に次の文字を押すと`japanese_kana`と通常文字を同じKarabiner manipulatorから連続送信する。従来の50ms遅延復帰では、かな切替で一時的にFinderへ戻ったフォーカスへ`n`や`j`が先に届いた。英数で成功し、日本語切替直後だけFinderへ文字が漏れる症状と設定のイベント順が一致する。
+- Constraint: 入力ソース変更通知ごとにfield editorを作り直さない。すでにactiveかつ検索欄が有効な通常ケースではAppKit状態を変更しない。同期復帰で取り切れない非同期の失焦点に限り50ms後の確認で補う。ユーザー個人のCommand入力切替ruleは変更せず、Finer外のアプリでの挙動へ影響を与えない。
+- Verification: 左Commandを単押しして即座に`n`、`j`および複数文字を入力し、すべて検索欄の日本語未確定文字列になることをdogfoodで確認する。左右Commandを繰り返してもパレットが閉じず、待機中sampleに`makeFirstResponder`と`NSTextInputContext activate`の自己ループがないことを確認する。英数入力、IME確定、`Delete`、`Esc`、候補決定も回帰確認する。
+
+### 2026-08-01: IME未確定文字列の操作をFinerより優先する
+
+- Decision: `z`パレットのfield editorが`hasMarkedText()`を返す間、panelの独自key handlerは全key-downを未処理としてAppKitへ渡す。IMEが未確定文字列を解消した後だけ、`Return`、上下、`Esc`をFinerの候補決定・選択移動・終了として扱う。
+- Reason: panelの`sendEvent`は検索欄のテキスト入力処理より先に呼ばれる。従来は日本語変換中の物理`Return`を`acceptSelection()`が横取りし、IMEの確定ではなくFinder移動とhelper終了を実行していた。英数入力ではmarked textがないため発生せず、日本語を確定した時だけパレットが閉じる症状と一致する。
+- Constraint: 未確定文字列がない英数入力と通常の候補操作は変更しない。IME変換中の上下は変換候補操作、`Esc`は変換キャンセルへ渡す。確定後に候補へ移動するにはもう一度`Return`を押す。
+- Verification: 日本語入力で未確定文字を作り、上下で変換候補を選び、最初の`Return`で文字だけが確定してパレットが残ることを確認する。続く`Return`でFiner候補へ移動すること、変換中の`Esc`でパレットではなく変換だけが解除されること、英数の複数文字入力と候補決定が従来どおり動くことをdogfoodで確認する。
+
+### 2026-08-01: `z`パレット表示中はFinder向けFinerマッピングを停止する
+
+- Decision: `z`のmanipulatorはhelper起動前にKarabiner変数`finer_jump_active=1`を設定する。生成するUtility／Navigation両ruleの全manipulatorへ`variable_unless finer_jump_active=1`を共通追加する。helperを同期的に待つshellは終了直後にKarabiner CLIで0へ戻す。停止範囲はFinerが生成したmanipulatorだけとし、入力ソース切替など別ruleは通常どおり動作させる。
+- Reason: accessory型のAppKit paletteを表示してもKarabinerのfrontmost application条件はFinderのままであり、検索欄へ入力した`n`や`hjkl`がFinerの新規フォルダ作成や移動として横取りされていた。特に`n`で毎回閉じること、2文字目や日本語変換確定で閉じることは、検索欄固有の編集問題ではなくFinder向けmanipulatorの再発火で説明できる。palette単体のフォーカス修正だけでは防げない。
+- Constraint: パレットを閉じた直後にFinderの全Finer操作を復帰させる。helperの待機shellはパレット表示中だけ存在し、終了後に残さない。検索候補、順位付け、Finder移動、IMEフォーカス復帰の実装は変更しない。生成物の各manipulatorに共通条件を重複なく1個だけ入れる。
+- Verification: 生成ルールの全manipulatorが共通guardをちょうど1個持ち、`z`が変数設定後にhelperを起動し、helper終了後のcommandが0へ戻すことを自動検証する。dogfoodでは`z`後に`n`、`hjkl`、2文字以上、`Delete`、日本語の未確定入力と確定を試し、パレットが閉じないことを確認する。`Esc`または候補決定後はFinderで`n`と`hjkl`が即時に再び動作し、待機プロセスが残らないことを確認する。
+
+### 2026-08-01: 入力ソース切替後の検索欄復帰を冪等にする
+
+- Decision: `NSTextInputContext.keyboardSelectionDidChangeNotification`ではIME由来`Esc`を識別する切替時刻を記録し、50ms後に冪等なフォーカス復帰を1回だけ予約する。復帰時にパネルがkey windowかつ検索欄のfield editorが存在すれば何もしない。実際にフォーカスが外れた場合だけ`makeKeyAndOrderFront`と`makeFirstResponder`を実行し、`NSApp.activate`は呼ばない。パレットがactiveへ戻った場合も同じ復帰関数を使う。
+- Reason: 日本語入力状態で現行dogfoodの待機中プロセスを3秒・1ms間隔でsampleしたところ、2027メインスレッド標本のうち1990標本が入力ソース通知後の`restoreSearchFocus`から`makeFirstResponder`へ入り、`NSTextInputContext activate`のXPC応答待ちに滞在していた。フォーカス再設定がIME activationを起こし、その通知から再びフォーカスを設定する自己ループがビーチボールの直接原因だった。入力ソース変更だけでは通常field editorを失わないため、通知ごとの再設定は不要である。
+- Constraint: 検索、候補順位、Spotlight、Finder移動、パレットの見た目は変更しない。入力ソース切替時刻による合成`Esc`抑制と`hidesOnDeactivate=false`は維持する。入力ソース切替で実際にfield editorを失う環境では、切替後の文字がFinderへ流れないよう復元を残す。同じ通知から何度呼ばれてもfield editorが存在する限りAppKitやIME状態を変更しない。
+- Verification: 起動したパレットを日本語入力状態で3秒sampleし、メインスレッドが通常のAppKit event waitへ滞在し、`restoreSearchFocus`／`makeFirstResponder`／`NSTextInputContext activate`の反復がないことを確認する。英数・かなを複数回切り替え、文字入力、Delete、左右Command、`Esc`、候補決定が継続することを物理dogfoodで確認する。
 
 ### 2026-07-31: `z`パレットへオンデマンドSpotlightファイル検索を統合する
 

@@ -8,6 +8,8 @@ The project is currently pre-alpha and has not published a tagged release.
 
 ### Added
 
+- Finder-native folder and file icons, plus reliable `Command-A` text
+  selection in the `z` palette.
 - On-demand native Finder navigation with no dedicated resident process while
   idle.
 - List, Column, and Icon View navigation, held-key movement, and numeric counts.
@@ -50,6 +52,20 @@ The project is currently pre-alpha and has not published a tagged release.
 
 ### Fixed
 
+- The `z` palette uses a wider, single-line plain text field sized to its
+  standard proportional system font, so descenders remain visible without
+  excess space below the text.
+- The `z` palette ignores AppKit's transient last-window termination requests
+  during input-source changes and closes only from explicit completion or an
+  original physically marked `Esc`.
+- Characters sent immediately after a Command-key Japanese input-source switch
+  now stay in the `z` palette instead of leaking to Finder during focus recovery.
+- Pressing `Return` during Japanese composition now confirms the marked text
+  instead of prematurely accepting a jump candidate and closing the palette.
+- Keys typed into the `z` palette are no longer intercepted by Finder-facing
+  Finer mappings, so multi-character and Japanese input stay in the field.
+- The `z` palette no longer reactivates its field editor from every input-source
+  notification, avoiding an IME focus loop and beachballing while idle.
 - Rapid Column View hierarchy sequences no longer reuse a stale Finder
   container.
 - Visual Mode counts and `gg`/`G` no longer leak characters into Finder's

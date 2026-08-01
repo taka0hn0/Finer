@@ -31,6 +31,29 @@ ranking, and clean source-unavailable errors. It also injects a fake
 the exact path through `jump-to` and `reveal-file`. It does not open the
 palette or Finder.
 
+Input-source changes remain a physical dogfood check. While the `z` palette is
+open, repeated English/Japanese switching must not repeatedly call
+`makeFirstResponder`, beachball, close the palette, or break text editing.
+Generated-rule tests verify that every Finer manipulator is disabled while the
+palette owns `finer_jump_active`, and that the launch wrapper resets the
+variable when the palette exits. They also require the physical-Esc marker to
+accept only an original, unchanged Karabiner event. Dogfood still checks that
+`n`, `hjkl`,
+multi-character text, `Delete`, and Japanese composition reach the search
+field, then work as Finer commands again after closing it.
+During Japanese composition, the first `Return` must confirm marked text while
+keeping the palette open; only a subsequent `Return` may accept a jump target.
+Arrow keys and `Esc` must remain available to the IME while marked text exists.
+The physical input-source check must also cover pressing the left Command key
+alone and immediately typing `n`, `j`, and longer romaji sequences. Those
+characters must reach the palette before its 50ms fallback focus check; they
+must never reach Finder.
+Leave the palette untouched for at least five seconds before and after an input
+source switch; an unmarked synthetic `Esc` must not close it. A physical `Esc`
+is marked by the palette-only Karabiner rule. During marked Japanese text, the
+first physical `Esc` cancels composition and keeps the palette open; the next
+physical `Esc` closes it.
+
 Generated-rule regression tests also verify that the experimental Column edge
 path keeps the direct Arrow last in the initial action list, clears its
 direction-specific physical-hold token on key-up, and launches the edge

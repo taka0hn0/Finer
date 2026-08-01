@@ -15,6 +15,9 @@ fail() {
     exit 1
 }
 
+"$helper" --self-test-palette-escape \
+    || fail "physical Esc marker gate failed"
+
 mkdir -p \
     "$test_root/Alpha Project" \
     "$test_root/Beta" \

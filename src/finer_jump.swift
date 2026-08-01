@@ -531,6 +531,7 @@ private enum FinderNavigator {
 
 private final class JumpPanel: NSPanel {
     var handleNavigationKey: ((NSEvent) -> Bool)?
+    var recordLifecycleEvent: ((String) -> Void)?
 
     override func sendEvent(_ event: NSEvent) {
         if event.type == .keyDown, handleNavigationKey?(event) == true {
@@ -538,10 +539,84 @@ private final class JumpPanel: NSPanel {
         }
         super.sendEvent(event)
     }
+
+    override func cancelOperation(_ sender: Any?) {
+        recordLifecycleEvent?("panel-cancel-operation")
+        super.cancelOperation(sender)
+    }
+
+    override func close() {
+        recordLifecycleEvent?("panel-close")
+        super.close()
+    }
+
+    override func orderOut(_ sender: Any?) {
+        recordLifecycleEvent?("panel-order-out")
+        super.orderOut(sender)
+    }
+}
+
+private struct PaletteEscapeGate {
+    static let markerKeyCode: UInt16 = 90 // F20 on macOS.
+    private static let markerLifetime: TimeInterval = 0.1
+
+    private var markerDeadline = -TimeInterval.infinity
+
+    mutating func markPhysicalEscape(at time: TimeInterval) {
+        markerDeadline = time + Self.markerLifetime
+    }
+
+    mutating func consumePhysicalEscape(at time: TimeInterval) -> Bool {
+        let isMarked = time <= markerDeadline
+        markerDeadline = -TimeInterval.infinity
+        return isMarked
+    }
+
+    mutating func clear() {
+        markerDeadline = -TimeInterval.infinity
+    }
+}
+
+private enum PaletteKeyCode {
+    static let selectAll: UInt16 = 80 // F19 on macOS.
+}
+
+private final class JumpDiagnostics {
+    private let handle: FileHandle?
+
+    init() {
+        let temporaryDirectory = URL(fileURLWithPath: NSTemporaryDirectory())
+        let enabledURL = temporaryDirectory
+            .appendingPathComponent("finer-jump-diagnostics-enabled")
+        guard FileManager.default.fileExists(atPath: enabledURL.path) else {
+            handle = nil
+            return
+        }
+
+        let logURL = temporaryDirectory
+            .appendingPathComponent("finer-jump-events.log")
+        FileManager.default.createFile(atPath: logURL.path, contents: nil)
+        handle = try? FileHandle(forWritingTo: logURL)
+        record("launch pid=\(ProcessInfo.processInfo.processIdentifier)")
+    }
+
+    deinit {
+        try? handle?.close()
+    }
+
+    func record(_ message: String) {
+        guard let handle else { return }
+        let timestamp = String(
+            format: "%.6f",
+            ProcessInfo.processInfo.systemUptime
+        )
+        handle.write(Data("\(timestamp) \(message)\n".utf8))
+        handle.synchronizeFile()
+    }
 }
 
 private final class JumpController: NSObject, NSApplicationDelegate,
-    NSTableViewDataSource, NSTableViewDelegate, NSSearchFieldDelegate
+    NSTableViewDataSource, NSTableViewDelegate, NSTextFieldDelegate
 {
     private let zoxide: ZoxideClient?
     private let spotlight: SpotlightClient?
@@ -554,12 +629,14 @@ private final class JumpController: NSObject, NSApplicationDelegate,
     private var fileSearchError: Error?
     private var isSearchingFiles = false
     private var shouldAcceptAfterFileSearch = false
-    private var lastInputSourceSwitchTime = -TimeInterval.infinity
     private var inputSourceObserver: NSObjectProtocol?
     private var isCompletingSelection = false
+    private var escapeGate = PaletteEscapeGate()
+    private let iconCache = NSCache<NSString, NSImage>()
+    private let diagnostics = JumpDiagnostics()
 
     private let panel: JumpPanel
-    private let searchField = NSSearchField()
+    private let searchField = NSTextField()
     private let tableView = NSTableView()
     private let statusLabel = NSTextField(labelWithString: "")
 
@@ -580,12 +657,13 @@ private final class JumpController: NSObject, NSApplicationDelegate,
         }
 
         panel = JumpPanel(
-            contentRect: NSRect(x: 0, y: 0, width: 700, height: 430),
+            contentRect: NSRect(x: 0, y: 0, width: 820, height: 430),
             styleMask: [.titled, .fullSizeContentView],
             backing: .buffered,
             defer: false
         )
         super.init()
+        iconCache.countLimit = 128
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -595,8 +673,8 @@ private final class JumpController: NSObject, NSApplicationDelegate,
             queue: .main
         ) { [weak self] _ in
             guard let self else { return }
-            self.lastInputSourceSwitchTime =
-                ProcessInfo.processInfo.systemUptime
+            self.diagnostics.record("input-source-changed")
+            self.restoreSearchFocus()
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
                 self.restoreSearchFocus()
             }
@@ -610,10 +688,12 @@ private final class JumpController: NSObject, NSApplicationDelegate,
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
-        true
+        diagnostics.record("ignored-terminate-after-last-window")
+        return false
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        diagnostics.record("application-will-terminate")
         fileSearchWorkItem?.cancel()
         spotlight?.cancel()
         if let inputSourceObserver {
@@ -622,6 +702,7 @@ private final class JumpController: NSObject, NSApplicationDelegate,
     }
 
     func applicationDidBecomeActive(_ notification: Notification) {
+        diagnostics.record("application-did-become-active")
         restoreSearchFocus()
     }
 
@@ -629,9 +710,16 @@ private final class JumpController: NSObject, NSApplicationDelegate,
         guard panel.isVisible, !isCompletingSelection else {
             return
         }
-        NSApp.activate(ignoringOtherApps: true)
+        if panel.isKeyWindow, searchField.currentEditor() != nil {
+            return
+        }
+        if !NSApp.isActive {
+            NSApp.activate(ignoringOtherApps: true)
+        }
         panel.makeKeyAndOrderFront(nil)
-        panel.makeFirstResponder(searchField)
+        if searchField.currentEditor() == nil {
+            panel.makeFirstResponder(searchField)
+        }
     }
 
     private func configurePanel() {
@@ -647,13 +735,22 @@ private final class JumpController: NSObject, NSApplicationDelegate,
         panel.handleNavigationKey = { [weak self] event in
             self?.handleKey(event) ?? false
         }
+        panel.recordLifecycleEvent = { [weak self] event in
+            self?.diagnostics.record(event)
+        }
 
         guard let contentView = panel.contentView else {
             return
         }
 
+        searchField.isEditable = true
+        searchField.isSelectable = true
+        searchField.isBezeled = true
+        searchField.bezelStyle = .roundedBezel
+        searchField.cell?.usesSingleLineMode = true
+        searchField.cell?.lineBreakMode = .byClipping
         searchField.placeholderString = "Jump to a folder or file…"
-        searchField.font = .systemFont(ofSize: 20)
+        searchField.font = .systemFont(ofSize: 18, weight: .regular)
         searchField.focusRingType = .none
         searchField.delegate = self
         searchField.translatesAutoresizingMaskIntoConstraints = false
@@ -691,7 +788,7 @@ private final class JumpController: NSObject, NSApplicationDelegate,
             searchField.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 30),
             searchField.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 22),
             searchField.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -22),
-            searchField.heightAnchor.constraint(equalToConstant: 38),
+            searchField.heightAnchor.constraint(equalToConstant: 32),
 
             scrollView.topAnchor.constraint(equalTo: searchField.bottomAnchor, constant: 14),
             scrollView.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 14),
@@ -715,6 +812,7 @@ private final class JumpController: NSObject, NSApplicationDelegate,
     }
 
     func controlTextDidChange(_ notification: Notification) {
+        diagnostics.record("text-changed length=\(searchField.stringValue.count)")
         scheduleFileSearch()
         updateFilter()
     }
@@ -840,7 +938,6 @@ private final class JumpController: NSObject, NSApplicationDelegate,
             let kindImage = NSImageView()
             kindImage.identifier = NSUserInterfaceItemIdentifier("kind")
             kindImage.imageScaling = .scaleProportionallyDown
-            kindImage.contentTintColor = .secondaryLabelColor
             kindImage.translatesAutoresizingMaskIntoConstraints = false
 
             let nameLabel = NSTextField(labelWithString: "")
@@ -874,9 +971,14 @@ private final class JumpController: NSObject, NSApplicationDelegate,
         }
 
         let candidate = filteredCandidates[row]
-        let symbolName = candidate.kind == .folder ? "folder.fill" : "doc"
-        (cell.subviews.first { $0.identifier?.rawValue == "kind" } as? NSImageView)?
-            .image = NSImage(systemSymbolName: symbolName, accessibilityDescription: nil)
+        let isFolder = candidate.kind == .folder
+        if let kindImage = cell.subviews.first(
+            where: { $0.identifier?.rawValue == "kind" }
+        ) as? NSImageView {
+            kindImage.image = nativeIcon(for: candidate)
+            kindImage.contentTintColor = nil
+            kindImage.setAccessibilityLabel(isFolder ? "Folder" : "File")
+        }
         (cell.subviews.first { $0.identifier?.rawValue == "name" } as? NSTextField)?
             .stringValue = candidate.name
         (cell.subviews.first { $0.identifier?.rawValue == "path" } as? NSTextField)?
@@ -884,23 +986,59 @@ private final class JumpController: NSObject, NSApplicationDelegate,
         return cell
     }
 
+    private func nativeIcon(for candidate: JumpCandidate) -> NSImage {
+        let cacheKey = candidate.path as NSString
+        if let cached = iconCache.object(forKey: cacheKey) {
+            return cached
+        }
+
+        let workspaceIcon = NSWorkspace.shared.icon(forFile: candidate.path)
+        let icon = (workspaceIcon.copy() as? NSImage) ?? workspaceIcon
+        icon.size = NSSize(width: 20, height: 20)
+        iconCache.setObject(icon, forKey: cacheKey)
+        return icon
+    }
+
     private func handleKey(_ event: NSEvent) -> Bool {
         let now = ProcessInfo.processInfo.systemUptime
-        let isLanguageKey = event.keyCode == 102 || event.keyCode == 104
-        let isInputSourceShortcut = event.keyCode == 49
-            && event.modifierFlags.contains(.control)
-        if isLanguageKey || isInputSourceShortcut {
-            lastInputSourceSwitchTime = now
+        let hasMarkedText = (searchField.currentEditor() as? NSTextView)?
+            .hasMarkedText() ?? false
+        let characters = event.charactersIgnoringModifiers?
+            .unicodeScalars
+            .map { String(format: "%04X", $0.value) }
+            .joined(separator: ",") ?? "none"
+        diagnostics.record(
+            "key code=\(event.keyCode) chars=\(characters) flags=\(event.modifierFlags.rawValue) marked=\(hasMarkedText)"
+        )
+        if event.keyCode == PaletteEscapeGate.markerKeyCode {
+            escapeGate.markPhysicalEscape(at: now)
+            diagnostics.record("escape-marker-armed")
+            return true
+        }
+
+        if event.keyCode == PaletteKeyCode.selectAll
+            || (event.modifierFlags.contains(.command)
+                && event.charactersIgnoringModifiers?.lowercased() == "a") {
+            panel.makeFirstResponder(searchField)
+            searchField.selectText(nil)
+            diagnostics.record("search-select-all")
+            return true
+        }
+
+        if hasMarkedText {
+            if event.keyCode == 53 {
+                escapeGate.clear()
+                diagnostics.record("marked-escape-forwarded")
+            }
             return false
         }
+
         if event.keyCode == 53 {
-            let sourceProcessIdentifier = event.cgEvent?.getIntegerValueField(
-                .eventSourceUnixProcessID
-            ) ?? 0
-            if sourceProcessIdentifier != 0
-                || now - lastInputSourceSwitchTime < 0.5 {
+            if !escapeGate.consumePhysicalEscape(at: now) {
+                diagnostics.record("unmarked-escape-consumed")
                 return true
             }
+            diagnostics.record("physical-escape-terminate")
             NSApp.terminate(nil)
             return true
         }
@@ -921,6 +1059,7 @@ private final class JumpController: NSObject, NSApplicationDelegate,
             return true
         }
         if event.keyCode == 36 || event.keyCode == 76 {
+            diagnostics.record("return-accept-requested")
             acceptSelection()
             return true
         }
@@ -939,17 +1078,20 @@ private final class JumpController: NSObject, NSApplicationDelegate,
 
     @objc private func acceptSelection() {
         if isSearchingFiles {
+            diagnostics.record("accept-deferred-for-file-search")
             shouldAcceptAfterFileSearch = true
             statusLabel.stringValue = "Searching files…"
             return
         }
         let row = tableView.selectedRow
         guard filteredCandidates.indices.contains(row) else {
+            diagnostics.record("accept-rejected-no-row")
             NSSound.beep()
             return
         }
 
         let candidate = filteredCandidates[row]
+        diagnostics.record("accept-start kind=\(candidate.kind == .folder ? "folder" : "file")")
         isCompletingSelection = true
         do {
             try FinderNavigator.navigate(to: candidate)
@@ -959,8 +1101,10 @@ private final class JumpController: NSObject, NSApplicationDelegate,
                 : URL(fileURLWithPath: candidate.path)
                     .deletingLastPathComponent().path
             zoxide?.add(path: visitedFolder)
+            diagnostics.record("accept-success-terminate")
             NSApp.terminate(nil)
         } catch {
+            diagnostics.record("accept-failed")
             isCompletingSelection = false
             statusLabel.stringValue = error.localizedDescription
             panel.makeKeyAndOrderFront(nil)
@@ -972,6 +1116,19 @@ private final class JumpController: NSObject, NSApplicationDelegate,
 private func runHeadless(arguments: [String]) -> Int32? {
     guard let first = arguments.first else {
         return nil
+    }
+    if first == "--self-test-palette-escape" {
+        var gate = PaletteEscapeGate()
+        guard !gate.consumePhysicalEscape(at: 1.0) else { return 1 }
+        gate.markPhysicalEscape(at: 2.0)
+        guard gate.consumePhysicalEscape(at: 2.05) else { return 1 }
+        guard !gate.consumePhysicalEscape(at: 2.06) else { return 1 }
+        gate.markPhysicalEscape(at: 3.0)
+        guard !gate.consumePhysicalEscape(at: 3.11) else { return 1 }
+        gate.markPhysicalEscape(at: 4.0)
+        gate.clear()
+        guard !gate.consumePhysicalEscape(at: 4.01) else { return 1 }
+        return 0
     }
     if first == "--query" {
         let query = arguments.dropFirst().first ?? ""

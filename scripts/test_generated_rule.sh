@@ -13,7 +13,7 @@ clear_selection_command='$HOME/.local/libexec/finder-vim/finder_ax_step clear-se
 visual_start_command='$HOME/.local/libexec/finder-vim/finder_ax_move visual-start >/dev/null 2>&1; exec /usr/bin/truncate -s 0 $HOME/.local/state/finder-vim/finder_marks.txt $HOME/.local/state/finder-vim/finder_navigation_anchor.txt'
 copy_marks_command='$HOME/.local/libexec/finder-vim/finder_action_marked.sh copy >/dev/null 2>&1; exec /usr/bin/truncate -s 0 $HOME/.local/state/finder-vim/finder_marks.txt $HOME/.local/state/finder-vim/finder_navigation_anchor.txt'
 new_folder_current_level_command='exec $HOME/.local/libexec/finder-vim/finder_ax_move new-folder-current-level >/dev/null 2>&1'
-jump_command='exec $HOME/.local/libexec/finder-vim/finer_jump >/dev/null 2>&1'
+jump_command='$HOME/.local/libexec/finder-vim/finer_jump >/dev/null 2>&1; exec '\''/Library/Application Support/org.pqrs/Karabiner-Elements/bin/karabiner_cli'\'' --set-variables '\''{"finer_jump_active":0}'\'' >/dev/null 2>&1'
 
 jq -e \
     --arg text_expression "$text_expression" \
@@ -87,7 +87,79 @@ def clears_motion_count:
         {"set_variable":{"name":"finder_motion_count_expiration","value":0}}
     ];
 
+def jump_palette_only_condition:
+    ([.conditions[] | select(
+        .type == "variable_if"
+        and .name == "finer_jump_active"
+        and .value == 1
+    )] | length == 1);
+
+def original_event_only_condition:
+    ([.conditions[] | select(
+        .type == "event_changed_if"
+        and .value == false
+    )] | length == 1);
+
+def jump_palette_guard_count:
+    ([.conditions[] | select(
+        .type == "variable_unless"
+        and .name == "finer_jump_active"
+        and .value == 1
+    )] | length);
+
+def without_jump_palette_guard:
+    .rules |= map(.manipulators |= map(
+        .conditions |= map(select((
+            .type == "variable_unless"
+            and .name == "finer_jump_active"
+            and .value == 1
+        ) | not))
+    ));
+
+. as $guarded_document
+| ($guarded_document | [
+    .rules[].manipulators[]
+    | select(jump_palette_only_condition | not)
+    | jump_palette_guard_count == 1
+] | all) as $finder_manipulators_guarded
+| ($guarded_document | [
+    .rules[].manipulators[]
+    | select(
+        .description == "Jump Palette: Mark a physical Esc before forwarding it"
+        and .from == {"key_code":"escape"}
+        and .to == [
+            {"key_code":"f20"},
+            {"key_code":"escape"}
+        ]
+        and jump_palette_only_condition
+        and original_event_only_condition
+        and jump_palette_guard_count == 0
+    )
+] | length == 1) as $physical_escape_marker_present
+| ($guarded_document | [
+    .rules[].manipulators[]
+    | select(
+        .description == "Jump Palette: Preserve Command-A as select all"
+        and .from == {
+            "key_code":"a",
+            "modifiers":{
+                "mandatory":["command"],
+                "optional":["caps_lock"]
+            }
+        }
+        and .to == [{"key_code":"f19"}]
+        and jump_palette_only_condition
+        and original_event_only_condition
+        and jump_palette_guard_count == 0
+    )
+] | length == 1) as $jump_select_all_bridge_present
+| without_jump_palette_guard
+|
+
 [
+    $finder_manipulators_guarded,
+    $physical_escape_marker_present,
+    $jump_select_all_bridge_present,
     ([
         .rules[]
         | select(.description == "Finer Utility Commands")
@@ -95,7 +167,10 @@ def clears_motion_count:
         | select(
             .description == "Normal Mode: Press z to jump to a zoxide folder"
             and .from == {"key_code":"z"}
-            and .to == [{"shell_command":$jump_command}]
+            and .to == [
+                {"set_variable":{"name":"finer_jump_active","value":1}},
+                {"shell_command":$jump_command}
+            ]
             and (.conditions | length == 3)
             and finder_normal_conditions
         )

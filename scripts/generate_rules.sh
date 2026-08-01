@@ -46,6 +46,25 @@ trap 'exit 143' TERM
 jq -n \
     --slurpfile utility "$utility_source" \
     --slurpfile navigation "$navigation_source" '
+    def jump_palette_guard: {
+        name: "finer_jump_active",
+        type: "variable_unless",
+        value: 1
+    };
+    def is_jump_palette_only:
+        ([.conditions[]? | select(
+            .name == "finer_jump_active"
+            and .type == "variable_if"
+            and .value == 1
+        )] | length == 1);
+    def guarded_rule:
+        .manipulators |= map(
+            if is_jump_palette_only then
+                .
+            else
+                .conditions = ((.conditions // []) + [jump_palette_guard])
+            end
+        );
     if ($utility | length) != 1
         or ($navigation | length) != 1
         or $utility[0].description != "Finer Utility Commands"
@@ -55,7 +74,7 @@ jq -n \
     else
         {
             title: "Finer (development snapshot)",
-            rules: [$utility[0], $navigation[0]]
+            rules: [($utility[0] | guarded_rule), ($navigation[0] | guarded_rule)]
         }
     end
 ' > "$temp_output"

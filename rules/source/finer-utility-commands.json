@@ -44,6 +44,63 @@
     {
       "conditions": [
         {
+          "name": "finer_jump_active",
+          "type": "variable_if",
+          "value": 1
+        },
+        {
+          "type": "event_changed_if",
+          "value": false
+        }
+      ],
+      "description": "Jump Palette: Mark a physical Esc before forwarding it",
+      "from": {
+        "key_code": "escape"
+      },
+      "to": [
+        {
+          "key_code": "f20"
+        },
+        {
+          "key_code": "escape"
+        }
+      ],
+      "type": "basic"
+    },
+    {
+      "conditions": [
+        {
+          "name": "finer_jump_active",
+          "type": "variable_if",
+          "value": 1
+        },
+        {
+          "type": "event_changed_if",
+          "value": false
+        }
+      ],
+      "description": "Jump Palette: Preserve Command-A as select all",
+      "from": {
+        "key_code": "a",
+        "modifiers": {
+          "mandatory": [
+            "command"
+          ],
+          "optional": [
+            "caps_lock"
+          ]
+        }
+      },
+      "to": [
+        {
+          "key_code": "f19"
+        }
+      ],
+      "type": "basic"
+    },
+    {
+      "conditions": [
+        {
           "bundle_identifiers": [
             "^com\\.apple\\.finder$"
           ],
@@ -65,7 +122,13 @@
       },
       "to": [
         {
-          "shell_command": "exec $HOME/.local/libexec/finder-vim/finer_jump >/dev/null 2>&1"
+          "set_variable": {
+            "name": "finer_jump_active",
+            "value": 1
+          }
+        },
+        {
+          "shell_command": "$HOME/.local/libexec/finder-vim/finer_jump >/dev/null 2>&1; exec '/Library/Application Support/org.pqrs/Karabiner-Elements/bin/karabiner_cli' --set-variables '{\"finer_jump_active\":0}' >/dev/null 2>&1"
         }
       ],
       "type": "basic"

@@ -25,6 +25,11 @@
               "name": "finder_g_prefix",
               "type": "variable_if",
               "value": 1
+            },
+            {
+              "name": "finer_jump_active",
+              "type": "variable_unless",
+              "value": 1
             }
           ],
           "description": "Visual Mode: Press gg to extend selection to first or Grid column top",
@@ -47,6 +52,63 @@
         {
           "conditions": [
             {
+              "name": "finer_jump_active",
+              "type": "variable_if",
+              "value": 1
+            },
+            {
+              "type": "event_changed_if",
+              "value": false
+            }
+          ],
+          "description": "Jump Palette: Mark a physical Esc before forwarding it",
+          "from": {
+            "key_code": "escape"
+          },
+          "to": [
+            {
+              "key_code": "f20"
+            },
+            {
+              "key_code": "escape"
+            }
+          ],
+          "type": "basic"
+        },
+        {
+          "conditions": [
+            {
+              "name": "finer_jump_active",
+              "type": "variable_if",
+              "value": 1
+            },
+            {
+              "type": "event_changed_if",
+              "value": false
+            }
+          ],
+          "description": "Jump Palette: Preserve Command-A as select all",
+          "from": {
+            "key_code": "a",
+            "modifiers": {
+              "mandatory": [
+                "command"
+              ],
+              "optional": [
+                "caps_lock"
+              ]
+            }
+          },
+          "to": [
+            {
+              "key_code": "f19"
+            }
+          ],
+          "type": "basic"
+        },
+        {
+          "conditions": [
+            {
               "bundle_identifiers": [
                 "^com\\.apple\\.finder$"
               ],
@@ -60,6 +122,11 @@
               "name": "finder_visual_mode",
               "type": "variable_unless",
               "value": 1
+            },
+            {
+              "name": "finer_jump_active",
+              "type": "variable_unless",
+              "value": 1
             }
           ],
           "description": "Normal Mode: Press z to jump to a zoxide folder",
@@ -68,7 +135,13 @@
           },
           "to": [
             {
-              "shell_command": "exec $HOME/.local/libexec/finder-vim/finer_jump >/dev/null 2>&1"
+              "set_variable": {
+                "name": "finer_jump_active",
+                "value": 1
+              }
+            },
+            {
+              "shell_command": "$HOME/.local/libexec/finder-vim/finer_jump >/dev/null 2>&1; exec '/Library/Application Support/org.pqrs/Karabiner-Elements/bin/karabiner_cli' --set-variables '{\"finer_jump_active\":0}' >/dev/null 2>&1"
             }
           ],
           "type": "basic"
@@ -88,6 +161,11 @@
             {
               "name": "finder_visual_mode",
               "type": "variable_if",
+              "value": 1
+            },
+            {
+              "name": "finer_jump_active",
+              "type": "variable_unless",
               "value": 1
             }
           ],
@@ -131,6 +209,11 @@
               "name": "finder_g_prefix",
               "type": "variable_if",
               "value": 1
+            },
+            {
+              "name": "finer_jump_active",
+              "type": "variable_unless",
+              "value": 1
             }
           ],
           "description": "Normal Mode: Press gg for List first or Grid column top",
@@ -166,6 +249,11 @@
               "name": "finder_visual_mode",
               "type": "variable_unless",
               "value": 1
+            },
+            {
+              "name": "finer_jump_active",
+              "type": "variable_unless",
+              "value": 1
             }
           ],
           "description": "Normal Mode: Press G for List last or Grid column bottom",
@@ -198,6 +286,11 @@
             {
               "expression": "accessibility.focused_ui_element.role_string like 'AXText*'",
               "type": "expression_unless"
+            },
+            {
+              "name": "finer_jump_active",
+              "type": "variable_unless",
+              "value": 1
             }
           ],
           "description": "Normal/Visual Mode: Start gg sequence",
@@ -256,6 +349,11 @@
               "name": "finder_c_prefix",
               "type": "variable_if",
               "value": 1
+            },
+            {
+              "name": "finer_jump_active",
+              "type": "variable_unless",
+              "value": 1
             }
           ],
           "description": "Normal Mode: Press cc to copy absolute paths",
@@ -295,6 +393,11 @@
             {
               "name": "finder_c_prefix",
               "type": "variable_if",
+              "value": 1
+            },
+            {
+              "name": "finer_jump_active",
+              "type": "variable_unless",
               "value": 1
             }
           ],
@@ -336,6 +439,11 @@
               "name": "finder_c_prefix",
               "type": "variable_if",
               "value": 1
+            },
+            {
+              "name": "finer_jump_active",
+              "type": "variable_unless",
+              "value": 1
             }
           ],
           "description": "Normal Mode: Press cf to copy names with extensions",
@@ -376,6 +484,11 @@
               "name": "finder_c_prefix",
               "type": "variable_if",
               "value": 1
+            },
+            {
+              "name": "finer_jump_active",
+              "type": "variable_unless",
+              "value": 1
             }
           ],
           "description": "Normal Mode: Press cn to copy names without extensions",
@@ -409,6 +522,11 @@
             },
             {
               "name": "finder_visual_mode",
+              "type": "variable_unless",
+              "value": 1
+            },
+            {
+              "name": "finer_jump_active",
               "type": "variable_unless",
               "value": 1
             }
@@ -464,6 +582,11 @@
               "name": "finder_visual_mode",
               "type": "variable_unless",
               "value": 1
+            },
+            {
+              "name": "finer_jump_active",
+              "type": "variable_unless",
+              "value": 1
             }
           ],
           "description": "Normal Mode: Press - to open the parent directory",
@@ -494,6 +617,11 @@
             },
             {
               "name": "finder_visual_mode",
+              "type": "variable_unless",
+              "value": 1
+            },
+            {
+              "name": "finer_jump_active",
               "type": "variable_unless",
               "value": 1
             }
@@ -529,6 +657,11 @@
               "name": "finder_visual_mode",
               "type": "variable_unless",
               "value": 1
+            },
+            {
+              "name": "finer_jump_active",
+              "type": "variable_unless",
+              "value": 1
             }
           ],
           "description": "Normal Mode: Press i to show Get Info",
@@ -559,6 +692,11 @@
             },
             {
               "name": "finder_visual_mode",
+              "type": "variable_unless",
+              "value": 1
+            },
+            {
+              "name": "finer_jump_active",
               "type": "variable_unless",
               "value": 1
             }
@@ -604,6 +742,11 @@
               "name": "finder_visual_mode",
               "type": "variable_unless",
               "value": 1
+            },
+            {
+              "name": "finer_jump_active",
+              "type": "variable_unless",
+              "value": 1
             }
           ],
           "description": "Normal Mode: Press Shift+n to create a new folder at Finder's active target",
@@ -645,6 +788,11 @@
               "name": "finder_visual_mode",
               "type": "variable_unless",
               "value": 1
+            },
+            {
+              "name": "finer_jump_active",
+              "type": "variable_unless",
+              "value": 1
             }
           ],
           "description": "Normal Mode: Press . to toggle hidden files",
@@ -678,6 +826,11 @@
             {
               "expression": "accessibility.focused_ui_element.role_string like 'AXText*'",
               "type": "expression_unless"
+            },
+            {
+              "name": "finer_jump_active",
+              "type": "variable_unless",
+              "value": 1
             }
           ],
           "description": "Normal/Visual Mode: Add 1 to Finder motion count",
@@ -725,6 +878,11 @@
             {
               "expression": "finder_motion_count == 0",
               "type": "expression_if"
+            },
+            {
+              "name": "finer_jump_active",
+              "type": "variable_unless",
+              "value": 1
             }
           ],
           "description": "Boost Mode: Hold Shift+j for Finder-native Down Arrow",
@@ -769,6 +927,11 @@
             {
               "expression": "finder_motion_count == 0",
               "type": "expression_if"
+            },
+            {
+              "name": "finer_jump_active",
+              "type": "variable_unless",
+              "value": 1
             }
           ],
           "description": "Boost Mode: Hold Shift+k for Finder-native Up Arrow",
@@ -799,6 +962,11 @@
             {
               "expression": "accessibility.focused_ui_element.role_string like 'AXText*'",
               "type": "expression_unless"
+            },
+            {
+              "name": "finer_jump_active",
+              "type": "variable_unless",
+              "value": 1
             }
           ],
           "description": "Normal/Visual Mode: Add 2 to Finder motion count",
@@ -832,6 +1000,11 @@
             {
               "expression": "accessibility.focused_ui_element.role_string like 'AXText*'",
               "type": "expression_unless"
+            },
+            {
+              "name": "finer_jump_active",
+              "type": "variable_unless",
+              "value": 1
             }
           ],
           "description": "Normal/Visual Mode: Add 3 to Finder motion count",
@@ -865,6 +1038,11 @@
             {
               "expression": "accessibility.focused_ui_element.role_string like 'AXText*'",
               "type": "expression_unless"
+            },
+            {
+              "name": "finer_jump_active",
+              "type": "variable_unless",
+              "value": 1
             }
           ],
           "description": "Normal/Visual Mode: Add 4 to Finder motion count",
@@ -898,6 +1076,11 @@
             {
               "expression": "accessibility.focused_ui_element.role_string like 'AXText*'",
               "type": "expression_unless"
+            },
+            {
+              "name": "finer_jump_active",
+              "type": "variable_unless",
+              "value": 1
             }
           ],
           "description": "Normal/Visual Mode: Add 5 to Finder motion count",
@@ -931,6 +1114,11 @@
             {
               "expression": "accessibility.focused_ui_element.role_string like 'AXText*'",
               "type": "expression_unless"
+            },
+            {
+              "name": "finer_jump_active",
+              "type": "variable_unless",
+              "value": 1
             }
           ],
           "description": "Normal/Visual Mode: Add 6 to Finder motion count",
@@ -964,6 +1152,11 @@
             {
               "expression": "accessibility.focused_ui_element.role_string like 'AXText*'",
               "type": "expression_unless"
+            },
+            {
+              "name": "finer_jump_active",
+              "type": "variable_unless",
+              "value": 1
             }
           ],
           "description": "Normal/Visual Mode: Add 7 to Finder motion count",
@@ -997,6 +1190,11 @@
             {
               "expression": "accessibility.focused_ui_element.role_string like 'AXText*'",
               "type": "expression_unless"
+            },
+            {
+              "name": "finer_jump_active",
+              "type": "variable_unless",
+              "value": 1
             }
           ],
           "description": "Normal/Visual Mode: Add 8 to Finder motion count",
@@ -1030,6 +1228,11 @@
             {
               "expression": "accessibility.focused_ui_element.role_string like 'AXText*'",
               "type": "expression_unless"
+            },
+            {
+              "name": "finer_jump_active",
+              "type": "variable_unless",
+              "value": 1
             }
           ],
           "description": "Normal/Visual Mode: Add 9 to Finder motion count",
@@ -1067,6 +1270,11 @@
             {
               "expression": "finder_motion_count > 0",
               "type": "expression_if"
+            },
+            {
+              "name": "finer_jump_active",
+              "type": "variable_unless",
+              "value": 1
             }
           ],
           "description": "Normal/Visual Mode: Add 0 to Finder motion count",
@@ -1108,6 +1316,11 @@
             {
               "name": "finder_visual_mode",
               "type": "variable_if",
+              "value": 1
+            },
+            {
+              "name": "finer_jump_active",
+              "type": "variable_unless",
               "value": 1
             }
           ],
@@ -2040,6 +2253,11 @@
             },
             {
               "name": "finder_visual_mode",
+              "type": "variable_unless",
+              "value": 1
+            },
+            {
+              "name": "finer_jump_active",
               "type": "variable_unless",
               "value": 1
             }
@@ -2975,6 +3193,11 @@
               "name": "finder_visual_mode",
               "type": "variable_if",
               "value": 1
+            },
+            {
+              "name": "finer_jump_active",
+              "type": "variable_unless",
+              "value": 1
             }
           ],
           "description": "Visual Mode: Extend selection up by Finder motion count",
@@ -3908,6 +4131,11 @@
               "name": "finder_visual_mode",
               "type": "variable_unless",
               "value": 1
+            },
+            {
+              "name": "finer_jump_active",
+              "type": "variable_unless",
+              "value": 1
             }
           ],
           "description": "Normal Mode: Move up by Finder motion count",
@@ -4837,6 +5065,11 @@
               "name": "finder_visual_mode",
               "type": "variable_unless",
               "value": 1
+            },
+            {
+              "name": "finer_jump_active",
+              "type": "variable_unless",
+              "value": 1
             }
           ],
           "description": "Normal Mode: Map h to reverse Grid row wrap with transient C worker",
@@ -4898,6 +5131,11 @@
               "name": "finder_native_list_edge_wrap_experiment",
               "type": "variable_unless",
               "value": 1
+            },
+            {
+              "name": "finer_jump_active",
+              "type": "variable_unless",
+              "value": 1
             }
           ],
           "description": "Experimental List native hold: Map j directly to Down Arrow",
@@ -4946,6 +5184,11 @@
             {
               "name": "finder_native_list_edge_wrap_experiment",
               "type": "variable_if",
+              "value": 1
+            },
+            {
+              "name": "finer_jump_active",
+              "type": "variable_unless",
               "value": 1
             }
           ],
@@ -5027,6 +5270,11 @@
               "name": "finder_native_list_edge_wrap_experiment",
               "type": "variable_if",
               "value": 1
+            },
+            {
+              "name": "finer_jump_active",
+              "type": "variable_unless",
+              "value": 1
             }
           ],
           "description": "Experimental List native hold with delayed edge monitor: Map k to Up Arrow",
@@ -5107,6 +5355,11 @@
               "name": "finder_native_list_edge_wrap_experiment",
               "type": "variable_unless",
               "value": 1
+            },
+            {
+              "name": "finer_jump_active",
+              "type": "variable_unless",
+              "value": 1
             }
           ],
           "description": "Experimental List native hold: Map k directly to Up Arrow",
@@ -5158,6 +5411,11 @@
             },
             {
               "name": "finder_native_column_edge_wrap_experiment",
+              "type": "variable_unless",
+              "value": 1
+            },
+            {
+              "name": "finer_jump_active",
               "type": "variable_unless",
               "value": 1
             }
@@ -5213,6 +5471,11 @@
               "name": "finder_native_column_edge_wrap_experiment",
               "type": "variable_unless",
               "value": 1
+            },
+            {
+              "name": "finer_jump_active",
+              "type": "variable_unless",
+              "value": 1
             }
           ],
           "description": "Experimental Column native hold: Map k directly to Up Arrow",
@@ -5265,6 +5528,11 @@
             {
               "name": "finder_native_column_edge_wrap_experiment",
               "type": "variable_if",
+              "value": 1
+            },
+            {
+              "name": "finer_jump_active",
+              "type": "variable_unless",
               "value": 1
             }
           ],
@@ -5353,6 +5621,11 @@
               "name": "finder_native_column_edge_wrap_experiment",
               "type": "variable_if",
               "value": 1
+            },
+            {
+              "name": "finer_jump_active",
+              "type": "variable_unless",
+              "value": 1
             }
           ],
           "description": "Experimental Column native hold with delayed edge monitor: Map k to Up Arrow",
@@ -5417,6 +5690,11 @@
               "name": "finder_visual_mode",
               "type": "variable_unless",
               "value": 1
+            },
+            {
+              "name": "finer_jump_active",
+              "type": "variable_unless",
+              "value": 1
             }
           ],
           "description": "Normal Mode: Map j to List wrap or Grid down with transient C worker",
@@ -5457,6 +5735,11 @@
             },
             {
               "name": "finder_visual_mode",
+              "type": "variable_unless",
+              "value": 1
+            },
+            {
+              "name": "finer_jump_active",
               "type": "variable_unless",
               "value": 1
             }
@@ -5501,6 +5784,11 @@
               "name": "finder_visual_mode",
               "type": "variable_unless",
               "value": 1
+            },
+            {
+              "name": "finer_jump_active",
+              "type": "variable_unless",
+              "value": 1
             }
           ],
           "description": "Normal Mode: Map l to forward Grid row wrap with transient C worker",
@@ -5541,6 +5829,11 @@
             },
             {
               "name": "finder_visual_mode",
+              "type": "variable_unless",
+              "value": 1
+            },
+            {
+              "name": "finer_jump_active",
               "type": "variable_unless",
               "value": 1
             }
@@ -5584,6 +5877,11 @@
               "name": "finder_visual_mode",
               "type": "variable_unless",
               "value": 1
+            },
+            {
+              "name": "finer_jump_active",
+              "type": "variable_unless",
+              "value": 1
             }
           ],
           "description": "Normal Mode: Press r to rename",
@@ -5611,6 +5909,11 @@
             },
             {
               "name": "finder_visual_mode",
+              "type": "variable_unless",
+              "value": 1
+            },
+            {
+              "name": "finer_jump_active",
               "type": "variable_unless",
               "value": 1
             }
@@ -5672,6 +5975,11 @@
               "name": "finder_visual_mode",
               "type": "variable_if",
               "value": 1
+            },
+            {
+              "name": "finer_jump_active",
+              "type": "variable_unless",
+              "value": 1
             }
           ],
           "description": "Visual Mode: Extend selection left with h",
@@ -5704,6 +6012,11 @@
             {
               "name": "finder_visual_mode",
               "type": "variable_if",
+              "value": 1
+            },
+            {
+              "name": "finer_jump_active",
+              "type": "variable_unless",
               "value": 1
             }
           ],
@@ -5738,6 +6051,11 @@
               "name": "finder_visual_mode",
               "type": "variable_if",
               "value": 1
+            },
+            {
+              "name": "finer_jump_active",
+              "type": "variable_unless",
+              "value": 1
             }
           ],
           "description": "Visual Mode: Extend selection up with k",
@@ -5771,6 +6089,11 @@
               "name": "finder_visual_mode",
               "type": "variable_if",
               "value": 1
+            },
+            {
+              "name": "finer_jump_active",
+              "type": "variable_unless",
+              "value": 1
             }
           ],
           "description": "Visual Mode: Extend selection right with l",
@@ -5803,6 +6126,11 @@
             {
               "name": "finder_visual_mode",
               "type": "variable_if",
+              "value": 1
+            },
+            {
+              "name": "finer_jump_active",
+              "type": "variable_unless",
               "value": 1
             }
           ],
@@ -5857,6 +6185,11 @@
               "name": "finder_visual_mode",
               "type": "variable_if",
               "value": 1
+            },
+            {
+              "name": "finer_jump_active",
+              "type": "variable_unless",
+              "value": 1
             }
           ],
           "description": "Visual Mode: Mark selection for move with x and return to Normal Mode",
@@ -5904,6 +6237,11 @@
               "name": "finder_visual_mode",
               "type": "variable_if",
               "value": 1
+            },
+            {
+              "name": "finer_jump_active",
+              "type": "variable_unless",
+              "value": 1
             }
           ],
           "description": "Visual Mode: Move selection to Trash with d and return to Normal Mode",
@@ -5945,6 +6283,11 @@
             {
               "name": "finder_visual_mode",
               "type": "variable_if",
+              "value": 1
+            },
+            {
+              "name": "finer_jump_active",
+              "type": "variable_unless",
               "value": 1
             }
           ],
@@ -6011,6 +6354,11 @@
               "name": "finder_visual_mode",
               "type": "variable_unless",
               "value": 1
+            },
+            {
+              "name": "finer_jump_active",
+              "type": "variable_unless",
+              "value": 1
             }
           ],
           "description": "Normal Mode: Toggle discontiguous Finder mark with s",
@@ -6044,6 +6392,11 @@
             },
             {
               "name": "finder_visual_mode",
+              "type": "variable_unless",
+              "value": 1
+            },
+            {
+              "name": "finer_jump_active",
               "type": "variable_unless",
               "value": 1
             }
@@ -6085,6 +6438,11 @@
             },
             {
               "name": "finder_visual_mode",
+              "type": "variable_unless",
+              "value": 1
+            },
+            {
+              "name": "finer_jump_active",
               "type": "variable_unless",
               "value": 1
             }
@@ -6133,6 +6491,11 @@
               "name": "finder_confirmed_marks_maybe_present",
               "type": "variable_unless",
               "value": 1
+            },
+            {
+              "name": "finer_jump_active",
+              "type": "variable_unless",
+              "value": 1
             }
           ],
           "description": "Normal Mode: Move Finder selection to Trash with native d",
@@ -6171,6 +6534,11 @@
               "name": "finder_confirmed_marks_maybe_present",
               "type": "variable_if",
               "value": 1
+            },
+            {
+              "name": "finer_jump_active",
+              "type": "variable_unless",
+              "value": 1
             }
           ],
           "description": "Normal Mode: Move confirmed marks to Trash with d",
@@ -6204,6 +6572,11 @@
             {
               "name": "finder_cut_pending",
               "type": "variable_if",
+              "value": 1
+            },
+            {
+              "name": "finer_jump_active",
+              "type": "variable_unless",
               "value": 1
             }
           ],
@@ -6250,6 +6623,11 @@
               "name": "finder_copy_pending",
               "type": "variable_if",
               "value": 1
+            },
+            {
+              "name": "finer_jump_active",
+              "type": "variable_unless",
+              "value": 1
             }
           ],
           "description": "Normal Mode: Copy-paste Finer items with p after y",
@@ -6289,6 +6667,11 @@
               "name": "finder_copy_pending",
               "type": "variable_unless",
               "value": 1
+            },
+            {
+              "name": "finer_jump_active",
+              "type": "variable_unless",
+              "value": 1
             }
           ],
           "description": "Normal Mode: Paste Finder items with p",
@@ -6319,6 +6702,11 @@
             },
             {
               "name": "finder_visual_mode",
+              "type": "variable_unless",
+              "value": 1
+            },
+            {
+              "name": "finer_jump_active",
               "type": "variable_unless",
               "value": 1
             }
