@@ -8,7 +8,7 @@ environment details listed at the end of this document when reporting a bug.
 1. Install and configure Karabiner-Elements.
 2. Confirm the Xcode Command Line Tools, `jq`, and `ripgrep` are available.
    Install `zoxide` as well if you want ranked folder history in the `z`
-   palette. File search uses the built-in Spotlight index.
+   palette. Unvisited folder and file search uses the built-in Spotlight index.
 3. Run `make check`.
 4. Run `make install`.
 5. Open Karabiner-Elements Settings > Complex Modifications.
@@ -68,7 +68,7 @@ ls -l ~/.local/libexec/finder-vim/finder_ax_move
 ls -l ~/.local/libexec/finder-vim/finer_jump
 ```
 
-## `z` does not open, find files, or navigate
+## `z` does not open, find folders or files, or navigate
 
 Confirm zoxide is installed and has learned at least one directory:
 
@@ -76,9 +76,10 @@ Confirm zoxide is installed and has learned at least one directory:
 zoxide query --list --score
 ```
 
-zoxide is optional for file results. File search begins after two characters
-and searches the current user's home directory through the macOS Spotlight
-index. If a known file does not appear, confirm Spotlight can find it:
+zoxide is optional for Spotlight results. Unvisited folder and file search
+begins after two characters and searches the current user's home directory
+through the macOS Spotlight index. If a known item does not appear, confirm
+Spotlight can find it:
 
 ```sh
 mdfind -onlyin "$HOME" -name 'part of the file name'

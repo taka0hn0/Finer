@@ -42,11 +42,11 @@ macOS Accessibility and Karabiner-Elements.
 - `n` creates a folder beside the selected item. `Shift+n` keeps Finder's
   active-target behavior, which creates inside a selected directory in Column
   View.
-- `z` opens an on-demand folder and file palette. zoxide ranks folders, while
-  two or more typed characters add file results from macOS Spotlight. Use
-  `Up`/`Down` or `Control+j`/`Control+k`, then press `Return` to move the same
-  Finder window. A file result opens its parent and selects the file. `Esc`
-  closes the palette.
+- `z` opens an on-demand folder and file palette. zoxide ranks visited folders,
+  while two or more typed characters add unvisited folders and files from
+  macOS Spotlight. Use `Up`/`Down` or `Control+j`/`Control+k`, then press
+  `Return` to move the same Finder window. A file result opens its parent and
+  selects the file. `Esc` closes the palette.
 - `Esc` clears the displayed selection in one press, including from Visual
   Mode.
 
@@ -71,8 +71,9 @@ Requirements:
 - Karabiner-Elements
 - `jq` for the current development checks
 - `ripgrep` for the current development checks
-- `zoxide` for ranked folder history in the optional `z` palette. File search
-  uses the built-in macOS Spotlight index and still works without zoxide.
+- `zoxide` for ranked folder history in the optional `z` palette. Unvisited
+  folder and file search uses the built-in macOS Spotlight index and still
+  works without zoxide.
 
 ```sh
 make build

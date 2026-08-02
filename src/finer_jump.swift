@@ -44,9 +44,9 @@ private enum JumpError: LocalizedError {
         case .spotlightUnavailable:
             return "Spotlight search is unavailable."
         case let .spotlightFailed(message):
-            return "Could not search files: \(message)"
+            return "Could not search folders or files: \(message)"
         case .searchCancelled:
-            return "File search was cancelled."
+            return "Spotlight search was cancelled."
         case .noFinderWindow:
             return "Finder has no window to navigate."
         case let .navigationFailed(message):
@@ -301,13 +301,13 @@ private final class SpotlightClient {
             guard FileManager.default.fileExists(
                 atPath: path,
                 isDirectory: &isDirectory
-            ), !isDirectory.boolValue else {
+            ) else {
                 continue
             }
             candidates.append(
                 JumpCandidate(
                     path: path,
-                    kind: .file,
+                    kind: isDirectory.boolValue ? .folder : .file,
                     sourceScore: Double(Self.resultLimit - candidates.count)
                         / Double(Self.resultLimit)
                 )
@@ -333,6 +333,7 @@ private final class SpotlightClient {
 
 private enum CandidateFilter {
     static func matches(_ candidates: [JumpCandidate], query: String) -> [JumpCandidate] {
+        let candidates = deduplicated(candidates)
         let normalizedQuery = normalize(query)
         guard !normalizedQuery.isEmpty else {
             return candidates.sorted { $0.sourceScore > $1.sourceScore }
@@ -370,6 +371,14 @@ private enum CandidateFilter {
             return $0.1 > $1.1
         }
         .map(\.0)
+    }
+
+    private static func deduplicated(_ candidates: [JumpCandidate]) -> [JumpCandidate] {
+        var seenPaths = Set<String>()
+        return candidates.filter { candidate in
+            let path = (candidate.path as NSString).standardizingPath
+            return seenPaths.insert(path).inserted
+        }
     }
 
     private static func normalize(_ value: String) -> String {
@@ -529,6 +538,20 @@ private enum FinderNavigator {
     }
 }
 
+private enum JumpCompletion {
+    static func navigateAndLearn(
+        candidate: JumpCandidate,
+        zoxide: ZoxideClient?
+    ) throws {
+        try FinderNavigator.navigate(to: candidate)
+        let visitedFolder = candidate.kind == .folder
+            ? candidate.path
+            : URL(fileURLWithPath: candidate.path)
+                .deletingLastPathComponent().path
+        zoxide?.add(path: visitedFolder)
+    }
+}
+
 private final class JumpPanel: NSPanel {
     var handleNavigationKey: ((NSEvent) -> Bool)?
     var recordLifecycleEvent: ((String) -> Void)?
@@ -623,7 +646,7 @@ private final class JumpController: NSObject, NSApplicationDelegate,
     private let zoxideLoadError: Error?
     private let spotlightLoadError: Error?
     private var folderCandidates: [JumpCandidate] = []
-    private var fileCandidates: [JumpCandidate] = []
+    private var spotlightCandidates: [JumpCandidate] = []
     private var filteredCandidates: [JumpCandidate] = []
     private var fileSearchWorkItem: DispatchWorkItem?
     private var fileSearchError: Error?
@@ -822,7 +845,7 @@ private final class JumpController: NSObject, NSApplicationDelegate,
         fileSearchWorkItem = nil
         spotlight?.cancel()
         shouldAcceptAfterFileSearch = false
-        fileCandidates = []
+        spotlightCandidates = []
         fileSearchError = nil
         isSearchingFiles = false
 
@@ -848,10 +871,10 @@ private final class JumpController: NSObject, NSApplicationDelegate,
                 self.isSearchingFiles = false
                 switch result {
                 case let .success(candidates):
-                    self.fileCandidates = candidates
+                    self.spotlightCandidates = candidates
                     self.fileSearchError = nil
                 case let .failure(error):
-                    self.fileCandidates = []
+                    self.spotlightCandidates = []
                     self.fileSearchError = error
                 }
                 self.updateFilter()
@@ -870,7 +893,7 @@ private final class JumpController: NSObject, NSApplicationDelegate,
 
     private func updateFilter() {
         filteredCandidates = CandidateFilter.matches(
-            folderCandidates + fileCandidates,
+            folderCandidates + spotlightCandidates,
             query: searchField.stringValue
         )
         tableView.reloadData()
@@ -893,17 +916,17 @@ private final class JumpController: NSObject, NSApplicationDelegate,
 
         if isSearchingFiles {
             statusLabel.stringValue =
-                "\(folderCount) folders  ·  Searching files…  ·  \(navigationHelp)"
+                "\(folderCount) folders  ·  Searching folders and files…  ·  \(navigationHelp)"
         } else if let fileSearchError {
             statusLabel.stringValue =
                 "\(folderCount) folders  ·  \(fileSearchError.localizedDescription)"
         } else if query.count < 2 {
             if filteredCandidates.isEmpty, let zoxideLoadError {
                 statusLabel.stringValue =
-                    "\(zoxideLoadError.localizedDescription) Type 2+ characters to search files."
+                    "\(zoxideLoadError.localizedDescription) Type 2+ characters to search folders and files."
             } else {
                 statusLabel.stringValue =
-                    "\(folderCount) folders  ·  Type 2+ characters to include files  ·  \(navigationHelp)"
+                    "\(folderCount) folders  ·  Type 2+ characters to include unvisited folders and files  ·  \(navigationHelp)"
             }
         } else if filteredCandidates.isEmpty {
             statusLabel.stringValue = "No matching folder or file"
@@ -1080,7 +1103,7 @@ private final class JumpController: NSObject, NSApplicationDelegate,
         if isSearchingFiles {
             diagnostics.record("accept-deferred-for-file-search")
             shouldAcceptAfterFileSearch = true
-            statusLabel.stringValue = "Searching files…"
+            statusLabel.stringValue = "Searching folders and files…"
             return
         }
         let row = tableView.selectedRow
@@ -1094,13 +1117,8 @@ private final class JumpController: NSObject, NSApplicationDelegate,
         diagnostics.record("accept-start kind=\(candidate.kind == .folder ? "folder" : "file")")
         isCompletingSelection = true
         do {
-            try FinderNavigator.navigate(to: candidate)
+            try JumpCompletion.navigateAndLearn(candidate: candidate, zoxide: zoxide)
             panel.orderOut(nil)
-            let visitedFolder = candidate.kind == .folder
-                ? candidate.path
-                : URL(fileURLWithPath: candidate.path)
-                    .deletingLastPathComponent().path
-            zoxide?.add(path: visitedFolder)
             diagnostics.record("accept-success-terminate")
             NSApp.terminate(nil)
         } catch {
@@ -1194,6 +1212,38 @@ private func runHeadless(arguments: [String]) -> Int32? {
     if first == "--navigate-file", let path = arguments.dropFirst().first {
         do {
             try FinderNavigator.reveal(file: path)
+            return 0
+        } catch {
+            FileHandle.standardError.write(
+                Data("finer_jump: \(error.localizedDescription)\n".utf8)
+            )
+            return 1
+        }
+    }
+    if first == "--navigate-and-learn-folder",
+       let path = arguments.dropFirst().first {
+        do {
+            let zoxide = try? ZoxideClient.discover()
+            try JumpCompletion.navigateAndLearn(
+                candidate: JumpCandidate(path: path, kind: .folder, sourceScore: 0),
+                zoxide: zoxide
+            )
+            return 0
+        } catch {
+            FileHandle.standardError.write(
+                Data("finer_jump: \(error.localizedDescription)\n".utf8)
+            )
+            return 1
+        }
+    }
+    if first == "--navigate-and-learn-file",
+       let path = arguments.dropFirst().first {
+        do {
+            let zoxide = try? ZoxideClient.discover()
+            try JumpCompletion.navigateAndLearn(
+                candidate: JumpCandidate(path: path, kind: .file, sourceScore: 0),
+                zoxide: zoxide
+            )
             return 0
         } catch {
             FileHandle.standardError.write(
