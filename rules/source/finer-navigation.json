@@ -4762,16 +4762,35 @@
       },
       "to": [
         {
+          "set_variable": {
+            "name": "finder_normal_vertical_owner",
+            "value": 1
+          }
+        },
+        {
           "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_step hold-start down >/dev/null 2>&1"
         }
       ],
       "to_after_key_up": [
         {
-          "shell_command": "exec /usr/bin/truncate -s 0 $HOME/.local/state/finder-vim/finder_down_hold.txt"
+          "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_step hold-stop down >/dev/null 2>&1"
+        },
+        {
+          "set_variable": {
+            "expression": "finder_normal_vertical_owner == 1 ? 0 : finder_normal_vertical_owner",
+            "name": "finder_normal_vertical_owner"
+          }
         }
       ],
       "to_if_held_down": [
         {
+          "conditions": [
+            {
+              "name": "finder_normal_vertical_owner",
+              "type": "variable_if",
+              "value": 1
+            }
+          ],
           "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_step hold-repeat down >/dev/null 2>&1"
         }
       ],
@@ -4804,16 +4823,35 @@
       },
       "to": [
         {
+          "set_variable": {
+            "name": "finder_normal_vertical_owner",
+            "value": 2
+          }
+        },
+        {
           "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_step hold-start up >/dev/null 2>&1"
         }
       ],
       "to_after_key_up": [
         {
-          "shell_command": "exec /usr/bin/truncate -s 0 $HOME/.local/state/finder-vim/finder_up_hold.txt"
+          "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_step hold-stop up >/dev/null 2>&1"
+        },
+        {
+          "set_variable": {
+            "expression": "finder_normal_vertical_owner == 2 ? 0 : finder_normal_vertical_owner",
+            "name": "finder_normal_vertical_owner"
+          }
         }
       ],
       "to_if_held_down": [
         {
+          "conditions": [
+            {
+              "name": "finder_normal_vertical_owner",
+              "type": "variable_if",
+              "value": 2
+            }
+          ],
           "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_step hold-repeat up >/dev/null 2>&1"
         }
       ],

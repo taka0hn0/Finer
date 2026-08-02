@@ -17,6 +17,7 @@ mkdir -p "$state_root"
 
 "$helper" edge-monitor-self-test
 HOME="$temp_root" "$helper" edge-monitor-lock-self-test
+HOME="$temp_root" "$helper" hold-token-stop-self-test
 
 for lock_name in \
         finder_list_down_edge_monitor.lock \
@@ -30,4 +31,4 @@ for lock_name in \
     fi
 done
 
-print -- "Vertical edge monitor headless tests passed."
+print -- "Vertical edge monitor and hold-token headless tests passed."

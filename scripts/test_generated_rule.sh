@@ -14,6 +14,8 @@ visual_start_command='$HOME/.local/libexec/finder-vim/finder_ax_move visual-star
 copy_marks_command='$HOME/.local/libexec/finder-vim/finder_action_marked.sh copy >/dev/null 2>&1; exec /usr/bin/truncate -s 0 $HOME/.local/state/finder-vim/finder_marks.txt $HOME/.local/state/finder-vim/finder_navigation_anchor.txt'
 new_folder_current_level_command='exec $HOME/.local/libexec/finder-vim/finder_ax_move new-folder-current-level >/dev/null 2>&1'
 jump_command='$HOME/.local/libexec/finder-vim/finer_jump >/dev/null 2>&1; exec '\''/Library/Application Support/org.pqrs/Karabiner-Elements/bin/karabiner_cli'\'' --set-variables '\''{"finer_jump_active":0}'\'' >/dev/null 2>&1'
+hold_stop_down_command='exec $HOME/.local/libexec/finder-vim/finder_ax_step hold-stop down >/dev/null 2>&1'
+hold_stop_up_command='exec $HOME/.local/libexec/finder-vim/finder_ax_step hold-stop up >/dev/null 2>&1'
 
 jq -e \
     --arg text_expression "$text_expression" \
@@ -26,7 +28,9 @@ jq -e \
     --arg visual_start_command "$visual_start_command" \
     --arg copy_marks_command "$copy_marks_command" \
     --arg new_folder_current_level_command "$new_folder_current_level_command" \
-    --arg jump_command "$jump_command" '
+    --arg jump_command "$jump_command" \
+    --arg hold_stop_down_command "$hold_stop_down_command" \
+    --arg hold_stop_up_command "$hold_stop_up_command" '
 def finder_normal_conditions:
     ([.conditions[] | select(
         .type == "frontmost_application_if"
@@ -891,6 +895,64 @@ def without_jump_palette_guard:
             .description == "Normal Mode: Press - to open the parent directory"
             and .from == {"key_code":"hyphen"}
             and .to == [{"key_code":"up_arrow","modifiers":["command"]}]
+            and finder_normal_conditions
+        )
+    ] | length == 1),
+    ([
+        .rules[]
+        | select(.description == "Finer Navigation")
+        | .manipulators[]
+        | select(
+            .description == "Normal Mode: Map j to List wrap or Grid down with transient C worker"
+            and .from == {"key_code":"j"}
+            and .to == [
+                {"set_variable":{"name":"finder_normal_vertical_owner","value":1}},
+                {"shell_command":"exec $HOME/.local/libexec/finder-vim/finder_ax_step hold-start down >/dev/null 2>&1"}
+            ]
+            and .to_after_key_up == [
+                {"shell_command":$hold_stop_down_command},
+                {"set_variable":{
+                    "expression":"finder_normal_vertical_owner == 1 ? 0 : finder_normal_vertical_owner",
+                    "name":"finder_normal_vertical_owner"
+                }}
+            ]
+            and .to_if_held_down == [{
+                "conditions":[{
+                    "name":"finder_normal_vertical_owner",
+                    "type":"variable_if",
+                    "value":1
+                }],
+                "shell_command":"exec $HOME/.local/libexec/finder-vim/finder_ax_step hold-repeat down >/dev/null 2>&1"
+            }]
+            and finder_normal_conditions
+        )
+    ] | length == 1),
+    ([
+        .rules[]
+        | select(.description == "Finer Navigation")
+        | .manipulators[]
+        | select(
+            .description == "Normal Mode: Map k to List wrap or Grid up with transient C worker"
+            and .from == {"key_code":"k"}
+            and .to == [
+                {"set_variable":{"name":"finder_normal_vertical_owner","value":2}},
+                {"shell_command":"exec $HOME/.local/libexec/finder-vim/finder_ax_step hold-start up >/dev/null 2>&1"}
+            ]
+            and .to_after_key_up == [
+                {"shell_command":$hold_stop_up_command},
+                {"set_variable":{
+                    "expression":"finder_normal_vertical_owner == 2 ? 0 : finder_normal_vertical_owner",
+                    "name":"finder_normal_vertical_owner"
+                }}
+            ]
+            and .to_if_held_down == [{
+                "conditions":[{
+                    "name":"finder_normal_vertical_owner",
+                    "type":"variable_if",
+                    "value":2
+                }],
+                "shell_command":"exec $HOME/.local/libexec/finder-vim/finder_ax_step hold-repeat up >/dev/null 2>&1"
+            }]
             and finder_normal_conditions
         )
     ] | length == 1),

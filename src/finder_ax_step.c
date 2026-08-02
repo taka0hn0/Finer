@@ -2354,9 +2354,12 @@ static bool post_column_navigation_key(
     return success;
 }
 
+static const CFIndex current_index_unknown = (CFIndex)-2;
+
 static CFIndex move_once(
     navigation_context_t *context,
     direction_t direction,
+    CFIndex current_hint,
     int lock_fd,
     bool *navigation_may_change,
     bool use_navigation_anchor,
@@ -2385,7 +2388,9 @@ static CFIndex move_once(
         : context->role == navigation_grid
             && context->predicted_index >= 0
         ? context->predicted_index
-        : current_index(context);
+        : current_hint != current_index_unknown
+            ? current_hint
+            : current_index(context);
     if (context->role == navigation_grid) {
         CFIndex position = 0;
         if (current >= 0
@@ -2654,8 +2659,12 @@ static void token_path(char *buffer, size_t size, direction_t direction) {
 static bool write_hold_token(direction_t direction) {
     char path[PATH_MAX];
     token_path(path, sizeof(path), direction);
-    int descriptor = open(path, O_CREAT | O_TRUNC | O_WRONLY, 0600);
+    int descriptor = open(path, O_CREAT | O_RDWR, 0600);
     if (descriptor < 0) return false;
+    if (flock(descriptor, LOCK_EX) != 0) {
+        close(descriptor);
+        return false;
+    }
 
     uint64_t random_values[2];
     arc4random_buf(random_values, sizeof(random_values));
@@ -2663,11 +2672,16 @@ static bool write_hold_token(direction_t direction) {
     int length = snprintf(
         token,
         sizeof(token),
-        "%016llx%016llx",
+        "%" PRIu64 "\t%016" PRIx64 "%016" PRIx64,
+        monotonic_nanoseconds(),
         random_values[0],
         random_values[1]
     );
-    bool success = write(descriptor, token, (size_t)length) == length;
+    bool success = length > 0
+        && length < (int)sizeof(token)
+        && ftruncate(descriptor, 0) == 0
+        && pwrite(descriptor, token, (size_t)length, 0) == length;
+    flock(descriptor, LOCK_UN);
     close(descriptor);
     return success;
 }
@@ -2675,10 +2689,16 @@ static bool write_hold_token(direction_t direction) {
 static bool clear_hold_token(direction_t direction) {
     char path[PATH_MAX];
     token_path(path, sizeof(path), direction);
-    int descriptor = open(path, O_CREAT | O_TRUNC | O_WRONLY, 0600);
+    int descriptor = open(path, O_CREAT | O_RDWR, 0600);
     if (descriptor < 0) return false;
+    if (flock(descriptor, LOCK_EX) != 0) {
+        close(descriptor);
+        return false;
+    }
+    bool success = ftruncate(descriptor, 0) == 0;
+    flock(descriptor, LOCK_UN);
     close(descriptor);
-    return true;
+    return success;
 }
 
 static ssize_t read_token(int descriptor, char *buffer, size_t size) {
@@ -2686,6 +2706,109 @@ static ssize_t read_token(int descriptor, char *buffer, size_t size) {
     if (count < 0) return count;
     buffer[count] = '\0';
     return count;
+}
+
+static bool token_created_within(
+    int descriptor,
+    uint64_t maximum_age_nanoseconds
+) {
+    char token[64];
+    ssize_t token_length = read_token(descriptor, token, sizeof(token));
+    if (token_length <= 0) return false;
+
+    char *separator = strchr(token, '\t');
+    if (!separator) return false;
+    *separator = '\0';
+    char *end = NULL;
+    errno = 0;
+    uint64_t created_nanoseconds = strtoull(token, &end, 10);
+    uint64_t now = monotonic_nanoseconds();
+    return errno == 0
+        && end
+        && *end == '\0'
+        && now >= created_nanoseconds
+        && now - created_nanoseconds < maximum_age_nanoseconds;
+}
+
+static bool hold_token_created_within(
+    direction_t direction,
+    uint64_t maximum_age_nanoseconds
+) {
+    char path[PATH_MAX];
+    token_path(path, sizeof(path), direction);
+    int descriptor = open(path, O_RDONLY);
+    if (descriptor < 0) return false;
+    if (flock(descriptor, LOCK_SH) != 0) {
+        close(descriptor);
+        return false;
+    }
+    bool recent = token_created_within(
+        descriptor,
+        maximum_age_nanoseconds
+    );
+    flock(descriptor, LOCK_UN);
+    close(descriptor);
+    return recent;
+}
+
+static bool stop_hold_token(direction_t direction) {
+    const uint64_t new_generation_guard_nanoseconds = 100000000ULL;
+    char path[PATH_MAX];
+    token_path(path, sizeof(path), direction);
+    int descriptor = open(path, O_CREAT | O_RDWR, 0600);
+    if (descriptor < 0) return false;
+    if (flock(descriptor, LOCK_EX) != 0) {
+        close(descriptor);
+        return false;
+    }
+
+    bool preserve_new_generation = token_created_within(
+        descriptor,
+        new_generation_guard_nanoseconds
+    );
+
+    bool success = preserve_new_generation
+        || ftruncate(descriptor, 0) == 0;
+    flock(descriptor, LOCK_UN);
+    close(descriptor);
+    return success;
+}
+
+static int run_hold_token_stop_self_test(void) {
+    char path[PATH_MAX];
+    token_path(path, sizeof(path), direction_down);
+
+    if (!write_hold_token(direction_down)) return 1;
+    if (!stop_hold_token(direction_down)) return 1;
+    int descriptor = open(path, O_RDONLY);
+    if (descriptor < 0) return 1;
+    char token[64];
+    ssize_t token_length = read_token(descriptor, token, sizeof(token));
+    close(descriptor);
+    if (token_length <= 0) return 1;
+
+    if (!write_hold_token(direction_up)) return 1;
+    if (!hold_token_created_within(direction_up, 100000000ULL)) return 1;
+
+    usleep(110000);
+    if (hold_token_created_within(direction_up, 100000000ULL)) return 1;
+    if (!stop_hold_token(direction_down)) return 1;
+    descriptor = open(path, O_RDONLY);
+    if (descriptor < 0) return 1;
+    token_length = read_token(descriptor, token, sizeof(token));
+    close(descriptor);
+    if (token_length != 0) return 1;
+
+    if (!write_hold_token(direction_up)
+        || !clear_hold_token(direction_up)) {
+        return 1;
+    }
+    token_path(path, sizeof(path), direction_up);
+    descriptor = open(path, O_RDONLY);
+    if (descriptor < 0) return 1;
+    token_length = read_token(descriptor, token, sizeof(token));
+    close(descriptor);
+    return token_length == 0 ? 0 : 1;
 }
 
 static double monotonic_seconds(void) {
@@ -3216,6 +3339,7 @@ static CFIndex move_worker_context(
     navigation_context_t *context,
     bool *context_created,
     direction_t direction,
+    CFIndex current,
     int movement_lock_fd,
     bool use_navigation_anchor,
     column_phase_metrics_t *column_phases
@@ -3243,6 +3367,7 @@ static CFIndex move_worker_context(
     CFIndex position = move_once(
         context,
         direction,
+        current,
         movement_lock_fd,
         &navigation_may_change,
         use_navigation_anchor,
@@ -3282,7 +3407,7 @@ static CFIndex worker_move(
     bool use_navigation_anchor,
     column_phase_metrics_t *column_phases
 ) {
-    CFIndex validated_index = 0;
+    CFIndex validated_index = current_index_unknown;
     if (*context_created) {
         uint64_t validation_started_nanoseconds = column_phases
             ? monotonic_nanoseconds()
@@ -3311,12 +3436,14 @@ static CFIndex worker_move(
             );
         }
         if (!*context_created) return false;
+        validated_index = current_index(context);
     }
 
     CFIndex position = move_worker_context(
         context,
         context_created,
         direction,
+        validated_index,
         movement_lock_fd,
         use_navigation_anchor,
         column_phases
@@ -3335,10 +3462,12 @@ static CFIndex worker_move(
         );
     }
     if (!*context_created) return 0;
+    validated_index = current_index(context);
     return move_worker_context(
         context,
         context_created,
         direction,
+        validated_index,
         movement_lock_fd,
         false,
         column_phases
@@ -3637,13 +3766,18 @@ static bool enqueue_clear_selection(void) {
 }
 
 static int run_hold_start(direction_t direction) {
-    if (direction == direction_down
-        && !clear_hold_token(direction_up)) {
-        return 1;
-    }
-    if (direction == direction_up
-        && !clear_hold_token(direction_down)) {
-        return 1;
+    if (direction == direction_down || direction == direction_up) {
+        direction_t opposite = direction == direction_down
+            ? direction_up
+            : direction_down;
+        if (!write_hold_token(direction)) return 1;
+        if (!clear_hold_token(opposite)) {
+            clear_hold_token(direction);
+            return 1;
+        }
+        bool enqueued = enqueue_worker_step(direction);
+        if (!enqueued) clear_hold_token(direction);
+        return enqueued ? 0 : 1;
     }
     bool enqueued = enqueue_worker_step(direction);
     bool token_written = write_hold_token(direction);
@@ -4374,6 +4508,16 @@ static CFIndex run_native_list_hold_repeat(
     }
 
     if (!process_is_frontmost(context->finder_pid)) return 0;
+
+    // A new opposite-direction key-down publishes its token before clearing
+    // this generation. Let that command take the movement lock immediately;
+    // an ordinary key-up still takes the full settle path below.
+    direction_t opposite = direction == direction_down
+        ? direction_up
+        : direction_down;
+    if (hold_token_created_within(opposite, 100000000ULL)) {
+        return last_observed + 1;
+    }
 
     // A complete tap has no held key state, but Finder may still be consuming
     // a few already-posted taps. Hold the movement lock until the actual
@@ -5654,6 +5798,10 @@ int main(int argc, char **argv) {
         return run_vertical_edge_monitor_lock_self_test();
     }
 
+    if (argc == 2 && strcmp(argv[1], "hold-token-stop-self-test") == 0) {
+        return run_hold_token_stop_self_test();
+    }
+
     if (argc == 2 && strcmp(argv[1], "vertical-scroll-value") == 0) {
         if (!AXIsProcessTrusted()) {
             fprintf(stderr, "finder_ax_step: Accessibility access is unavailable\n");
@@ -5761,6 +5909,7 @@ int main(int argc, char **argv) {
         CFIndex position = move_once(
             &context,
             direction,
+            current_index_unknown,
             -1,
             NULL,
             true,
@@ -5860,6 +6009,9 @@ int main(int argc, char **argv) {
         if (strcmp(argv[1], "hold-token-start") == 0) {
             return run_hold_token_start(direction);
         }
+        if (strcmp(argv[1], "hold-stop") == 0) {
+            return stop_hold_token(direction) ? 0 : 1;
+        }
         if (strcmp(argv[1], "hold-repeat") == 0) {
             if (!AXIsProcessTrusted()) {
                 fprintf(stderr, "finder_ax_step: Accessibility access is unavailable\n");
@@ -5873,7 +6025,7 @@ int main(int argc, char **argv) {
         stderr,
         "Usage: finder_ax_step <clear-selection|toggle-mark|edge-monitor-self-test|edge-monitor-lock-self-test|vertical-scroll-value|selected-visible|scroll-state|first|last|down-wrap|up-wrap|left-wrap|right-wrap> | "
         "count-move <down|up> <1...99> | "
-        "<hold-start|hold-token-start|hold-repeat> <down|up|left|right> | "
+        "<hold-start|hold-token-start|hold-stop|hold-repeat> <down|up|left|right> | "
         "<list-edge-monitor-start|column-edge-monitor-start> <down|up> | "
         "edge-wrap-test <list|column> <down|up>\n"
     );

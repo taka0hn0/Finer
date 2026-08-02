@@ -15,6 +15,10 @@ verify the List distance-based AX probe delay in both directions. The separate
 Column state test verifies that a changed selection continues traversal and an
 identical consecutive selection triggers the item-count-independent stall
 path.
+The same isolated-state suite verifies that a delayed key-up preserves a newly
+created same-direction hold-token generation, while an ordinary key-up after
+the guard interval still clears it. It also checks the recent-token predicate
+used to hand the movement lock directly to a newly pressed opposite direction.
 The suite exercises pure state and lock self-test entry points rather than a
 live worker, so it does not open Finder or require a refresh-rate-specific
 display.
@@ -66,6 +70,9 @@ Boost mapping. They must send unmodified Finder-native Down/Up Arrow repeat,
 apply only in Normal Mode with no confirmed marks or motion count, and start no
 helper process. The default unmodified `j/k` mappings continue to use the
 token-controlled transient worker and precise AX wrap path.
+Their held actions also require a synchronous vertical-owner variable: when
+`j` and `k` overlap, only the later key-down may start a repeat, and releasing
+the earlier non-owner must not clear the later owner.
 
 New-folder mapping checks require one view-independent `n` helper that creates
 beside the selected item. Normal `n` may only mark its key-down state; key-up
