@@ -25,7 +25,8 @@ fi
 
 utility_source="$source_dir/finer-utility-commands.json"
 navigation_source="$source_dir/finer-navigation.json"
-for source_file in "$utility_source" "$navigation_source"; do
+open_panel_source="$source_dir/finer-open-panel-navigation.json"
+for source_file in "$utility_source" "$navigation_source" "$open_panel_source"; do
     if [[ ! -f "$source_file" || ! -r "$source_file" || -L "$source_file" ]]; then
         fail "source must be a readable regular file: $source_file"
     fi
@@ -45,7 +46,8 @@ trap 'exit 143' TERM
 
 jq -n \
     --slurpfile utility "$utility_source" \
-    --slurpfile navigation "$navigation_source" '
+    --slurpfile navigation "$navigation_source" \
+    --slurpfile open_panel "$open_panel_source" '
     def jump_palette_guard: {
         name: "finer_jump_active",
         type: "variable_unless",
@@ -67,14 +69,20 @@ jq -n \
         );
     if ($utility | length) != 1
         or ($navigation | length) != 1
+        or ($open_panel | length) != 1
         or $utility[0].description != "Finer Utility Commands"
         or $navigation[0].description != "Finer Navigation"
+        or $open_panel[0].description != "Finer Open Panel Navigation"
     then
         error("invalid Finer rule source modules")
     else
         {
             title: "Finer (development snapshot)",
-            rules: [($utility[0] | guarded_rule), ($navigation[0] | guarded_rule)]
+            rules: [
+                ($utility[0] | guarded_rule),
+                ($navigation[0] | guarded_rule),
+                ($open_panel[0] | guarded_rule)
+            ]
         }
     end
 ' > "$temp_output"

@@ -13,6 +13,7 @@ typeset -a sources=(
     "$build_dir/finder_ax_step"
     "$build_dir/finder_ax_move"
     "$build_dir/finer_jump"
+    "$build_dir/finer_open_panel"
     "$repo_root/scripts/finder_action_marked.sh"
     "$repo_root/scripts/finder_paste.sh"
     "$source_rule"
@@ -21,11 +22,12 @@ typeset -a destinations=(
     "$libexec_dir/finder_ax_step"
     "$libexec_dir/finder_ax_move"
     "$libexec_dir/finer_jump"
+    "$libexec_dir/finer_open_panel"
     "$libexec_dir/finder_action_marked.sh"
     "$libexec_dir/finder_paste.sh"
     "$rule_file"
 )
-typeset -a modes=(0755 0755 0755 0755 0755 0644)
+typeset -a modes=(0755 0755 0755 0755 0755 0755 0644)
 typeset -a state_names=(
     finder_marks.txt
     finder_navigation_anchor.txt
@@ -64,7 +66,7 @@ for ((index = 1; index <= ${#sources[@]}; ++index)); do
     fi
 done
 for helper in "$build_dir/finder_ax_step" "$build_dir/finder_ax_move" \
-    "$build_dir/finer_jump"; do
+    "$build_dir/finer_jump" "$build_dir/finer_open_panel"; do
     if [[ ! -x "$helper" ]]; then
         fail "build artifact is not executable: $helper"
     fi

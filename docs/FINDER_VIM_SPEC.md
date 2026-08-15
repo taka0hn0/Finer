@@ -45,10 +45,12 @@ macOS FinderをVim風に操作できる、高速・軽量・設定可能なキ�
 - 非連続マーク
 - ファイルのコピー、移動、削除、名前変更
 - Vim風モーションとカウント
+- 実測して許可したアプリのOpenダイアログ（実験対応）
 
 ### 3.2 初期リリースの対象外
 
-- Finder以外のアプリに表示されるOpen/Saveダイアログ
+- 未検証アプリのOpenダイアログ
+- Finder以外のアプリに表示されるSaveダイアログ
 - Gallery Viewの正式対応
 - WindowsやLinux
 - ネットワーク同期サービス
@@ -116,6 +118,15 @@ macOS FinderをVim風に操作できる、高速・軽量・設定可能なキ�
 - `FR-DIAG-003`: 通常時はログを増やさず、診断時だけ詳細ログを有効化できること。
 - `FR-DIAG-004`: デモ収録用キー表示アプリが明示的に待受中の場合だけ、Finerが消費した元の操作キーをローカルIPCへbest-effortで通知できること。通常のFinder入力ストリームへ表示用キーを追加送信しないこと。
 
+### 4.6 Openダイアログ（実験対応）
+
+- `FR-OPEN-001`: VS CodeのOpenダイアログに限り、Column、List、Iconで`h/j/k/l`をFinderと同じ方向の標準矢印として操作できること。
+- `FR-OPEN-002`: `gg`は標準の`Option+Up Arrow`、`G`は`Option+Down Arrow`、`o`は`Return`として動作すること。
+- `FR-OPEN-003`: 物理`Return`と`Esc`、検索欄、IME入力はmacOS標準処理を維持すること。Saveダイアログには介入しないこと。
+- `FR-OPEN-004`: 初回入力の実行直前に、前面bundle ID、親`AXSheet`の`AXIdentifier=open-panel`、対象roleをオンデマンドhelperで検証すること。検証失敗時は元の文字とmodifierを対象アプリへ1回だけ戻すこと。
+- `FR-OPEN-005`: 認定後はKarabinerから標準矢印へ直接変換し、長押しrepeatごとにhelperやAX問い合わせを起動しないこと。
+- `FR-OPEN-006`: 対応アプリはbundle IDと実測したAX構造の許可リストで追加し、全アプリへ一括適用しないこと。
+
 ## 5. 非機能要件
 
 ### 5.1 性能
@@ -132,6 +143,7 @@ macOS FinderをVim風に操作できる、高速・軽量・設定可能なキ�
 - `NFR-PERF-008`: 10、1000、10000項目の測定から、項目数に対するレイテンシの増加率を記録すること。
 - `NFR-PERF-009`: AXの一括取得後の検索・照合はプロセス内メモリで行うこと。
 - `NFR-PERF-010`: 100ms間隔の独立した`h/j/k/l`入力で、順序の入れ替わり、取りこぼし、入力残りを起こさず、滑らかに選択を反映できること。
+- `NFR-PERF-011`: Openダイアログの初回認定操作はp95 20msを目標、30msを許容上限とし、認定後はmacOS標準矢印と同じrepeat経路を使うこと。
 
 測定では平均値だけでなく、p50、p95、p99、最大値を記録する。
 
@@ -281,6 +293,14 @@ Spotlight候補は、空検索でホーム全体を列挙しない。前後の�
 
 AppKitが入力ソース切替やfield editorの更新中に問い合わせる「最後のウィンドウが閉じた後の自動終了」には応じない。パレットのプロセス終了は、物理`Esc`または候補決定から明示的に行う。これにより一時的なウィンドウ状態を終了意思と誤認しない。パネルはcloseableではなく、閉じるボタンを表示しない。
 
+### 6.8 検証済みOpenダイアログ
+
+VS Code向け`Finer Open Panel Navigation`はFinderルールと分離する。最初の`h/j/k/l/g/G/o`だけをオンデマンドC helperの`finer_open_panel handle`へ渡す。helperは前面bundle IDが`com.microsoft.VSCode`で、Focused UI Elementから親をたどった`AXSheet`の`AXIdentifier`が`open-panel`、かつ初回対象が`AXList`または`AXOutline`である場合だけセッションを認定する。Iconは`AXList`の`AXCollectionList` subroleとして受理する。`save-panel`、通常のVS Code Explorer、Editor、Terminal、テキスト欄は認定しない。
+
+認定成功後はKarabiner変数`finer_open_panel_active=1`を設定し、`h/j/k/l`を標準矢印へ直接変換する。`G`は`Option+Down Arrow`、`o`は`Return`へ直接変換する。`gg`だけは`finer_open_panel_g_prefix`を用い、1秒後、別のFiner操作、またはセッション終了で解除する。全manipulatorへ`finer_jump_active` guardを適用する。物理`Return`と`Esc`のmanipulatorは作らず、macOS標準処理へ渡す。
+
+一時helperはOpenパネルの`AXUIElementDestroyed`通知を終了主経路とし、通知を取得できない場合を含めて250msごとに前面PIDと`open-panel`親階層を確認する。ダイアログ終了、VS Code失焦点、signal、または300秒の安全上限で2変数、UNIX datagram socket、lockを消して終了する。初回と認定完了前にsocketへ届いた標準矢印は、認定時のVS Code PIDが直前にも前面であることを確認してからmacOSの通常イベント経路へ送る。OpenパネルはPID宛ての合成矢印を処理しないためである。初回認定失敗時の元文字とShift modifierだけは、Karabinerへの再帰を避けてVS Code PIDへ1回だけ再送する。Openパネルを使っていない時は専用プロセス、ポーリング、CPU使用を残さない。
+
 ## 7. 禁止事項
 
 - 専用プロセスを `KeepAlive` で常駐させない。
@@ -353,9 +373,11 @@ finder-vim/
 │   ├── finder_ax_step.c
 │   ├── finder_ax_move.swift
 │   ├── finer_jump.swift
+│   ├── finer_open_panel.c
 │   ├── worker/finder_ax_step/
 │   ├── commands/finder_ax_move/
-│   └── jump/
+│   ├── jump/
+│   └── open_panel/
 ├── rules/
 │   ├── source/
 │   └── generated/
@@ -486,6 +508,13 @@ finder-vim/
   - 受け入れ条件: 短いListと1000項目Listで通常`j/k`を20回以上素早く交互入力し、取りこぼし0、意図しない停止0、大ジャンプ0、表示追従あり、key-up後drift 0とする。Boost Modeの速度と端停止は変化させない。
 
 ## 16. Decision Log
+
+### 2026-08-15: VS Code Openダイアログを短命認定セッションで操作する
+
+- Decision: `Finer Open Panel Navigation`をFinderルールから分離して追加する。VS CodeでFocused UI Elementが`AXList`または`AXOutline`の時だけ初回キーをC helperへ渡し、親`AXSheet`の`AXIdentifier=open-panel`を確認する。成功後は`finer_open_panel_active`を立て、`h/j/k/l`、`G`、`o`をKarabinerから標準キーへ直結する。`gg`は専用の1秒prefixを使う。helperはパネル破棄通知を主経路、250ms確認をfallbackとして、パネル終了・失焦点・300秒上限で変数とsocketを消す。
+- Reason: macOSのOpenダイアログはFinderに似たColumn、List、Iconを持つが、前面プロセスはVS Codeであり通常Explorerの`AXOutline`ともroleが重なる。bundle IDとfocused roleだけで直接変換すると通常画面の文字を奪うため、実測した`open-panel` sheetを初回だけAXで認定し、認定後の長押しはネイティブrepeatへ渡す二段構成が必要である。
+- Constraint: 初期許可リストは`com.microsoft.VSCode`だけとし、Saveパネル、通常のExplorer、Editor、Terminal、検索欄へ介入しない。物理`Return`と`Esc`は変換しない。対応アプリ追加時はbundle IDとOpen/通常画面のAX構造を実測する。常駐プロセス、全アプリ対象rule、repeatごとのhelper起動を追加しない。
+- Verification: 3 source moduleの決定的生成、VS Code限定条件、jump guard、キー対応、prefix、Return/Esc非介入、helper CLI、install/uninstallを自動試験する。dogfoodではColumn/List/Icon、長押しとスクロール、`gg/G/o`、検索欄とIME、通常VS Code画面、Cancel/Open、アプリ切替、終了後プロセス0を確認する。初回操作のp95は20ms目標、30ms上限として別途実測する。
 
 ### 2026-08-15: 大規模fragmentを単一責務へ再分割する
 

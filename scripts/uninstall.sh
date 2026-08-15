@@ -25,6 +25,7 @@ rm -f \
     "$libexec_dir/finder_ax_step" \
     "$libexec_dir/finder_ax_move" \
     "$libexec_dir/finer_jump" \
+    "$libexec_dir/finer_open_panel" \
     "$libexec_dir/finder_action_marked.sh" \
     "$libexec_dir/finder_paste.sh" \
     "$rule_file"

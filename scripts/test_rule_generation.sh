@@ -15,6 +15,7 @@ output="$temp_root/generated/finder-vim.json"
 mkdir -p "$source_dir" "${output:h}"
 /bin/cp "$repo_root/rules/source/finer-utility-commands.json" "$source_dir/"
 /bin/cp "$repo_root/rules/source/finer-navigation.json" "$source_dir/"
+/bin/cp "$repo_root/rules/source/finer-open-panel-navigation.json" "$source_dir/"
 /bin/cp "$repo_root/rules/generated/finder-vim.json" "$output"
 
 run_generator() {
@@ -46,6 +47,13 @@ if ! cmp -s "$repo_root/rules/generated/finder-vim.json" "$output"; then
     print -u2 -- "Regenerated rule differs from the tracked snapshot"
     exit 1
 fi
+
+/bin/rm -f "$source_dir/finer-open-panel-navigation.json"
+if run_generator >/dev/null 2>&1; then
+    print -u2 -- "Generation unexpectedly succeeded without the Open Panel module"
+    exit 1
+fi
+/bin/cp "$repo_root/rules/source/finer-open-panel-navigation.json" "$source_dir/"
 
 /bin/rm -f "$output"
 ln -s "$temp_root/symlink-target.json" "$output"

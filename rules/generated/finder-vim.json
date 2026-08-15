@@ -6799,6 +6799,1361 @@
           "type": "basic"
         }
       ]
+    },
+    {
+      "description": "Finer Open Panel Navigation",
+      "manipulators": [
+        {
+          "type": "basic",
+          "description": "Open Panel List or Icon: Complete gg",
+          "from": {
+            "key_code": "g"
+          },
+          "to": [
+            {
+              "key_code": "up_arrow",
+              "modifiers": [
+                "option"
+              ],
+              "repeat": false
+            },
+            {
+              "set_variable": {
+                "name": "finer_open_panel_g_prefix",
+                "value": 0
+              }
+            }
+          ],
+          "conditions": [
+            {
+              "type": "frontmost_application_if",
+              "bundle_identifiers": [
+                "^com\\.microsoft\\.VSCode$"
+              ]
+            },
+            {
+              "type": "expression_unless",
+              "expression": "accessibility.focused_ui_element.role_string like 'AXText*'"
+            },
+            {
+              "type": "variable_if",
+              "name": "finer_open_panel_active",
+              "value": 1
+            },
+            {
+              "type": "expression_if",
+              "expression": "accessibility.focused_ui_element.role_string == 'AXList'"
+            },
+            {
+              "type": "variable_if",
+              "name": "finer_open_panel_g_prefix",
+              "value": 1
+            },
+            {
+              "name": "finer_jump_active",
+              "type": "variable_unless",
+              "value": 1
+            }
+          ]
+        },
+        {
+          "type": "basic",
+          "description": "Open Panel List view: Complete gg",
+          "from": {
+            "key_code": "g"
+          },
+          "to": [
+            {
+              "key_code": "up_arrow",
+              "modifiers": [
+                "option"
+              ],
+              "repeat": false
+            },
+            {
+              "set_variable": {
+                "name": "finer_open_panel_g_prefix",
+                "value": 0
+              }
+            }
+          ],
+          "conditions": [
+            {
+              "type": "frontmost_application_if",
+              "bundle_identifiers": [
+                "^com\\.microsoft\\.VSCode$"
+              ]
+            },
+            {
+              "type": "expression_unless",
+              "expression": "accessibility.focused_ui_element.role_string like 'AXText*'"
+            },
+            {
+              "type": "variable_if",
+              "name": "finer_open_panel_active",
+              "value": 1
+            },
+            {
+              "type": "expression_if",
+              "expression": "accessibility.focused_ui_element.role_string == 'AXOutline'"
+            },
+            {
+              "type": "variable_if",
+              "name": "finer_open_panel_g_prefix",
+              "value": 1
+            },
+            {
+              "name": "finer_jump_active",
+              "type": "variable_unless",
+              "value": 1
+            }
+          ]
+        },
+        {
+          "type": "basic",
+          "description": "Open Panel List or Icon: h uses native navigation",
+          "from": {
+            "key_code": "h"
+          },
+          "to": [
+            {
+              "set_variable": {
+                "name": "finer_open_panel_g_prefix",
+                "value": 0
+              }
+            },
+            {
+              "key_code": "left_arrow",
+              "repeat": true
+            }
+          ],
+          "conditions": [
+            {
+              "type": "frontmost_application_if",
+              "bundle_identifiers": [
+                "^com\\.microsoft\\.VSCode$"
+              ]
+            },
+            {
+              "type": "expression_unless",
+              "expression": "accessibility.focused_ui_element.role_string like 'AXText*'"
+            },
+            {
+              "type": "variable_if",
+              "name": "finer_open_panel_active",
+              "value": 1
+            },
+            {
+              "type": "expression_if",
+              "expression": "accessibility.focused_ui_element.role_string == 'AXList'"
+            },
+            {
+              "name": "finer_jump_active",
+              "type": "variable_unless",
+              "value": 1
+            }
+          ]
+        },
+        {
+          "type": "basic",
+          "description": "Open Panel List or Icon: j uses native navigation",
+          "from": {
+            "key_code": "j"
+          },
+          "to": [
+            {
+              "set_variable": {
+                "name": "finer_open_panel_g_prefix",
+                "value": 0
+              }
+            },
+            {
+              "key_code": "down_arrow",
+              "repeat": true
+            }
+          ],
+          "conditions": [
+            {
+              "type": "frontmost_application_if",
+              "bundle_identifiers": [
+                "^com\\.microsoft\\.VSCode$"
+              ]
+            },
+            {
+              "type": "expression_unless",
+              "expression": "accessibility.focused_ui_element.role_string like 'AXText*'"
+            },
+            {
+              "type": "variable_if",
+              "name": "finer_open_panel_active",
+              "value": 1
+            },
+            {
+              "type": "expression_if",
+              "expression": "accessibility.focused_ui_element.role_string == 'AXList'"
+            },
+            {
+              "name": "finer_jump_active",
+              "type": "variable_unless",
+              "value": 1
+            }
+          ]
+        },
+        {
+          "type": "basic",
+          "description": "Open Panel List or Icon: k uses native navigation",
+          "from": {
+            "key_code": "k"
+          },
+          "to": [
+            {
+              "set_variable": {
+                "name": "finer_open_panel_g_prefix",
+                "value": 0
+              }
+            },
+            {
+              "key_code": "up_arrow",
+              "repeat": true
+            }
+          ],
+          "conditions": [
+            {
+              "type": "frontmost_application_if",
+              "bundle_identifiers": [
+                "^com\\.microsoft\\.VSCode$"
+              ]
+            },
+            {
+              "type": "expression_unless",
+              "expression": "accessibility.focused_ui_element.role_string like 'AXText*'"
+            },
+            {
+              "type": "variable_if",
+              "name": "finer_open_panel_active",
+              "value": 1
+            },
+            {
+              "type": "expression_if",
+              "expression": "accessibility.focused_ui_element.role_string == 'AXList'"
+            },
+            {
+              "name": "finer_jump_active",
+              "type": "variable_unless",
+              "value": 1
+            }
+          ]
+        },
+        {
+          "type": "basic",
+          "description": "Open Panel List or Icon: l uses native navigation",
+          "from": {
+            "key_code": "l"
+          },
+          "to": [
+            {
+              "set_variable": {
+                "name": "finer_open_panel_g_prefix",
+                "value": 0
+              }
+            },
+            {
+              "key_code": "right_arrow",
+              "repeat": true
+            }
+          ],
+          "conditions": [
+            {
+              "type": "frontmost_application_if",
+              "bundle_identifiers": [
+                "^com\\.microsoft\\.VSCode$"
+              ]
+            },
+            {
+              "type": "expression_unless",
+              "expression": "accessibility.focused_ui_element.role_string like 'AXText*'"
+            },
+            {
+              "type": "variable_if",
+              "name": "finer_open_panel_active",
+              "value": 1
+            },
+            {
+              "type": "expression_if",
+              "expression": "accessibility.focused_ui_element.role_string == 'AXList'"
+            },
+            {
+              "name": "finer_jump_active",
+              "type": "variable_unless",
+              "value": 1
+            }
+          ]
+        },
+        {
+          "type": "basic",
+          "description": "Open Panel List or Icon: G uses native navigation",
+          "from": {
+            "key_code": "g",
+            "modifiers": {
+              "mandatory": [
+                "shift"
+              ],
+              "optional": [
+                "caps_lock"
+              ]
+            }
+          },
+          "to": [
+            {
+              "set_variable": {
+                "name": "finer_open_panel_g_prefix",
+                "value": 0
+              }
+            },
+            {
+              "key_code": "down_arrow",
+              "repeat": false,
+              "modifiers": [
+                "option"
+              ]
+            }
+          ],
+          "conditions": [
+            {
+              "type": "frontmost_application_if",
+              "bundle_identifiers": [
+                "^com\\.microsoft\\.VSCode$"
+              ]
+            },
+            {
+              "type": "expression_unless",
+              "expression": "accessibility.focused_ui_element.role_string like 'AXText*'"
+            },
+            {
+              "type": "variable_if",
+              "name": "finer_open_panel_active",
+              "value": 1
+            },
+            {
+              "type": "expression_if",
+              "expression": "accessibility.focused_ui_element.role_string == 'AXList'"
+            },
+            {
+              "name": "finer_jump_active",
+              "type": "variable_unless",
+              "value": 1
+            }
+          ]
+        },
+        {
+          "type": "basic",
+          "description": "Open Panel List or Icon: o uses native navigation",
+          "from": {
+            "key_code": "o"
+          },
+          "to": [
+            {
+              "set_variable": {
+                "name": "finer_open_panel_g_prefix",
+                "value": 0
+              }
+            },
+            {
+              "key_code": "return_or_enter",
+              "repeat": false
+            }
+          ],
+          "conditions": [
+            {
+              "type": "frontmost_application_if",
+              "bundle_identifiers": [
+                "^com\\.microsoft\\.VSCode$"
+              ]
+            },
+            {
+              "type": "expression_unless",
+              "expression": "accessibility.focused_ui_element.role_string like 'AXText*'"
+            },
+            {
+              "type": "variable_if",
+              "name": "finer_open_panel_active",
+              "value": 1
+            },
+            {
+              "type": "expression_if",
+              "expression": "accessibility.focused_ui_element.role_string == 'AXList'"
+            },
+            {
+              "name": "finer_jump_active",
+              "type": "variable_unless",
+              "value": 1
+            }
+          ]
+        },
+        {
+          "type": "basic",
+          "description": "Open Panel List view: h uses native navigation",
+          "from": {
+            "key_code": "h"
+          },
+          "to": [
+            {
+              "set_variable": {
+                "name": "finer_open_panel_g_prefix",
+                "value": 0
+              }
+            },
+            {
+              "key_code": "left_arrow",
+              "repeat": true
+            }
+          ],
+          "conditions": [
+            {
+              "type": "frontmost_application_if",
+              "bundle_identifiers": [
+                "^com\\.microsoft\\.VSCode$"
+              ]
+            },
+            {
+              "type": "expression_unless",
+              "expression": "accessibility.focused_ui_element.role_string like 'AXText*'"
+            },
+            {
+              "type": "variable_if",
+              "name": "finer_open_panel_active",
+              "value": 1
+            },
+            {
+              "type": "expression_if",
+              "expression": "accessibility.focused_ui_element.role_string == 'AXOutline'"
+            },
+            {
+              "name": "finer_jump_active",
+              "type": "variable_unless",
+              "value": 1
+            }
+          ]
+        },
+        {
+          "type": "basic",
+          "description": "Open Panel List view: j uses native navigation",
+          "from": {
+            "key_code": "j"
+          },
+          "to": [
+            {
+              "set_variable": {
+                "name": "finer_open_panel_g_prefix",
+                "value": 0
+              }
+            },
+            {
+              "key_code": "down_arrow",
+              "repeat": true
+            }
+          ],
+          "conditions": [
+            {
+              "type": "frontmost_application_if",
+              "bundle_identifiers": [
+                "^com\\.microsoft\\.VSCode$"
+              ]
+            },
+            {
+              "type": "expression_unless",
+              "expression": "accessibility.focused_ui_element.role_string like 'AXText*'"
+            },
+            {
+              "type": "variable_if",
+              "name": "finer_open_panel_active",
+              "value": 1
+            },
+            {
+              "type": "expression_if",
+              "expression": "accessibility.focused_ui_element.role_string == 'AXOutline'"
+            },
+            {
+              "name": "finer_jump_active",
+              "type": "variable_unless",
+              "value": 1
+            }
+          ]
+        },
+        {
+          "type": "basic",
+          "description": "Open Panel List view: k uses native navigation",
+          "from": {
+            "key_code": "k"
+          },
+          "to": [
+            {
+              "set_variable": {
+                "name": "finer_open_panel_g_prefix",
+                "value": 0
+              }
+            },
+            {
+              "key_code": "up_arrow",
+              "repeat": true
+            }
+          ],
+          "conditions": [
+            {
+              "type": "frontmost_application_if",
+              "bundle_identifiers": [
+                "^com\\.microsoft\\.VSCode$"
+              ]
+            },
+            {
+              "type": "expression_unless",
+              "expression": "accessibility.focused_ui_element.role_string like 'AXText*'"
+            },
+            {
+              "type": "variable_if",
+              "name": "finer_open_panel_active",
+              "value": 1
+            },
+            {
+              "type": "expression_if",
+              "expression": "accessibility.focused_ui_element.role_string == 'AXOutline'"
+            },
+            {
+              "name": "finer_jump_active",
+              "type": "variable_unless",
+              "value": 1
+            }
+          ]
+        },
+        {
+          "type": "basic",
+          "description": "Open Panel List view: l uses native navigation",
+          "from": {
+            "key_code": "l"
+          },
+          "to": [
+            {
+              "set_variable": {
+                "name": "finer_open_panel_g_prefix",
+                "value": 0
+              }
+            },
+            {
+              "key_code": "right_arrow",
+              "repeat": true
+            }
+          ],
+          "conditions": [
+            {
+              "type": "frontmost_application_if",
+              "bundle_identifiers": [
+                "^com\\.microsoft\\.VSCode$"
+              ]
+            },
+            {
+              "type": "expression_unless",
+              "expression": "accessibility.focused_ui_element.role_string like 'AXText*'"
+            },
+            {
+              "type": "variable_if",
+              "name": "finer_open_panel_active",
+              "value": 1
+            },
+            {
+              "type": "expression_if",
+              "expression": "accessibility.focused_ui_element.role_string == 'AXOutline'"
+            },
+            {
+              "name": "finer_jump_active",
+              "type": "variable_unless",
+              "value": 1
+            }
+          ]
+        },
+        {
+          "type": "basic",
+          "description": "Open Panel List view: G uses native navigation",
+          "from": {
+            "key_code": "g",
+            "modifiers": {
+              "mandatory": [
+                "shift"
+              ],
+              "optional": [
+                "caps_lock"
+              ]
+            }
+          },
+          "to": [
+            {
+              "set_variable": {
+                "name": "finer_open_panel_g_prefix",
+                "value": 0
+              }
+            },
+            {
+              "key_code": "down_arrow",
+              "repeat": false,
+              "modifiers": [
+                "option"
+              ]
+            }
+          ],
+          "conditions": [
+            {
+              "type": "frontmost_application_if",
+              "bundle_identifiers": [
+                "^com\\.microsoft\\.VSCode$"
+              ]
+            },
+            {
+              "type": "expression_unless",
+              "expression": "accessibility.focused_ui_element.role_string like 'AXText*'"
+            },
+            {
+              "type": "variable_if",
+              "name": "finer_open_panel_active",
+              "value": 1
+            },
+            {
+              "type": "expression_if",
+              "expression": "accessibility.focused_ui_element.role_string == 'AXOutline'"
+            },
+            {
+              "name": "finer_jump_active",
+              "type": "variable_unless",
+              "value": 1
+            }
+          ]
+        },
+        {
+          "type": "basic",
+          "description": "Open Panel List view: o uses native navigation",
+          "from": {
+            "key_code": "o"
+          },
+          "to": [
+            {
+              "set_variable": {
+                "name": "finer_open_panel_g_prefix",
+                "value": 0
+              }
+            },
+            {
+              "key_code": "return_or_enter",
+              "repeat": false
+            }
+          ],
+          "conditions": [
+            {
+              "type": "frontmost_application_if",
+              "bundle_identifiers": [
+                "^com\\.microsoft\\.VSCode$"
+              ]
+            },
+            {
+              "type": "expression_unless",
+              "expression": "accessibility.focused_ui_element.role_string like 'AXText*'"
+            },
+            {
+              "type": "variable_if",
+              "name": "finer_open_panel_active",
+              "value": 1
+            },
+            {
+              "type": "expression_if",
+              "expression": "accessibility.focused_ui_element.role_string == 'AXOutline'"
+            },
+            {
+              "name": "finer_jump_active",
+              "type": "variable_unless",
+              "value": 1
+            }
+          ]
+        },
+        {
+          "type": "basic",
+          "description": "Open Panel List or Icon: Start gg",
+          "from": {
+            "key_code": "g"
+          },
+          "to": [
+            {
+              "set_variable": {
+                "name": "finer_open_panel_g_prefix",
+                "value": 1
+              }
+            }
+          ],
+          "parameters": {
+            "basic.to_delayed_action_delay_milliseconds": 1000
+          },
+          "to_delayed_action": {
+            "to_if_canceled": [
+              {
+                "set_variable": {
+                  "name": "finer_open_panel_g_prefix",
+                  "value": 0
+                }
+              }
+            ],
+            "to_if_invoked": [
+              {
+                "set_variable": {
+                  "name": "finer_open_panel_g_prefix",
+                  "value": 0
+                }
+              }
+            ]
+          },
+          "conditions": [
+            {
+              "type": "frontmost_application_if",
+              "bundle_identifiers": [
+                "^com\\.microsoft\\.VSCode$"
+              ]
+            },
+            {
+              "type": "expression_unless",
+              "expression": "accessibility.focused_ui_element.role_string like 'AXText*'"
+            },
+            {
+              "type": "variable_if",
+              "name": "finer_open_panel_active",
+              "value": 1
+            },
+            {
+              "type": "expression_if",
+              "expression": "accessibility.focused_ui_element.role_string == 'AXList'"
+            },
+            {
+              "type": "variable_unless",
+              "name": "finer_open_panel_g_prefix",
+              "value": 1
+            },
+            {
+              "name": "finer_jump_active",
+              "type": "variable_unless",
+              "value": 1
+            }
+          ]
+        },
+        {
+          "type": "basic",
+          "description": "Open Panel List view: Start gg",
+          "from": {
+            "key_code": "g"
+          },
+          "to": [
+            {
+              "set_variable": {
+                "name": "finer_open_panel_g_prefix",
+                "value": 1
+              }
+            }
+          ],
+          "parameters": {
+            "basic.to_delayed_action_delay_milliseconds": 1000
+          },
+          "to_delayed_action": {
+            "to_if_canceled": [
+              {
+                "set_variable": {
+                  "name": "finer_open_panel_g_prefix",
+                  "value": 0
+                }
+              }
+            ],
+            "to_if_invoked": [
+              {
+                "set_variable": {
+                  "name": "finer_open_panel_g_prefix",
+                  "value": 0
+                }
+              }
+            ]
+          },
+          "conditions": [
+            {
+              "type": "frontmost_application_if",
+              "bundle_identifiers": [
+                "^com\\.microsoft\\.VSCode$"
+              ]
+            },
+            {
+              "type": "expression_unless",
+              "expression": "accessibility.focused_ui_element.role_string like 'AXText*'"
+            },
+            {
+              "type": "variable_if",
+              "name": "finer_open_panel_active",
+              "value": 1
+            },
+            {
+              "type": "expression_if",
+              "expression": "accessibility.focused_ui_element.role_string == 'AXOutline'"
+            },
+            {
+              "type": "variable_unless",
+              "name": "finer_open_panel_g_prefix",
+              "value": 1
+            },
+            {
+              "name": "finer_jump_active",
+              "type": "variable_unless",
+              "value": 1
+            }
+          ]
+        },
+        {
+          "type": "basic",
+          "description": "Open Panel List or Icon: Validate then handle h",
+          "from": {
+            "key_code": "h"
+          },
+          "to": [
+            {
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finer_open_panel handle h >/dev/null 2>&1"
+            }
+          ],
+          "conditions": [
+            {
+              "type": "frontmost_application_if",
+              "bundle_identifiers": [
+                "^com\\.microsoft\\.VSCode$"
+              ]
+            },
+            {
+              "type": "expression_unless",
+              "expression": "accessibility.focused_ui_element.role_string like 'AXText*'"
+            },
+            {
+              "type": "variable_unless",
+              "name": "finer_open_panel_active",
+              "value": 1
+            },
+            {
+              "type": "expression_if",
+              "expression": "accessibility.focused_ui_element.role_string == 'AXList'"
+            },
+            {
+              "name": "finer_jump_active",
+              "type": "variable_unless",
+              "value": 1
+            }
+          ]
+        },
+        {
+          "type": "basic",
+          "description": "Open Panel List or Icon: Validate then handle j",
+          "from": {
+            "key_code": "j"
+          },
+          "to": [
+            {
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finer_open_panel handle j >/dev/null 2>&1"
+            }
+          ],
+          "conditions": [
+            {
+              "type": "frontmost_application_if",
+              "bundle_identifiers": [
+                "^com\\.microsoft\\.VSCode$"
+              ]
+            },
+            {
+              "type": "expression_unless",
+              "expression": "accessibility.focused_ui_element.role_string like 'AXText*'"
+            },
+            {
+              "type": "variable_unless",
+              "name": "finer_open_panel_active",
+              "value": 1
+            },
+            {
+              "type": "expression_if",
+              "expression": "accessibility.focused_ui_element.role_string == 'AXList'"
+            },
+            {
+              "name": "finer_jump_active",
+              "type": "variable_unless",
+              "value": 1
+            }
+          ]
+        },
+        {
+          "type": "basic",
+          "description": "Open Panel List or Icon: Validate then handle k",
+          "from": {
+            "key_code": "k"
+          },
+          "to": [
+            {
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finer_open_panel handle k >/dev/null 2>&1"
+            }
+          ],
+          "conditions": [
+            {
+              "type": "frontmost_application_if",
+              "bundle_identifiers": [
+                "^com\\.microsoft\\.VSCode$"
+              ]
+            },
+            {
+              "type": "expression_unless",
+              "expression": "accessibility.focused_ui_element.role_string like 'AXText*'"
+            },
+            {
+              "type": "variable_unless",
+              "name": "finer_open_panel_active",
+              "value": 1
+            },
+            {
+              "type": "expression_if",
+              "expression": "accessibility.focused_ui_element.role_string == 'AXList'"
+            },
+            {
+              "name": "finer_jump_active",
+              "type": "variable_unless",
+              "value": 1
+            }
+          ]
+        },
+        {
+          "type": "basic",
+          "description": "Open Panel List or Icon: Validate then handle l",
+          "from": {
+            "key_code": "l"
+          },
+          "to": [
+            {
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finer_open_panel handle l >/dev/null 2>&1"
+            }
+          ],
+          "conditions": [
+            {
+              "type": "frontmost_application_if",
+              "bundle_identifiers": [
+                "^com\\.microsoft\\.VSCode$"
+              ]
+            },
+            {
+              "type": "expression_unless",
+              "expression": "accessibility.focused_ui_element.role_string like 'AXText*'"
+            },
+            {
+              "type": "variable_unless",
+              "name": "finer_open_panel_active",
+              "value": 1
+            },
+            {
+              "type": "expression_if",
+              "expression": "accessibility.focused_ui_element.role_string == 'AXList'"
+            },
+            {
+              "name": "finer_jump_active",
+              "type": "variable_unless",
+              "value": 1
+            }
+          ]
+        },
+        {
+          "type": "basic",
+          "description": "Open Panel List or Icon: Validate then handle g",
+          "from": {
+            "key_code": "g"
+          },
+          "to": [
+            {
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finer_open_panel handle g >/dev/null 2>&1"
+            }
+          ],
+          "conditions": [
+            {
+              "type": "frontmost_application_if",
+              "bundle_identifiers": [
+                "^com\\.microsoft\\.VSCode$"
+              ]
+            },
+            {
+              "type": "expression_unless",
+              "expression": "accessibility.focused_ui_element.role_string like 'AXText*'"
+            },
+            {
+              "type": "variable_unless",
+              "name": "finer_open_panel_active",
+              "value": 1
+            },
+            {
+              "type": "expression_if",
+              "expression": "accessibility.focused_ui_element.role_string == 'AXList'"
+            },
+            {
+              "name": "finer_jump_active",
+              "type": "variable_unless",
+              "value": 1
+            }
+          ]
+        },
+        {
+          "type": "basic",
+          "description": "Open Panel List or Icon: Validate then handle G",
+          "from": {
+            "key_code": "g",
+            "modifiers": {
+              "mandatory": [
+                "shift"
+              ],
+              "optional": [
+                "caps_lock"
+              ]
+            }
+          },
+          "to": [
+            {
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finer_open_panel handle G >/dev/null 2>&1"
+            }
+          ],
+          "conditions": [
+            {
+              "type": "frontmost_application_if",
+              "bundle_identifiers": [
+                "^com\\.microsoft\\.VSCode$"
+              ]
+            },
+            {
+              "type": "expression_unless",
+              "expression": "accessibility.focused_ui_element.role_string like 'AXText*'"
+            },
+            {
+              "type": "variable_unless",
+              "name": "finer_open_panel_active",
+              "value": 1
+            },
+            {
+              "type": "expression_if",
+              "expression": "accessibility.focused_ui_element.role_string == 'AXList'"
+            },
+            {
+              "name": "finer_jump_active",
+              "type": "variable_unless",
+              "value": 1
+            }
+          ]
+        },
+        {
+          "type": "basic",
+          "description": "Open Panel List or Icon: Validate then handle o",
+          "from": {
+            "key_code": "o"
+          },
+          "to": [
+            {
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finer_open_panel handle o >/dev/null 2>&1"
+            }
+          ],
+          "conditions": [
+            {
+              "type": "frontmost_application_if",
+              "bundle_identifiers": [
+                "^com\\.microsoft\\.VSCode$"
+              ]
+            },
+            {
+              "type": "expression_unless",
+              "expression": "accessibility.focused_ui_element.role_string like 'AXText*'"
+            },
+            {
+              "type": "variable_unless",
+              "name": "finer_open_panel_active",
+              "value": 1
+            },
+            {
+              "type": "expression_if",
+              "expression": "accessibility.focused_ui_element.role_string == 'AXList'"
+            },
+            {
+              "name": "finer_jump_active",
+              "type": "variable_unless",
+              "value": 1
+            }
+          ]
+        },
+        {
+          "type": "basic",
+          "description": "Open Panel List view: Validate then handle h",
+          "from": {
+            "key_code": "h"
+          },
+          "to": [
+            {
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finer_open_panel handle h >/dev/null 2>&1"
+            }
+          ],
+          "conditions": [
+            {
+              "type": "frontmost_application_if",
+              "bundle_identifiers": [
+                "^com\\.microsoft\\.VSCode$"
+              ]
+            },
+            {
+              "type": "expression_unless",
+              "expression": "accessibility.focused_ui_element.role_string like 'AXText*'"
+            },
+            {
+              "type": "variable_unless",
+              "name": "finer_open_panel_active",
+              "value": 1
+            },
+            {
+              "type": "expression_if",
+              "expression": "accessibility.focused_ui_element.role_string == 'AXOutline'"
+            },
+            {
+              "name": "finer_jump_active",
+              "type": "variable_unless",
+              "value": 1
+            }
+          ]
+        },
+        {
+          "type": "basic",
+          "description": "Open Panel List view: Validate then handle j",
+          "from": {
+            "key_code": "j"
+          },
+          "to": [
+            {
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finer_open_panel handle j >/dev/null 2>&1"
+            }
+          ],
+          "conditions": [
+            {
+              "type": "frontmost_application_if",
+              "bundle_identifiers": [
+                "^com\\.microsoft\\.VSCode$"
+              ]
+            },
+            {
+              "type": "expression_unless",
+              "expression": "accessibility.focused_ui_element.role_string like 'AXText*'"
+            },
+            {
+              "type": "variable_unless",
+              "name": "finer_open_panel_active",
+              "value": 1
+            },
+            {
+              "type": "expression_if",
+              "expression": "accessibility.focused_ui_element.role_string == 'AXOutline'"
+            },
+            {
+              "name": "finer_jump_active",
+              "type": "variable_unless",
+              "value": 1
+            }
+          ]
+        },
+        {
+          "type": "basic",
+          "description": "Open Panel List view: Validate then handle k",
+          "from": {
+            "key_code": "k"
+          },
+          "to": [
+            {
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finer_open_panel handle k >/dev/null 2>&1"
+            }
+          ],
+          "conditions": [
+            {
+              "type": "frontmost_application_if",
+              "bundle_identifiers": [
+                "^com\\.microsoft\\.VSCode$"
+              ]
+            },
+            {
+              "type": "expression_unless",
+              "expression": "accessibility.focused_ui_element.role_string like 'AXText*'"
+            },
+            {
+              "type": "variable_unless",
+              "name": "finer_open_panel_active",
+              "value": 1
+            },
+            {
+              "type": "expression_if",
+              "expression": "accessibility.focused_ui_element.role_string == 'AXOutline'"
+            },
+            {
+              "name": "finer_jump_active",
+              "type": "variable_unless",
+              "value": 1
+            }
+          ]
+        },
+        {
+          "type": "basic",
+          "description": "Open Panel List view: Validate then handle l",
+          "from": {
+            "key_code": "l"
+          },
+          "to": [
+            {
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finer_open_panel handle l >/dev/null 2>&1"
+            }
+          ],
+          "conditions": [
+            {
+              "type": "frontmost_application_if",
+              "bundle_identifiers": [
+                "^com\\.microsoft\\.VSCode$"
+              ]
+            },
+            {
+              "type": "expression_unless",
+              "expression": "accessibility.focused_ui_element.role_string like 'AXText*'"
+            },
+            {
+              "type": "variable_unless",
+              "name": "finer_open_panel_active",
+              "value": 1
+            },
+            {
+              "type": "expression_if",
+              "expression": "accessibility.focused_ui_element.role_string == 'AXOutline'"
+            },
+            {
+              "name": "finer_jump_active",
+              "type": "variable_unless",
+              "value": 1
+            }
+          ]
+        },
+        {
+          "type": "basic",
+          "description": "Open Panel List view: Validate then handle g",
+          "from": {
+            "key_code": "g"
+          },
+          "to": [
+            {
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finer_open_panel handle g >/dev/null 2>&1"
+            }
+          ],
+          "conditions": [
+            {
+              "type": "frontmost_application_if",
+              "bundle_identifiers": [
+                "^com\\.microsoft\\.VSCode$"
+              ]
+            },
+            {
+              "type": "expression_unless",
+              "expression": "accessibility.focused_ui_element.role_string like 'AXText*'"
+            },
+            {
+              "type": "variable_unless",
+              "name": "finer_open_panel_active",
+              "value": 1
+            },
+            {
+              "type": "expression_if",
+              "expression": "accessibility.focused_ui_element.role_string == 'AXOutline'"
+            },
+            {
+              "name": "finer_jump_active",
+              "type": "variable_unless",
+              "value": 1
+            }
+          ]
+        },
+        {
+          "type": "basic",
+          "description": "Open Panel List view: Validate then handle G",
+          "from": {
+            "key_code": "g",
+            "modifiers": {
+              "mandatory": [
+                "shift"
+              ],
+              "optional": [
+                "caps_lock"
+              ]
+            }
+          },
+          "to": [
+            {
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finer_open_panel handle G >/dev/null 2>&1"
+            }
+          ],
+          "conditions": [
+            {
+              "type": "frontmost_application_if",
+              "bundle_identifiers": [
+                "^com\\.microsoft\\.VSCode$"
+              ]
+            },
+            {
+              "type": "expression_unless",
+              "expression": "accessibility.focused_ui_element.role_string like 'AXText*'"
+            },
+            {
+              "type": "variable_unless",
+              "name": "finer_open_panel_active",
+              "value": 1
+            },
+            {
+              "type": "expression_if",
+              "expression": "accessibility.focused_ui_element.role_string == 'AXOutline'"
+            },
+            {
+              "name": "finer_jump_active",
+              "type": "variable_unless",
+              "value": 1
+            }
+          ]
+        },
+        {
+          "type": "basic",
+          "description": "Open Panel List view: Validate then handle o",
+          "from": {
+            "key_code": "o"
+          },
+          "to": [
+            {
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finer_open_panel handle o >/dev/null 2>&1"
+            }
+          ],
+          "conditions": [
+            {
+              "type": "frontmost_application_if",
+              "bundle_identifiers": [
+                "^com\\.microsoft\\.VSCode$"
+              ]
+            },
+            {
+              "type": "expression_unless",
+              "expression": "accessibility.focused_ui_element.role_string like 'AXText*'"
+            },
+            {
+              "type": "variable_unless",
+              "name": "finer_open_panel_active",
+              "value": 1
+            },
+            {
+              "type": "expression_if",
+              "expression": "accessibility.focused_ui_element.role_string == 'AXOutline'"
+            },
+            {
+              "name": "finer_jump_active",
+              "type": "variable_unless",
+              "value": 1
+            }
+          ]
+        }
+      ]
     }
   ]
 }

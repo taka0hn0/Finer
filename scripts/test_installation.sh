@@ -53,7 +53,7 @@ print -r -- 'preserve cut' > "$state_dir/finder_cut.txt"
 
 HOME="$test_home" "$install_script" >/dev/null
 
-for artifact in finder_ax_step finder_ax_move finer_jump finder_action_marked.sh finder_paste.sh; do
+for artifact in finder_ax_step finder_ax_move finer_jump finer_open_panel finder_action_marked.sh finder_paste.sh; do
     [[ -x "$libexec_dir/$artifact" ]] || fail "artifact is not executable: $artifact"
     [[ "$(stat -f '%Lp' "$libexec_dir/$artifact")" == 755 ]] \
         || fail "unexpected executable mode: $artifact"
@@ -66,6 +66,8 @@ cmp -s "$repo_root/.build/finder_ax_move" "$libexec_dir/finder_ax_move" \
     || fail "finder_ax_move differs from build"
 cmp -s "$repo_root/.build/finer_jump" "$libexec_dir/finer_jump" \
     || fail "finer_jump differs from build"
+cmp -s "$repo_root/.build/finer_open_panel" "$libexec_dir/finer_open_panel" \
+    || fail "finer_open_panel differs from build"
 cmp -s "$repo_root/rules/generated/finder-vim.json" "$rule_file" \
     || fail "installed rule differs from source"
 cmp -s "$main_config" "$expected_main" || fail "main karabiner.json changed"
@@ -103,7 +105,7 @@ print -r -- '{"title":"locally-modified-importable-rule"}' > "$rule_file"
 cp "$rule_file" "$expected_modified_rule"
 HOME="$test_home" "$uninstall_script" >/dev/null
 
-for artifact in finder_ax_step finder_ax_move finer_jump finder_action_marked.sh finder_paste.sh; do
+for artifact in finder_ax_step finder_ax_move finer_jump finer_open_panel finder_action_marked.sh finder_paste.sh; do
     [[ ! -e "$libexec_dir/$artifact" ]] \
         || fail "artifact remains after uninstall: $artifact"
 done

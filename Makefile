@@ -5,10 +5,12 @@ MODULE_CACHE := $(BUILD_DIR)/swift-module-cache
 C_HELPER := $(BUILD_DIR)/finder_ax_step
 SWIFT_HELPER := $(BUILD_DIR)/finder_ax_move
 JUMP_HELPER := $(BUILD_DIR)/finer_jump
+OPEN_PANEL_HELPER := $(BUILD_DIR)/finer_open_panel
 VISUAL_CAPTURE_HELPER := $(BUILD_DIR)/finer_visual_capture
 C_WORKER_SOURCES := src/finder_ax_step.c $(wildcard src/worker/finder_ax_step/*.inc)
 AX_MOVE_SOURCES := src/finder_ax_move.swift $(wildcard src/commands/finder_ax_move/*.swift)
 JUMP_SOURCES := src/finer_jump.swift $(wildcard src/jump/*.swift)
+OPEN_PANEL_SOURCES := src/finer_open_panel.c $(wildcard src/open_panel/*.inc)
 ITERATIONS ?= 10
 COUNTS ?= 10 1000 10000
 BASELINE_REF ?= 793a82c
@@ -19,7 +21,7 @@ VERSION ?=
 
 all: build
 
-build: $(C_HELPER) $(SWIFT_HELPER) $(JUMP_HELPER)
+build: $(C_HELPER) $(SWIFT_HELPER) $(JUMP_HELPER) $(OPEN_PANEL_HELPER)
 
 rules:
 	./scripts/generate_rules.sh
@@ -46,6 +48,11 @@ $(JUMP_HELPER): $(JUMP_SOURCES) | $(BUILD_DIR)
 		-framework AppKit \
 		$(JUMP_SOURCES) -o $@
 
+$(OPEN_PANEL_HELPER): $(OPEN_PANEL_SOURCES) | $(BUILD_DIR)
+	xcrun clang -std=c11 -O2 -Wall -Wextra -Werror \
+		-framework ApplicationServices -framework Carbon -framework CoreFoundation \
+		src/finer_open_panel.c -o $@
+
 $(VISUAL_CAPTURE_HELPER): tools/finer_visual_capture.m | $(BUILD_DIR)
 	xcrun clang -fobjc-arc -O2 -Wall -Wextra -Werror \
 		-framework AppKit -framework ApplicationServices \
@@ -55,6 +62,7 @@ check: build check-rules
 	jq empty rules/generated/finder-vim.json
 	./scripts/test_generated_rule.sh
 	./scripts/test_finer_jump.sh
+	./scripts/test_open_panel.sh
 	./scripts/test_edge_monitor.sh
 	./scripts/test_mark_state.sh
 	./scripts/test_tap_burst_headless.sh

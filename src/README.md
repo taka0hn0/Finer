@@ -1,6 +1,6 @@
 # Source layout
 
-The three files directly under `src/` are stable executable entry points. The
+The four files directly under `src/` are stable executable entry points. The
 implementation lives in responsibility-based subdirectories so build and
 installation paths remain compatible.
 
@@ -48,6 +48,17 @@ Finder navigation, post-navigation learning, AppKit panel support, controller
 lifecycle, layout, search coordination, result rendering, key input, selection
 completion, and headless test commands. `finer_jump.swift` contains only the
 executable entry point.
+
+## Open panel navigation
+
+`finer_open_panel.c` includes the fragments under `open_panel/` as one C
+translation unit. `context.inc` owns the VS Code/open-panel AX allowlist,
+`events.inc` owns native and fallback key events, `variables.inc` owns the two
+Karabiner session variables, and `session.inc` owns the temporary socket,
+AX-destruction observer, 250ms fallback validation, and cleanup. The helper
+exists only while a verified Open panel is present.
+`finer_open_panel diagnose` reports the current allowlist decision without
+changing focus, variables, or key input.
 
 Behavioral or architectural changes still belong in
 `docs/FINDER_VIM_SPEC.md` and its Decision Log. Run `make check` after any
