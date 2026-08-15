@@ -11,18 +11,24 @@ explicit dependency order. They intentionally form one C translation unit to
 preserve internal linkage and whole-file optimization on the navigation hot
 path.
 
-- `prelude.inc`: imports, shared types, metrics state, and forward declarations
-- `accessibility.inc`: Finder process and Accessibility container discovery
-- `selection.inc`: item identity, anchors, marks, and selection updates
-- `events.inc`: locks, keyboard events, menus, and scroll primitives
-- `movement.inc`: List, Column, and Icon movement algorithms
-- `runtime.inc`: hold tokens, sockets, metrics, and runtime configuration
-- `worker.inc`: command queue, worker lifecycle, and dispatch
-- `hold_state.inc`: hold ownership and mode selection
-- `hold_repeat.inc`: fast AX and native List repeat loops
-- `edge_state.inc`: view-independent edge-monitor state machines
-- `edge_monitor.inc`: Column/List edge monitoring and wrap execution
-- `cli.inc`: command parsing and the executable entry point
+- Foundation: `prelude.inc`, `accessibility_primitives.inc`,
+  `finder_accessibility.inc`, and `navigation_context.inc`
+- Selection: `item_resolution.inc`, `selection_core.inc`,
+  `selection_state.inc`, and `selection_clear.inc`
+- Finder events: `process_locks.inc`, `keyboard_events.inc`, and
+  `scroll_events.inc`
+- Movement: `vertical_movement.inc`, `grid_movement.inc`, and
+  `movement_dispatch.inc`
+- Runtime and worker: `hold_tokens.inc`, `runtime_support.inc`, `metrics.inc`,
+  `worker_transport.inc`, `navigation_transition.inc`,
+  `worker_lifecycle.inc`, and `worker_client.inc`
+- Hold navigation: `hold_state_tokens.inc`, `hold_configuration.inc`,
+  `hold_position.inc`, `hold_scroll.inc`, `hold_fast_ax.inc`,
+  `hold_native_list.inc`, and `hold_controller.inc`
+- Edge handling: `edge_monitor_state.inc`, `edge_monitor_lock.inc`,
+  `edge_probe.inc`, `column_stall_state.inc`, `column_edge_context.inc`,
+  `column_edge_monitor.inc`, and `edge_monitor_commands.inc`
+- CLI: `cli.inc`
 
 Do not compile an `.inc` fragment independently. Add it to the ordered include
 list in `finder_ax_step.c`; the Makefile already tracks every fragment as a
@@ -37,9 +43,11 @@ entry point.
 
 ## Jump palette
 
-`jump/` separates candidate search, Finder navigation, post-navigation zoxide
-learning, AppKit UI, and headless test commands. `finer_jump.swift` contains
-only the executable entry point.
+`jump/` separates candidate models and ranking, zoxide and Spotlight clients,
+Finder navigation, post-navigation learning, AppKit panel support, controller
+lifecycle, layout, search coordination, result rendering, key input, selection
+completion, and headless test commands. `finer_jump.swift` contains only the
+executable entry point.
 
 Behavioral or architectural changes still belong in
 `docs/FINDER_VIM_SPEC.md` and its Decision Log. Run `make check` after any

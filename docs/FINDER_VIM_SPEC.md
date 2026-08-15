@@ -487,6 +487,13 @@ finder-vim/
 
 ## 16. Decision Log
 
+### 2026-08-15: 大規模fragmentを単一責務へ再分割する
+
+- Decision: 初回分割後も複数の責務を含んでいたC fragmentを、AX基盤とFinder context、項目解決と選択状態、キー送信とスクロール、表示形式別移動、hold tokenと反復方式、worker通信と実行、端検出stateとColumn監視へ再分割する。Jump Paletteは候補model、zoxide、Spotlight、順位付け、補助型、controller lifecycle、layout、検索調停、一覧描画、キー入力、移動確定へ分ける。似た変更理由を持つ処理だけを同じファイルへ置く。
+- Reason: 初回分割でentry pointは短くなったが、Cには651〜862行、Jump Paletteには581行のファイルが残り、たとえば選択解除の修正でも項目識別・マーク永続化まで同じファイルを読む必要があった。責務をもう一段細かく表すことで、修正対象、依存方向、レビュー範囲を局所化する。
+- Constraint: C fragmentの関数順序と単一translation unitを維持し、内部linkage、whole-file optimization、Finder上の挙動、CLI、プロセス寿命、AX/CGEvent経路を変えない。Jump Paletteの分割に必要なcontroller memberは実行ファイルmodule内だけで共有し、外部APIを追加しない。
+- Verification: 分割前後でclean buildと`make check`を通し、C helperの逆アセンブル結果が一致すること、隔離installが成功すること、Jump、mark、tap burst、edge monitorのheadless回帰結果が変わらないことを確認する。
+
 ### 2026-08-15: helper実装を責務別ソースへ分割する
 
 - Decision: 3つの実行ファイルと既存CLIを維持しながら、CナビゲーションworkerをAX基盤、選択、イベント、移動、runtime、worker転送、長押し、端監視、CLIへ分割する。Cは短い互換entry pointが内部fragmentを固定順でincludeする単一translation unitを維持する。SwiftのAX command helperは共通型、AX操作、ナビゲーション状態、選択、新規フォルダ、Visual選択、command dispatchへ分割し、Jump Paletteは検索、Finder移動、完了処理、UI、headless interfaceへ分割する。
