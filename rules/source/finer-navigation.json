@@ -72,6 +72,9 @@
       },
       "to": [
         {
+          "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_step notify-key 38 4 125 0 >/dev/null 2>&1"
+        },
+        {
           "key_code": "down_arrow",
           "repeat": true
         }
@@ -115,6 +118,9 @@
         }
       },
       "to": [
+        {
+          "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_step notify-key 40 4 126 0 >/dev/null 2>&1"
+        },
         {
           "key_code": "up_arrow",
           "repeat": true
@@ -4773,7 +4779,14 @@
       ],
       "to_after_key_up": [
         {
-          "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_step hold-stop down >/dev/null 2>&1"
+          "conditions": [
+            {
+              "name": "finder_normal_vertical_owner",
+              "type": "variable_if",
+              "value": 1
+            }
+          ],
+          "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_step hold-stop-now down >/dev/null 2>&1"
         },
         {
           "set_variable": {
@@ -4834,7 +4847,14 @@
       ],
       "to_after_key_up": [
         {
-          "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_step hold-stop up >/dev/null 2>&1"
+          "conditions": [
+            {
+              "name": "finder_normal_vertical_owner",
+              "type": "variable_if",
+              "value": 2
+            }
+          ],
+          "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_step hold-stop-now up >/dev/null 2>&1"
         },
         {
           "set_variable": {
@@ -5052,6 +5072,9 @@
       },
       "to": [
         {
+          "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_step notify-key 4 0 123 4 >/dev/null 2>&1"
+        },
+        {
           "key_code": "left_arrow",
           "modifiers": [
             "shift"
@@ -5084,6 +5107,9 @@
         "key_code": "j"
       },
       "to": [
+        {
+          "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_step notify-key 38 0 125 4 >/dev/null 2>&1"
+        },
         {
           "key_code": "down_arrow",
           "modifiers": [
@@ -5118,6 +5144,9 @@
       },
       "to": [
         {
+          "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_step notify-key 40 0 126 4 >/dev/null 2>&1"
+        },
+        {
           "key_code": "up_arrow",
           "modifiers": [
             "shift"
@@ -5150,6 +5179,9 @@
         "key_code": "l"
       },
       "to": [
+        {
+          "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_step notify-key 37 0 124 4 >/dev/null 2>&1"
+        },
         {
           "key_code": "right_arrow",
           "modifiers": [

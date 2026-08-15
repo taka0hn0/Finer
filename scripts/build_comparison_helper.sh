@@ -24,16 +24,17 @@ fi
 mkdir -p "$repo_root/.build" "$output_root/$label"
 temp_root="$(mktemp -d "$repo_root/.build/comparison-helper.XXXXXX")"
 trap 'rm -rf "$temp_root"' EXIT
-source_copy="$temp_root/finder_ax_step.c"
 helper_copy="$temp_root/finder_ax_step"
 manifest_copy="$temp_root/environment.txt"
+source_root="$temp_root/source"
+mkdir -p "$source_root/src"
 
 head_commit="$(git -C "$repo_root" rev-parse HEAD)"
 if [[ "$requested_ref" == WORKTREE ]]; then
     source_kind=worktree
     resolved_commit="$head_commit"
     source_blob=WORKTREE
-    cp "$repo_root/$source_path" "$source_copy"
+    compile_root="$repo_root"
 else
     source_kind=git
     if ! resolved_commit="$(git -C "$repo_root" rev-parse --verify "$requested_ref^{commit}" 2>/dev/null)"; then
@@ -44,15 +45,31 @@ else
         print -u2 -- "Missing $source_path at Git ref: $requested_ref"
         exit 1
     fi
-    git -C "$repo_root" show "$requested_ref:$source_path" > "$source_copy"
+    if git -C "$repo_root" cat-file -e \
+        "${requested_ref}:src/worker/finder_ax_step/prelude.inc" 2>/dev/null; then
+        git -C "$repo_root" archive "$requested_ref" -- \
+            "$source_path" src/worker/finder_ax_step \
+            | tar -x -C "$source_root"
+    else
+        git -C "$repo_root" show "$requested_ref:$source_path" \
+            > "$source_root/$source_path"
+    fi
+    compile_root="$source_root"
 fi
 
 compiler="$(xcrun --find clang)"
 xcrun clang -std=c11 -O2 -Wall -Wextra -Werror \
     -framework ApplicationServices -framework Carbon \
-    "$source_copy" -o "$helper_copy"
+    "$compile_root/$source_path" -o "$helper_copy"
 
-source_sha256="$(shasum -a 256 "$source_copy" | awk '{ print $1 }')"
+typeset -a source_files=("$compile_root/$source_path")
+source_files+=("$compile_root"/src/worker/finder_ax_step/*.inc(N))
+source_fingerprints=""
+for source_file in "${source_files[@]}"; do
+    relative_source="${source_file#$compile_root/}"
+    source_fingerprints+="$relative_source $(shasum -a 256 "$source_file" | awk '{ print $1 }')\n"
+done
+source_sha256="$(print -rn -- "$source_fingerprints" | shasum -a 256 | awk '{ print $1 }')"
 helper_sha256="$(shasum -a 256 "$helper_copy" | awk '{ print $1 }')"
 compiler_version="$("$compiler" --version | awk 'NR == 1 { print; exit }')"
 {

@@ -70,7 +70,7 @@ for required in Makefile README.md LICENSE scripts/install.sh scripts/uninstall.
     scripts/build_distribution.sh scripts/verify_distribution.sh \
     scripts/test_distribution.sh rules/source/finer-utility-commands.json \
     rules/source/finer-navigation.json rules/generated/finder-vim.json \
-    src/finder_ax_step.c src/finder_ax_move.swift; do
+    src/finder_ax_step.c src/finder_ax_move.swift src/finer_jump.swift; do
     if [[ ! -f "$source_root/$required" ]]; then
         fail "missing required source file: $required"
     fi

@@ -5,8 +5,12 @@ This repository began as an extraction from a working local
 
 ## Included implementation
 
-- `src/finder_ax_step.c`: transient C worker for navigation and held keys.
-- `src/finder_ax_move.swift`: AX selection, marks, and clipboard information.
+- `src/finder_ax_step.c` and `src/worker/finder_ax_step/`: transient C worker
+  for navigation, held keys, worker transport, and edge monitoring.
+- `src/finder_ax_move.swift` and `src/commands/finder_ax_move/`: AX selection,
+  marks, new-folder behavior, Visual selection, and clipboard information.
+- `src/finer_jump.swift` and `src/jump/`: on-demand folder and file search
+  palette, candidate providers, and Finder navigation.
 - `scripts/finder_action_marked.sh`: records copy, cut, and delete targets.
 - `scripts/finder_paste.sh`: copies or moves recorded targets through Finder.
 - `rules/generated/finder-vim.json`: snapshot of the two active Finer

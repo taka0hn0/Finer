@@ -1,7 +1,7 @@
 # Finer 要件定義・基本設計
 
 - Status: Draft 0.1
-- Last updated: 2026-08-02
+- Last updated: 2026-08-15
 - Source of truth: This document
 
 ## 1. 目的
@@ -114,6 +114,7 @@ macOS FinderをVim風に操作できる、高速・軽量・設定可能なキ�
 - `FR-DIAG-001`: `?` でキーマップと現在のモードを確認できること。
 - `FR-DIAG-002`: 診断コマンドでKarabiner、権限、インストールファイル、設定、ソケットを検査できること。
 - `FR-DIAG-003`: 通常時はログを増やさず、診断時だけ詳細ログを有効化できること。
+- `FR-DIAG-004`: デモ収録用キー表示アプリが明示的に待受中の場合だけ、Finerが消費した元の操作キーをローカルIPCへbest-effortで通知できること。通常のFinder入力ストリームへ表示用キーを追加送信しないこと。
 
 ## 5. 非機能要件
 
@@ -203,6 +204,13 @@ Keyboard
 - エラーコードと診断情報の生成
 - AX属性の一括取得とプロセス内での検索・照合
 - 項目単位のAX問い合わせを互換フォールバックへ限定
+
+実装ソースは責務別に分割する。Cワーカーはhot pathの内部リンクと
+whole-file最適化を維持するため、短い互換entry pointから内部実装fragmentを
+固定順でincludeする単一translation unitとする。Swift helperはentry point、
+AX共通処理、選択状態、ファイル操作、検索provider、Finder移動、UIを独立した
+ソースファイルとして同一実行ファイルへコンパイルする。分割によって実行ファイル名、
+CLI、プロセス構成、アイドル時リソース要件を変更しない。
 
 ### 6.4 ワーカーのライフサイクル
 
@@ -342,8 +350,12 @@ finder-vim/
 │   ├── BENCHMARKS.md
 │   └── TROUBLESHOOTING.md
 ├── src/
-│   ├── worker/
-│   └── cli/
+│   ├── finder_ax_step.c
+│   ├── finder_ax_move.swift
+│   ├── finer_jump.swift
+│   ├── worker/finder_ax_step/
+│   ├── commands/finder_ax_move/
+│   └── jump/
 ├── rules/
 │   ├── source/
 │   └── generated/
@@ -468,12 +480,34 @@ finder-vim/
   - 回帰確認: List、Column、Iconで3項目以上を昇順・降順・交互順にマークし、各`s`直後と移動後の表示選択、マーク状態ファイル、移動アンカーを確認する。`y/x/d`は引き続き確定マークだけを対象にする。
 - `TASK-NAVIGATION-001` (Open): Listの通常`j/k`で、素早い方向切替でも入力を取りこぼさず停止しないようにする。
   - 現在の再現条件: 間欠的な大ジャンプは現行dogfoodで解消した。一方、`j`と`k`を素早く交互に入力すると、直前と反対方向の入力が認識されずカーソルが停止する場合がある。Finder標準矢印へ直結する`Shift+j/k`のBoost Modeでは再現しない。
-  - 現在の候補: hold tokenの世代保護だけでは入力無視が多少改善する程度だった。新方向tokenの先行公開と方向転換時だけの安定待ち省略でさらに改善したが、Boost Modeには及ばない。次の候補ではウォームな通常移動が同じFinder選択を事前検証と移動開始で2回読む重複を1回へ統合し、循環・選択確定・移動方法を変えずAX往復だけを減らす。
-  - 次回の調査: この候補で物理入力の取りこぼしが残る場合だけ、物理`j/k`、Karabinerの`hold-start`／key-up、方向別token更新、移動worker受信、movement lock取得・解放を同じ時系列で一時記録する。計測時だけ記録し、通常利用へログや常駐監視を追加しない。
+  - 現在の候補: owner制御とウォーム選択AX読取の重複除去までで体感は改善したが、Boost Modeには及ばなかった。実験候補では方向別の反復プロセスを停止・再起動せず、押下中だけ存在する1本の縦反復controllerがdown/up tokenの新しい方を各tickで採用し、同じFinderコンテキストとmovement loopのまま方向を切り替える。
+  - 次回の調査: 1本化した実験で物理入力の取りこぼしが残る場合だけ、物理`j/k`、Karabinerの`hold-start`／key-up、方向token更新、controllerの方向採用、movement lock取得・解放を同じ時系列で一時記録する。計測時だけ記録し、通常利用へログや常駐監視を追加しない。
   - 実装方針: 項目数、端窓、予測位置、スクロール値による補正を追加しない。原因を1つに絞り、Finder標準の選択・表示追従を維持した最小の状態機械で修正する。
   - 受け入れ条件: 短いListと1000項目Listで通常`j/k`を20回以上素早く交互入力し、取りこぼし0、意図しない停止0、大ジャンプ0、表示追従あり、key-up後drift 0とする。Boost Modeの速度と端停止は変化させない。
 
 ## 16. Decision Log
+
+### 2026-08-15: helper実装を責務別ソースへ分割する
+
+- Decision: 3つの実行ファイルと既存CLIを維持しながら、CナビゲーションworkerをAX基盤、選択、イベント、移動、runtime、worker転送、長押し、端監視、CLIへ分割する。Cは短い互換entry pointが内部fragmentを固定順でincludeする単一translation unitを維持する。SwiftのAX command helperは共通型、AX操作、ナビゲーション状態、選択、新規フォルダ、Visual選択、command dispatchへ分割し、Jump Paletteは検索、Finder移動、完了処理、UI、headless interfaceへ分割する。
+- Reason: 変更前の`src`は6,343行、2,058行、1,308行の3ファイルへ約9,700行が集中し、ナビゲーション性能経路と周辺機能の変更範囲を追いにくかった。責務境界をファイルとして表し、ビルド依存関係を明示すれば、該当機能を局所的に読んで変更・レビューできる。
+- Constraint: この変更ではFinder上の挙動、CLI引数、Karabiner rule、実行ファイル名、プロセス寿命、AX問い合わせ、CGEvent送信、性能経路を変更しない。Cを複数translation unitへ分ける最適化上の影響も持ち込まない。root entry pointは既存ツールとの互換識別子として残し、子ソース変更でも必ず再ビルドする。
+- Verification: clean build、`make check`、隔離install、旧単一Cファイルと新しいC fragment構成の比較helper buildを通す。headless Jump、mark state、tap burst、edge monitorの既存回帰結果が分割前と一致することを確認する。
+
+### 2026-08-09: Keystroke待受中だけ元の操作キーをデモ表示へ通知する
+
+- Decision: Keystrokeがユーザー単位のUNIX datagram socketを開いている間だけ、Finerが消費した操作キーをbest-effortで通知する。通常`h/j/k/l`、Visual開始、`cc/cd/cf/cn`、Jump Palette起動は既存ヘルパー内またはprefixルールから元キーを通知する。Visual ModeとBoost ModeでFinderへ変換後キーを送る経路は元キーと抑制対象を通知する。Keystrokeは元キーを表示し、対応する変換後イベントを重複表示しない。矢印にmacOSが暗黙付与する`fn`は重複判定から除外する。
+- Reason: Karabiner適用後のread-only CGEvent tapでは、AXで完結する通常移動はイベントが届かず、Visual Modeの`j`は物理`j`ではなく`Shift+Down Arrow`として観測される。デモ動画には物理操作を表示したいが、通常のFinder入力ストリームへ表示専用キーを注入したくないため。
+- Constraint: 通知先がなければ直ちに失敗して操作を継続し、Finderの成否や速度を通知結果へ依存させない。常駐プロセス、ログ、ネットワーク通信は追加しない。IPCはデモ表示の補助であり、Finer本体の操作仕様には使用しない。
+- Verification: Keystroke不在時に通常操作とテストが従来どおり成功すること、待受中に通常`h/j/k/l`、`v`、`cc/cd/cf/cn`、`z`が元キーで表示されること、通常`h/l`とVisual Modeの`v j`が変換後矢印を重複表示しないことを確認する。
+
+### 2026-08-02: 通常j/kの長押し反復を1本の縦controllerで切り替える
+
+- Status: Experiment。既知の良好なdogfoodはcommit `23b8723`として保持し、この候補は物理確認が終わるまで正式採用・コミットしない。
+- Decision: 通常`j/k`の長押し反復は、down/upごとに別プロセスを停止・再起動する代わりに、押下中だけ存在する単一の縦controller lockを使う。controllerはdown/up両tokenの単調時刻を各反復で読み、より新しいkey-down方向へ同じループ内で切り替える。Listの標準矢印タップ経路とColumnの高速AX経路は同じ所有モデルを使い、新方向の`hold-repeat`プロセスは既存controllerが動いていれば処理を重複させず終了する。ownerでない先入力のkey-upは後入力tokenを停止せず、現在ownerのkey-upだけが対応tokenを直ちに空にする。
+- Reason: owner変数は150ms後の`to_if_held_down`競合を防ぐが、従来は各key-downが独立した`hold-start`、各長押しが方向別`hold-repeat`、各key-upが方向別停止を起動していた。そのため反転ごとに旧loopの終了、Finder入力tailの安定待ち、新loopのコンテキスト作成が境界になり、KarabinerからFinder矢印へ直結するBoost Modeより切り返しが止まりやすかった。既存loopの方向だけを交換すれば、この停止・再生成境界を反転hot pathから外せる。
+- Constraint: 初回長押し判定150ms、通常単押しのワーカー移動、Listの8.333msタップと16.667ms端確認、Columnの高速AX移動、循環、確定マーク、Boost Modeは変更しない。controllerは最大300秒、token消失、Finder失焦点で終了し、アイドル時にプロセスを残さない。項目数、端までの距離、予測窓、スクロール値を方向判定へ追加しない。同方向の高速な離す→再押下を含め、key-up後driftを物理確認する。
+- Verification: 隔離HOMEでdown開始、down据え置き、up後入力への切替、同方向の新世代、全token停止を自己テストする。生成ルールでは現在ownerのkey-upだけがtokenを空にすることを検証する。dogfoodでは短いListと1000項目List、Columnで`j→k`と`k→j`を重ねる保持、20回以上の高速交互入力、同方向の高速再押下、単独長押し、上下循環、key-up後100msのdrift 0を確認する。
 
 ### 2026-08-02: 同時押下された通常j/kは後入力を所有者とする
 

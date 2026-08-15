@@ -14,8 +14,8 @@ visual_start_command='$HOME/.local/libexec/finder-vim/finder_ax_move visual-star
 copy_marks_command='$HOME/.local/libexec/finder-vim/finder_action_marked.sh copy >/dev/null 2>&1; exec /usr/bin/truncate -s 0 $HOME/.local/state/finder-vim/finder_marks.txt $HOME/.local/state/finder-vim/finder_navigation_anchor.txt'
 new_folder_current_level_command='exec $HOME/.local/libexec/finder-vim/finder_ax_move new-folder-current-level >/dev/null 2>&1'
 jump_command='$HOME/.local/libexec/finder-vim/finer_jump >/dev/null 2>&1; exec '\''/Library/Application Support/org.pqrs/Karabiner-Elements/bin/karabiner_cli'\'' --set-variables '\''{"finer_jump_active":0}'\'' >/dev/null 2>&1'
-hold_stop_down_command='exec $HOME/.local/libexec/finder-vim/finder_ax_step hold-stop down >/dev/null 2>&1'
-hold_stop_up_command='exec $HOME/.local/libexec/finder-vim/finder_ax_step hold-stop up >/dev/null 2>&1'
+hold_stop_down_command='exec $HOME/.local/libexec/finder-vim/finder_ax_step hold-stop-now down >/dev/null 2>&1'
+hold_stop_up_command='exec $HOME/.local/libexec/finder-vim/finder_ax_step hold-stop-now up >/dev/null 2>&1'
 
 jq -e \
     --arg text_expression "$text_expression" \
@@ -252,7 +252,10 @@ def without_jump_palette_guard:
                 "key_code":"j",
                 "modifiers":{"mandatory":["shift"]}
             }
-            and .to == [{"key_code":"down_arrow","repeat":true}]
+            and .to == [
+                {"shell_command":"exec $HOME/.local/libexec/finder-vim/finder_ax_step notify-key 38 4 125 0 >/dev/null 2>&1"},
+                {"key_code":"down_arrow","repeat":true}
+            ]
             and .conditions == [
                 {
                     "bundle_identifiers":["^com\\.apple\\.finder$"],
@@ -284,7 +287,10 @@ def without_jump_palette_guard:
                 "key_code":"k",
                 "modifiers":{"mandatory":["shift"]}
             }
-            and .to == [{"key_code":"up_arrow","repeat":true}]
+            and .to == [
+                {"shell_command":"exec $HOME/.local/libexec/finder-vim/finder_ax_step notify-key 40 4 126 0 >/dev/null 2>&1"},
+                {"key_code":"up_arrow","repeat":true}
+            ]
             and .conditions == [
                 {
                     "bundle_identifiers":["^com\\.apple\\.finder$"],
@@ -910,7 +916,14 @@ def without_jump_palette_guard:
                 {"shell_command":"exec $HOME/.local/libexec/finder-vim/finder_ax_step hold-start down >/dev/null 2>&1"}
             ]
             and .to_after_key_up == [
-                {"shell_command":$hold_stop_down_command},
+                {
+                    "conditions":[{
+                        "name":"finder_normal_vertical_owner",
+                        "type":"variable_if",
+                        "value":1
+                    }],
+                    "shell_command":$hold_stop_down_command
+                },
                 {"set_variable":{
                     "expression":"finder_normal_vertical_owner == 1 ? 0 : finder_normal_vertical_owner",
                     "name":"finder_normal_vertical_owner"
@@ -939,7 +952,14 @@ def without_jump_palette_guard:
                 {"shell_command":"exec $HOME/.local/libexec/finder-vim/finder_ax_step hold-start up >/dev/null 2>&1"}
             ]
             and .to_after_key_up == [
-                {"shell_command":$hold_stop_up_command},
+                {
+                    "conditions":[{
+                        "name":"finder_normal_vertical_owner",
+                        "type":"variable_if",
+                        "value":2
+                    }],
+                    "shell_command":$hold_stop_up_command
+                },
                 {"set_variable":{
                     "expression":"finder_normal_vertical_owner == 2 ? 0 : finder_normal_vertical_owner",
                     "name":"finder_normal_vertical_owner"

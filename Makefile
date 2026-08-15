@@ -6,6 +6,9 @@ C_HELPER := $(BUILD_DIR)/finder_ax_step
 SWIFT_HELPER := $(BUILD_DIR)/finder_ax_move
 JUMP_HELPER := $(BUILD_DIR)/finer_jump
 VISUAL_CAPTURE_HELPER := $(BUILD_DIR)/finer_visual_capture
+C_WORKER_SOURCES := src/finder_ax_step.c $(wildcard src/worker/finder_ax_step/*.inc)
+AX_MOVE_SOURCES := src/finder_ax_move.swift $(wildcard src/commands/finder_ax_move/*.swift)
+JUMP_SOURCES := src/finer_jump.swift $(wildcard src/jump/*.swift)
 ITERATIONS ?= 10
 COUNTS ?= 10 1000 10000
 BASELINE_REF ?= 793a82c
@@ -28,20 +31,20 @@ check-rules:
 $(BUILD_DIR):
 	mkdir -p $(BUILD_DIR) $(MODULE_CACHE)
 
-$(C_HELPER): src/finder_ax_step.c | $(BUILD_DIR)
+$(C_HELPER): $(C_WORKER_SOURCES) | $(BUILD_DIR)
 	xcrun clang -std=c11 -O2 -Wall -Wextra -Werror \
 		-framework ApplicationServices -framework Carbon \
-		$< -o $@
+		src/finder_ax_step.c -o $@
 
-$(SWIFT_HELPER): src/finder_ax_move.swift | $(BUILD_DIR)
+$(SWIFT_HELPER): $(AX_MOVE_SOURCES) | $(BUILD_DIR)
 	xcrun swiftc -O -module-cache-path $(MODULE_CACHE) \
 		-framework AppKit -framework ApplicationServices \
-		$< -o $@
+		$(AX_MOVE_SOURCES) -o $@
 
-$(JUMP_HELPER): src/finer_jump.swift | $(BUILD_DIR)
+$(JUMP_HELPER): $(JUMP_SOURCES) | $(BUILD_DIR)
 	xcrun swiftc -O -module-cache-path $(MODULE_CACHE) \
 		-framework AppKit \
-		$< -o $@
+		$(JUMP_SOURCES) -o $@
 
 $(VISUAL_CAPTURE_HELPER): tools/finer_visual_capture.m | $(BUILD_DIR)
 	xcrun clang -fobjc-arc -O2 -Wall -Wextra -Werror \

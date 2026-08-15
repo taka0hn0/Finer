@@ -60,9 +60,9 @@ fails if the source modules and generated importable rule differ.
 
 ## Changing navigation or selection
 
-Changes to `src/finder_ax_step.c`, `src/finder_ax_move.swift`, or
-`rules/source/*.json` should include the narrowest relevant
-regression test. At minimum, verify:
+Changes to the entry points or implementation modules under `src/worker/`,
+`src/commands/`, or `src/jump/`, and changes to `rules/source/*.json`, should
+include the narrowest relevant regression test. At minimum, verify:
 
 ```sh
 make check

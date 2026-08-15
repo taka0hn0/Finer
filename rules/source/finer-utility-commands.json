@@ -482,6 +482,9 @@
       },
       "to": [
         {
+          "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_step notify-key 8 0 -1 0 >/dev/null 2>&1"
+        },
+        {
           "set_variable": {
             "name": "finder_c_prefix",
             "value": 1
