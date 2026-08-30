@@ -129,13 +129,6 @@ func directlySelectedItems(
     )
 }
 
-func selectedItemURL(
-    in container: AXUIElement,
-    role: String
-) -> URL? {
-    selectedItemWithURL(in: container, role: role)?.url
-}
-
 func selectedItemWithURL(
     in container: AXUIElement,
     role: String
