@@ -1,7 +1,7 @@
 # Finer 要件定義・基本設計
 
 - Status: Draft 0.1
-- Last updated: 2026-08-15
+- Last updated: 2026-08-29
 - Source of truth: This document
 
 ## 1. 目的
@@ -508,6 +508,13 @@ finder-vim/
   - 受け入れ条件: 短いListと1000項目Listで通常`j/k`を20回以上素早く交互入力し、取りこぼし0、意図しない停止0、大ジャンプ0、表示追従あり、key-up後drift 0とする。Boost Modeの速度と端停止は変化させない。
 
 ## 16. Decision Log
+
+### 2026-08-29: Openダイアログの許可判定を単一のpolicy関数に集約する
+
+- Decision: 前面bundle ID、`AXSheet`の`AXIdentifier`、対象roleの許可判定を`open_panel_context_model_accepts`1か所に集約し、本番の認定経路・継続検証・`diagnose`がすべて同じ関数を通る構造にする。AX状態の取得は共通スナップショットへ分け、sheetの探索は識別子を判定せず最も近い`AXSheet`祖先を返す。
+- Reason: 従来は許可リストが3か所に分散し、self-testは本番が呼ばない純粋モデル関数だけを検証していた。そのため許可アプリやroleを変更してもテストは通り、実際の判定だけが変わらない乖離を検出できなかった。sheet探索が`open-panel`を直接埋め込んでいたことも、判定の集約を妨げていた。
+- Constraint: 許可リストは`com.microsoft.VSCode`と`open-panel`のみとする。subroleは判定に使わない。Columnの`AXList`とIconの`AXList/AXCollectionList`をともに受理する既存挙動を維持する。認定は初回キーだけで行い、認定後のrepeat経路へAX問い合わせを追加しない。
+- Verification: helperのself-testで許可・非許可の組み合わせに加え、`AXSheet`祖先がない場合と`save-panel`が拒否されることを検証する。`make check`と`scripts/test_open_panel.sh`を通す。
 
 ### 2026-08-15: VS Code Openダイアログを短命認定セッションで操作する
 

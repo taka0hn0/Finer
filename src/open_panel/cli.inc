@@ -66,6 +66,36 @@ static int open_panel_self_test(void) {
         )) {
         return 1;
     }
+
+    // The production certification path reaches the allowlist above through
+    // `open_panel_evaluation_accepts`, so cover that wrapper too: a focused
+    // element with no AXSheet ancestor must never be certified.
+    open_panel_evaluation_t evaluation;
+    memset(&evaluation, 0, sizeof(evaluation));
+    snprintf(
+        evaluation.bundle_identifier,
+        sizeof(evaluation.bundle_identifier),
+        "%s",
+        open_panel_bundle_id
+    );
+    snprintf(
+        evaluation.sheet_identifier,
+        sizeof(evaluation.sheet_identifier),
+        "%s",
+        open_panel_identifier
+    );
+    snprintf(evaluation.role, sizeof(evaluation.role), "AXList");
+    evaluation.has_sheet = false;
+    if (open_panel_evaluation_accepts(&evaluation)) return 1;
+    evaluation.has_sheet = true;
+    if (!open_panel_evaluation_accepts(&evaluation)) return 1;
+    snprintf(
+        evaluation.sheet_identifier,
+        sizeof(evaluation.sheet_identifier),
+        "save-panel"
+    );
+    if (open_panel_evaluation_accepts(&evaluation)) return 1;
+
     puts("Open panel helper self-test passed.");
     return 0;
 }

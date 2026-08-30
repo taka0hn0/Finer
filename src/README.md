@@ -60,6 +60,12 @@ exists only while a verified Open panel is present.
 `finer_open_panel diagnose` reports the current allowlist decision without
 changing focus, variables, or key input.
 
+`open_panel_context_model_accepts` in `context.inc` is the single allowlist
+decision. Certification, the session's continued validation, and `diagnose` all
+reach it through the same snapshot, and the self-test exercises that same
+function, so the accepted applications and roles cannot drift away from what the
+test covers.
+
 Behavioral or architectural changes still belong in
 `docs/FINDER_VIM_SPEC.md` and its Decision Log. Run `make check` after any
 source change.
