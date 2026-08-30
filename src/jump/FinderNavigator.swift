@@ -18,7 +18,7 @@ enum FinderNavigator {
             throw JumpError.navigationFailed("the folder no longer exists")
         }
 
-        if navigateDirectly(to: path) {
+        if FinderScript.navigate(toFolder: path) {
             return
         }
 
@@ -32,7 +32,7 @@ enum FinderNavigator {
             throw JumpError.navigationFailed("the file no longer exists")
         }
 
-        if revealDirectly(file: path) {
+        if FinderScript.reveal(file: path) {
             return
         }
 
@@ -62,77 +62,6 @@ enum FinderNavigator {
                     ? message!
                     : "finder_ax_move exited with \(process.terminationStatus)"
             )
-        }
-    }
-
-    private static func navigateDirectly(to path: String) -> Bool {
-        let environment = ProcessInfo.processInfo.environment
-        let executablePath = environment["FINER_OSASCRIPT_PATH"]
-            ?? "/usr/bin/osascript"
-        guard FileManager.default.isExecutableFile(atPath: executablePath) else {
-            return false
-        }
-
-        let script = """
-        on run argv
-            set destinationPath to item 1 of argv
-            tell application "/System/Library/CoreServices/Finder.app"
-                if (count of Finder windows) is 0 then error "No Finder window"
-                set destinationFolder to POSIX file destinationPath as alias
-                set target of front Finder window to destinationFolder
-                activate
-            end tell
-        end run
-        """
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: executablePath)
-        process.arguments = ["-e", script, path]
-        process.standardOutput = FileHandle.nullDevice
-        process.standardError = FileHandle.nullDevice
-        do {
-            try process.run()
-            process.waitUntilExit()
-            return process.terminationStatus == 0
-        } catch {
-            return false
-        }
-    }
-
-    private static func revealDirectly(file path: String) -> Bool {
-        let environment = ProcessInfo.processInfo.environment
-        let executablePath = environment["FINER_OSASCRIPT_PATH"]
-            ?? "/usr/bin/osascript"
-        guard FileManager.default.isExecutableFile(atPath: executablePath) else {
-            return false
-        }
-
-        let parentPath = URL(fileURLWithPath: path)
-            .deletingLastPathComponent().path
-        let script = """
-        on run argv
-            set destinationPath to item 1 of argv
-            set selectedPath to item 2 of argv
-            tell application "/System/Library/CoreServices/Finder.app"
-                if (count of Finder windows) is 0 then error "No Finder window"
-                set destinationFolder to POSIX file destinationPath as alias
-                set selectedFile to POSIX file selectedPath as alias
-                set target of front Finder window to destinationFolder
-                set selection to {selectedFile}
-                activate
-            end tell
-        end run
-        """
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: executablePath)
-        process.arguments = ["-e", script, parentPath, path]
-        process.standardOutput = FileHandle.nullDevice
-        process.standardError = FileHandle.nullDevice
-        do {
-            try process.run()
-            process.waitUntilExit()
-            return process.terminationStatus == 0
-        } catch {
-            return false
         }
     }
 

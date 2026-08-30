@@ -4,6 +4,13 @@ The four files directly under `src/` are stable executable entry points. The
 implementation lives in responsibility-based subdirectories so build and
 installation paths remain compatible.
 
+`shared/` holds the Swift sources compiled into **both** Swift executables.
+Add a file there only when the two helpers must behave identically:
+`FinderScript.swift` owns the Apple Event scripts that retarget the front Finder
+window, and `KeystrokeSocket.swift` owns the demo-overlay notification format.
+The Makefile appends `SHARED_SWIFT_SOURCES` to `AX_MOVE_SOURCES` and
+`JUMP_SOURCES`; keep both lists in sync when adding one.
+
 ## Navigation worker
 
 `finder_ax_step.c` includes the fragments under `worker/finder_ax_step/` in an

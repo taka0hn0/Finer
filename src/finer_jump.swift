@@ -10,7 +10,7 @@ enum FinerJumpCommand {
             exit(exitCode)
         }
 
-        notifyKeystrokeJumpKey()
+        KeystrokeSocket.notify(keyCode: 6)
 
         let app = NSApplication.shared
         let controller = JumpController()
