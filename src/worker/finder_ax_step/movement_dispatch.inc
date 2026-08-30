@@ -15,6 +15,193 @@ static bool post_column_navigation_key(
 
 static const CFIndex current_index_unknown = (CFIndex)-2;
 
+// The movement handlers below never touch the movement lock. `move_once` owns
+// it for the whole dispatch so every outcome leaves through one unlock.
+
+static CFIndex move_once_grid(
+    navigation_context_t *context,
+    direction_t direction,
+    CFIndex current,
+    CFIndex count,
+    bool *navigation_may_change
+) {
+    CFIndex position = 0;
+    if (current >= 0
+        && (direction == direction_left || direction == direction_right)) {
+        if (context->has_marks) {
+            CFIndex destination = direction == direction_right
+                ? (current + 1) % count
+                : (current + count - 1) % count;
+            position = set_visible_mark_and_cursor_selection(
+                context,
+                destination
+            ) ? destination + 1 : 0;
+        } else {
+            position = move_grid_horizontal(
+                context,
+                current,
+                direction,
+                navigation_may_change
+            );
+        }
+    } else if (current >= 0 && post_key_code(arrow_key_code(direction))) {
+        CFIndex destination = context->has_marks
+            ? wait_for_selection_change(context, current)
+            : current;
+        position = destination >= 0 ? destination + 1 : 0;
+    }
+    // Vertical Grid movement posts a native arrow and only then learns where
+    // Finder landed, so the marked selection has to be rebuilt afterwards.
+    // The horizontal paths above already selected through the mark helper.
+    if (context->has_marks && position > 0
+        && direction != direction_left
+        && direction != direction_right) {
+        if (!set_visible_mark_and_cursor_selection(context, position - 1)) {
+            position = 0;
+        }
+    }
+    if (context->has_marks && position > 0) {
+        context->cursor_index = position - 1;
+    }
+    return position;
+}
+
+static CFIndex move_once_outline_vertical(
+    navigation_context_t *context,
+    direction_t direction,
+    CFIndex current
+) {
+    CFIndex position = select_outline_next(context, current, direction);
+    if (context->has_marks && position > 0
+        && !set_visible_mark_and_cursor_selection(context, position - 1)) {
+        position = 0;
+    }
+    if (context->has_marks && position > 0) {
+        context->cursor_index = position - 1;
+    }
+    return position;
+}
+
+static CFIndex move_once_descendant_selection(
+    navigation_context_t *context,
+    direction_t direction,
+    CFIndex current,
+    bool *navigation_may_change,
+    column_phase_metrics_t *column_phases
+) {
+    CFIndex position;
+    if (direction == direction_left || direction == direction_right) {
+        bool success = post_column_navigation_key(
+            arrow_key_code(direction),
+            column_phases
+        );
+        if (success && navigation_may_change) {
+            *navigation_may_change = true;
+        }
+        position = success ? (current >= 0 ? current + 1 : 1) : 0;
+    } else {
+        bool success = post_column_navigation_key(
+            arrow_key_code(direction),
+            column_phases
+        );
+        CFIndex destination = success
+            ? wait_for_selection_change(context, current)
+            : -1;
+        if (context->has_marks && destination >= 0
+            && !set_visible_mark_and_cursor_selection(
+                context,
+                destination
+            )) {
+            destination = -1;
+        }
+        position = destination >= 0 ? destination + 1 : 0;
+    }
+    if (context->has_marks && position > 0) {
+        context->cursor_index = position - 1;
+    }
+    return position;
+}
+
+// Column hierarchy movement. The new directory is discovered by the caller
+// through `navigation_may_change`, so no cursor bookkeeping applies here.
+static CFIndex move_once_horizontal(
+    direction_t direction,
+    CFIndex current,
+    bool *navigation_may_change,
+    column_phase_metrics_t *column_phases
+) {
+    bool success = post_column_navigation_key(
+        arrow_key_code(direction),
+        column_phases
+    );
+    if (success && navigation_may_change) {
+        *navigation_may_change = true;
+    }
+    return success ? (current >= 0 ? current + 1 : 1) : 0;
+}
+
+static CFIndex move_once_indexed(
+    navigation_context_t *context,
+    direction_t direction,
+    CFIndex current,
+    CFIndex count
+) {
+    CFIndex destination = current;
+    for (CFIndex attempt = 0; attempt < count; ++attempt) {
+        if (direction == direction_down) {
+            destination = destination < 0
+                ? 0
+                : (destination + 1) % count;
+        } else {
+            destination = destination < 0
+                ? count - 1
+                : (destination + count - 1) % count;
+        }
+        if (navigation_item_is_selectable(context, destination)) break;
+    }
+    if (!navigation_item_is_selectable(context, destination)) return 0;
+
+    bool success = set_visible_mark_and_cursor_selection(context, destination);
+    if (success) {
+        for (int attempt = 0; attempt < 20; ++attempt) {
+            if (context->has_marks || current_index(context) == destination) {
+                break;
+            }
+            usleep(500);
+        }
+    }
+    if (success && context->has_marks) {
+        context->cursor_index = destination;
+    }
+    return success ? destination + 1 : 0;
+}
+
+static CFIndex move_once_current_index(
+    navigation_context_t *context,
+    CFIndex current_hint,
+    bool use_navigation_anchor
+) {
+    CFIndex anchor = context->cursor_index >= 0
+        ? context->cursor_index
+        : use_navigation_anchor
+            ? take_navigation_anchor(context)
+            : -1;
+    if (anchor >= 0 && !context->has_marks
+        && !select_index(context, anchor)) {
+        anchor = -1;
+    }
+    if (anchor >= 0) {
+        context->predicted_index = -1;
+        return anchor;
+    }
+    if (context->role == navigation_grid && context->predicted_index >= 0) {
+        return context->predicted_index;
+    }
+    return current_hint != current_index_unknown
+        ? current_hint
+        : current_index(context);
+}
+
 static CFIndex move_once(
     navigation_context_t *context,
     direction_t direction,
@@ -32,166 +219,45 @@ static CFIndex move_once(
     }
 
     CFIndex count = CFArrayGetCount(context->items);
-    CFIndex anchor = context->cursor_index >= 0
-        ? context->cursor_index
-        : use_navigation_anchor
-            ? take_navigation_anchor(context)
-            : -1;
-    if (anchor >= 0 && !context->has_marks
-        && !select_index(context, anchor)) {
-        anchor = -1;
-    }
-    if (anchor >= 0) context->predicted_index = -1;
-    CFIndex current = anchor >= 0
-        ? anchor
-        : context->role == navigation_grid
-            && context->predicted_index >= 0
-        ? context->predicted_index
-        : current_hint != current_index_unknown
-            ? current_hint
-            : current_index(context);
+    CFIndex current = move_once_current_index(
+        context,
+        current_hint,
+        use_navigation_anchor
+    );
+
+    CFIndex position;
     if (context->role == navigation_grid) {
-        CFIndex position = 0;
-        if (current >= 0
-            && (direction == direction_left || direction == direction_right)) {
-            if (context->has_marks) {
-                CFIndex destination = direction == direction_right
-                    ? (current + 1) % count
-                    : (current + count - 1) % count;
-                position = set_visible_mark_and_cursor_selection(
-                    context,
-                    destination
-                ) ? destination + 1 : 0;
-            } else {
-                position = move_grid_horizontal(
-                    context,
-                    current,
-                    direction,
-                    navigation_may_change
-                );
-            }
-        } else if (current >= 0 && post_key_code(arrow_key_code(direction))) {
-            CFIndex destination = context->has_marks
-                ? wait_for_selection_change(context, current)
-                : current;
-            position = destination >= 0 ? destination + 1 : 0;
-        }
-        if (context->has_marks && position > 0
-            && direction != direction_left
-            && direction != direction_right) {
-            if (!set_visible_mark_and_cursor_selection(
-                    context,
-                    position - 1
-                )) {
-                position = 0;
-            }
-        }
-        if (context->has_marks && position > 0) {
-            context->cursor_index = position - 1;
-        }
-        if (lock_fd >= 0) flock(lock_fd, LOCK_UN);
-        return position;
-    }
-
-    if (context->role == navigation_outline
-        && (direction == direction_down || direction == direction_up)) {
-        CFIndex position = select_outline_next(context, current, direction);
-        if (context->has_marks && position > 0
-            && !set_visible_mark_and_cursor_selection(
-                context,
-                position - 1
-            )) {
-            position = 0;
-        }
-        if (context->has_marks && position > 0) {
-            context->cursor_index = position - 1;
-        }
-        if (lock_fd >= 0) flock(lock_fd, LOCK_UN);
-        return position;
-    }
-
-    if (uses_descendant_selection(context, current)) {
-        CFIndex position;
-        if (direction == direction_left || direction == direction_right) {
-            bool success = post_column_navigation_key(
-                arrow_key_code(direction),
-                column_phases
-            );
-            if (success && navigation_may_change) {
-                *navigation_may_change = true;
-            }
-            position = success ? (current >= 0 ? current + 1 : 1) : 0;
-        } else {
-            bool success = post_column_navigation_key(
-                arrow_key_code(direction),
-                column_phases
-            );
-            CFIndex destination = success
-                ? wait_for_selection_change(context, current)
-                : -1;
-            if (context->has_marks && destination >= 0
-                && !set_visible_mark_and_cursor_selection(
-                    context,
-                    destination
-                )) {
-                destination = -1;
-            }
-            position = destination >= 0 ? destination + 1 : 0;
-        }
-        if (context->has_marks && position > 0) {
-            context->cursor_index = position - 1;
-        }
-        if (lock_fd >= 0) flock(lock_fd, LOCK_UN);
-        return position;
-    }
-
-    if (direction == direction_left || direction == direction_right) {
-        bool success = post_column_navigation_key(
-            arrow_key_code(direction),
+        position = move_once_grid(
+            context,
+            direction,
+            current,
+            count,
+            navigation_may_change
+        );
+    } else if (context->role == navigation_outline
+            && (direction == direction_down || direction == direction_up)) {
+        position = move_once_outline_vertical(context, direction, current);
+    } else if (uses_descendant_selection(context, current)) {
+        position = move_once_descendant_selection(
+            context,
+            direction,
+            current,
+            navigation_may_change,
             column_phases
         );
-        if (success && navigation_may_change) {
-            *navigation_may_change = true;
-        }
-        if (lock_fd >= 0) flock(lock_fd, LOCK_UN);
-        return success ? (current >= 0 ? current + 1 : 1) : 0;
+    } else if (direction == direction_left || direction == direction_right) {
+        position = move_once_horizontal(
+            direction,
+            current,
+            navigation_may_change,
+            column_phases
+        );
+    } else {
+        position = move_once_indexed(context, direction, current, count);
     }
 
-    CFIndex destination = current;
-    for (CFIndex attempt = 0; attempt < count; ++attempt) {
-        if (direction == direction_down) {
-            destination = destination < 0
-                ? 0
-                : (destination + 1) % count;
-        } else {
-            destination = destination < 0
-                ? count - 1
-                : (destination + count - 1) % count;
-        }
-        if (navigation_item_is_selectable(context, destination)) break;
-    }
-    if (!navigation_item_is_selectable(context, destination)) {
-        if (lock_fd >= 0) flock(lock_fd, LOCK_UN);
-        return 0;
-    }
-
-    bool success = set_visible_mark_and_cursor_selection(
-        context,
-        destination
-    );
-    if (success) {
-        for (int attempt = 0; attempt < 20; ++attempt) {
-            if (context->has_marks || current_index(context) == destination) {
-                break;
-            }
-            usleep(500);
-        }
-    }
-    if (success && context->has_marks) {
-        context->cursor_index = destination;
-    }
     if (lock_fd >= 0) flock(lock_fd, LOCK_UN);
-    return success ? destination + 1 : 0;
+    return position;
 }
 
 static CFIndex move_to_edge(

@@ -509,6 +509,13 @@ finder-vim/
 
 ## 16. Decision Log
 
+### 2026-08-29: 重複実装と巨大関数を、ホットパスの性質を保ったまま整理する
+
+- Decision: 挙動を変えずに次を整理する。(1) `move_once`を表示形式別ハンドラへ分割し、movement lockの解放を単一経路にする。(2) 選択インデックス解決を`selected_index_fast`へ共通化し、項目単位AX走査の互換フォールバックは通常経路の`current_index`だけに残す。(3) 3か所へ逐語複製されていたmach長押しペーシングを`hold_pacer_t`へ、`posix_spawn`のstdioリダイレクトを`spawn_with_null_stdio`へ、Column phase計測を`phase_timer_start`と`PHASE_TIMER_ADD`へ集約する。(4) 複数fragmentが使う型、state fileパス、direction表記を`prelude.inc`へ集約する。(5) List端監視を`list_edge_monitor.inc`、共通ライフサイクルを`edge_monitor_worker.inc`へ分け、`column_edge_monitor.inc`をColumn専用にする。(6) CLI、長押しcontroller、Openパネルsession、Swift helperを責務別へ分割し、2実行ファイルが共有するAppleScriptとkeystroke通知を`src/shared/`へ移す。
+- Reason: 重複はレビュー範囲を広げるだけでなく、`move_once`の5つのreturn経路が個別にlockを解放するなど、将来の変更で壊れやすい形を作っていた。一方でホットパスの特殊化には理由があり、機械的な共通化はそれを壊す。互換フォールバックを長押し経路へ持ち込まないこと、計測が無効なとき時刻を一切読まないこと、`arrow_key_code()`のような分岐をランタイムテーブルへ寄せないことを共通化の制約として明示する。
+- Constraint: Finder上の挙動、CLI引数、Karabiner rule、実行ファイル名、プロセス構成、アイドル時リソース要件を変更しない。Cの単一translation unitと固定include順を維持する。`posix_spawn`のリダイレクト集約では、従来無視していたfile action失敗を呼び出し側の失敗として扱う。矢印の連続送出は最初の失敗で打ち切る。`FINER_OSASCRIPT_PATH`はJump paletteだけでなくAX helperでも尊重する。
+- Verification: 各段階で`make check`を通す。CLIは45通りの引数列を変更前バイナリと比較し終了コードの完全一致を確認する。長押しtokenのファイル名が変わらないことを隔離HOMEで確認する。Swift分割は変更前後のトップレベル宣言集合を比較し、意図した増減だけであることを確認する。ホットパスへの影響は逆アセンブル規模の比較で退行がないことを確認し、Finder実機の長押し・折り返し・方向反転はdogfoodで別途確認する。
+
 ### 2026-08-29: Openダイアログの許可判定を単一のpolicy関数に集約する
 
 - Decision: 前面bundle ID、`AXSheet`の`AXIdentifier`、対象roleの許可判定を`open_panel_context_model_accepts`1か所に集約し、本番の認定経路・継続検証・`diagnose`がすべて同じ関数を通る構造にする。AX状態の取得は共通スナップショットへ分け、sheetの探索は識別子を判定せず最も近い`AXSheet`祖先を返す。
