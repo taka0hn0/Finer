@@ -124,56 +124,77 @@ static void open_panel_process_session_command(pid_t pid, char command) {
     (void)open_panel_post_command(pid, command, false);
 }
 
-static int open_panel_run_session(char first_command) {
+typedef enum {
+    open_panel_owner_acquired,
+    open_panel_owner_handled_elsewhere,
+    open_panel_owner_failed,
+} open_panel_owner_t;
+
+// Only one helper owns a panel at a time. A second invocation hands its command
+// to the running session over the socket, and falls back to replaying the
+// original key into the application if that session is going away.
+static open_panel_owner_t open_panel_acquire_ownership(char first_command) {
     char lock_path[PATH_MAX];
-    if (!open_panel_create_state_paths(lock_path, sizeof(lock_path))) return 1;
-    open_panel_lock_fd = open(lock_path, O_CREAT | O_RDWR, 0600);
-    if (open_panel_lock_fd < 0) return 1;
-
-    if (flock(open_panel_lock_fd, LOCK_EX | LOCK_NB) != 0) {
-        for (int attempt = 0; attempt < 50; ++attempt) {
-            if (open_panel_send_existing_command(first_command)) return 0;
-            struct timespec delay = {.tv_sec = 0, .tv_nsec = 2000000};
-            nanosleep(&delay, NULL);
-        }
-        if (flock(open_panel_lock_fd, LOCK_EX | LOCK_NB) != 0) {
-            pid_t pid = 0;
-            if (open_panel_frontmost_pid(&pid)) {
-                (void)open_panel_post_command(pid, first_command, true);
-                return 0;
-            }
-            return 1;
-        }
+    if (!open_panel_create_state_paths(lock_path, sizeof(lock_path))) {
+        return open_panel_owner_failed;
     }
-    if (!open_panel_bind_session_socket()) return 1;
+    open_panel_lock_fd = open(lock_path, O_CREAT | O_RDWR, 0600);
+    if (open_panel_lock_fd < 0) return open_panel_owner_failed;
 
-    open_panel_context_t context;
-    if (!open_panel_copy_context(true, &context)) {
-        pid_t pid = 0;
-        if (open_panel_frontmost_pid(&pid)) {
-            (void)open_panel_post_command(pid, first_command, true);
+    if (flock(open_panel_lock_fd, LOCK_EX | LOCK_NB) == 0) {
+        return open_panel_owner_acquired;
+    }
+
+    for (int attempt = 0; attempt < 50; ++attempt) {
+        if (open_panel_send_existing_command(first_command)) {
+            return open_panel_owner_handled_elsewhere;
         }
-        for (int attempt = 0; attempt < 3; ++attempt) {
-            struct timespec delay = {.tv_sec = 0, .tv_nsec = 2000000};
-            nanosleep(&delay, NULL);
-            char queued[32];
-            ssize_t received;
-            while ((received = recv(
-                open_panel_socket_fd,
-                queued,
-                sizeof(queued),
-                0
-            )) > 0) {
-                for (ssize_t index = 0; index < received; ++index) {
-                    if (open_panel_frontmost_pid(&pid)) {
-                        (void)open_panel_post_command(pid, queued[index], true);
-                    }
+        struct timespec delay = {.tv_sec = 0, .tv_nsec = 2000000};
+        nanosleep(&delay, NULL);
+    }
+    if (flock(open_panel_lock_fd, LOCK_EX | LOCK_NB) == 0) {
+        return open_panel_owner_acquired;
+    }
+
+    pid_t pid = 0;
+    if (!open_panel_frontmost_pid(&pid)) return open_panel_owner_failed;
+    (void)open_panel_post_command(pid, first_command, true);
+    return open_panel_owner_handled_elsewhere;
+}
+
+// The focused element was not a certified Open panel. Give the keys back to the
+// application unchanged, including any that raced into the socket while the
+// certification was running, and leave no Karabiner variables behind.
+static int open_panel_run_passthrough(char first_command) {
+    pid_t pid = 0;
+    if (open_panel_frontmost_pid(&pid)) {
+        (void)open_panel_post_command(pid, first_command, true);
+    }
+    for (int attempt = 0; attempt < 3; ++attempt) {
+        struct timespec delay = {.tv_sec = 0, .tv_nsec = 2000000};
+        nanosleep(&delay, NULL);
+        char queued[32];
+        ssize_t received;
+        while ((received = recv(
+            open_panel_socket_fd,
+            queued,
+            sizeof(queued),
+            0
+        )) > 0) {
+            for (ssize_t index = 0; index < received; ++index) {
+                if (open_panel_frontmost_pid(&pid)) {
+                    (void)open_panel_post_command(pid, queued[index], true);
                 }
             }
         }
-        return 0;
     }
+    return 0;
+}
 
+static int open_panel_run_owned_session(
+    open_panel_context_t context,
+    char first_command
+) {
     if (!open_panel_set_variables(true, first_command == 'g')) {
         (void)open_panel_post_command(context.pid, first_command, true);
         open_panel_release_context(&context);
@@ -243,4 +264,19 @@ static int open_panel_run_session(char first_command) {
     if (observer) CFRelease(observer);
     open_panel_release_context(&context);
     return 0;
+}
+
+static int open_panel_run_session(char first_command) {
+    switch (open_panel_acquire_ownership(first_command)) {
+        case open_panel_owner_handled_elsewhere: return 0;
+        case open_panel_owner_failed: return 1;
+        case open_panel_owner_acquired: break;
+    }
+    if (!open_panel_bind_session_socket()) return 1;
+
+    open_panel_context_t context;
+    if (!open_panel_copy_context(true, &context)) {
+        return open_panel_run_passthrough(first_command);
+    }
+    return open_panel_run_owned_session(context, first_command);
 }
