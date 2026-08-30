@@ -1,7 +1,7 @@
 # Finer 要件定義・基本設計
 
 - Status: Draft 0.1
-- Last updated: 2026-08-29
+- Last updated: 2026-08-30
 - Source of truth: This document
 
 ## 1. 目的
@@ -508,6 +508,13 @@ finder-vim/
   - 受け入れ条件: 短いListと1000項目Listで通常`j/k`を20回以上素早く交互入力し、取りこぼし0、意図しない停止0、大ジャンプ0、表示追従あり、key-up後drift 0とする。Boost Modeの速度と端停止は変化させない。
 
 ## 16. Decision Log
+
+### 2026-08-30: Swift helperからNormal Modeの移動コマンドを削除する
+
+- Decision: `finder_ax_move`から`down N`、`up N`、`first`、`last`、`down-wrap`、`up-wrap`、`hold-start`、`hold-repeat`と、それらだけが使う移動実装・Swift側hold token・マーク付き移動選択を削除する。usage文字列も同じ集合へ縮める。Visual Mode、確定マークの切り替え、コピー、新規フォルダ、`jump-to`/`reveal-file`は`finder_ax_move`に残す。Normal Modeの起点規則はC workerの`selected_index_fast`が唯一の実装とする。
+- Reason: 通常の単押し・長押し・`gg/G`は公開履歴の開始時点からC workerが担当しており、最後まで残っていた数値付き`j/k`も2026-07-30の決定でC helperへ移管済みである。以後、生成ルール、テスト、スクリプトのいずれもSwift側の移動コマンドを呼んでいない。互換APIやフォールバックとして維持するという決定も存在せず、CLIを変えないという分割方針の副作用として残っていたレガシーである。二重実装を残すと、同じ移動の意味と性能がC側と乖離し続ける。実際、Swift側だけに存在した「選択配列の末尾/先頭」という起点の非対称は、到達不能なまま長期間検出されなかった。
+- Constraint: Karabiner ruleが実際に呼ぶコマンドを変更しない。Visual Modeが使う`targetIndex`は残し、Visual Mode側へ移す。マークのアンカー読み書きは`toggle-mark`が引き続き使うため残す。C workerの起点規則、長押しtoken、端監視は変更しない。
+- Verification: `make check`を通す。削除した8コマンドがusageで拒否され、残る8コマンドがパースを通過することをCLIで確認する。生成ルールが`finder_ax_move`へ渡す引数が`visual-*`、`copy-*`、`new-folder-current-level`だけであることを確認する。
 
 ### 2026-08-29: 重複実装と巨大関数を、ホットパスの性質を保ったまま整理する
 

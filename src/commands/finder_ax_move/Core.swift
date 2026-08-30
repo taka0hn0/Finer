@@ -1,54 +1,11 @@
 import AppKit
 import ApplicationServices
-import Darwin
 import Foundation
 
 let axMenuItemModifierShift = 1 << 0
 let axMenuItemModifierOption = 1 << 1
 let axMenuItemModifierControl = 1 << 2
 let axMenuItemModifierNoCommand = 1 << 3
-
-func notifyKeystroke(
-    keyCode: UInt16,
-    modifiers: UInt64 = 0,
-    suppressKeyCode: Int = -1,
-    suppressModifiers: UInt64 = 0
-) {
-    let path = "/tmp/keystroke-finer-\(getuid()).sock"
-    guard path.utf8.count < MemoryLayout.size(ofValue: sockaddr_un().sun_path) else { return }
-    guard access(path, F_OK) == 0 else { return }
-
-    let socketDescriptor = socket(AF_UNIX, SOCK_DGRAM, 0)
-    guard socketDescriptor >= 0 else { return }
-    defer { close(socketDescriptor) }
-
-    var address = sockaddr_un()
-    address.sun_family = sa_family_t(AF_UNIX)
-    withUnsafeMutableBytes(of: &address.sun_path) { buffer in
-        buffer.initializeMemory(as: UInt8.self, repeating: 0)
-        _ = path.utf8CString.withUnsafeBytes { source in
-            source.copyBytes(to: buffer)
-        }
-    }
-    let addressLength = socklen_t(
-        MemoryLayout.offset(of: \sockaddr_un.sun_path)! + path.utf8.count + 1
-    )
-    let message = "\(keyCode) \(modifiers) \(suppressKeyCode) \(suppressModifiers)\n"
-    message.withCString { bytes in
-        withUnsafePointer(to: &address) { pointer in
-            pointer.withMemoryRebound(to: sockaddr.self, capacity: 1) { socketAddress in
-                _ = sendto(
-                    socketDescriptor,
-                    bytes,
-                    strlen(bytes),
-                    MSG_DONTWAIT,
-                    socketAddress,
-                    addressLength
-                )
-            }
-        }
-    }
-}
 
 enum MoveError: Error, CustomStringConvertible {
     case invalidArguments
@@ -71,7 +28,7 @@ enum MoveError: Error, CustomStringConvertible {
     var description: String {
         switch self {
         case .invalidArguments:
-            return "Usage: finder_ax_move <down|up|visual-down|visual-up> <1...99> | jump-to <directory> | reveal-file <file> | <down-wrap|up-wrap|first|last|visual-start|visual-first|visual-last|toggle-mark|copy-absolute|copy-directory|copy-filename|copy-stem|new-folder-current-level> | <hold-start|hold-repeat> <down|up>"
+            return "Usage: finder_ax_move <visual-down|visual-up> <1...99> | jump-to <directory> | reveal-file <file> | <visual-start|visual-first|visual-last|toggle-mark|copy-absolute|copy-directory|copy-filename|copy-stem|new-folder-current-level>"
         case .finderIsNotFrontmost:
             return "Finder is not frontmost"
         case .accessibilityUnavailable:
@@ -106,7 +63,9 @@ enum MoveError: Error, CustomStringConvertible {
     }
 }
 
-enum Direction: String {
+// Visual Mode directions. The string spellings this enum used to carry existed
+// for the Normal Mode movement arguments, which the C worker now owns.
+enum Direction {
     case down
     case up
     case first
@@ -120,13 +79,13 @@ enum CopyMode: String {
     case stem = "copy-stem"
 }
 
+// Normal Mode movement is not here: single presses, holds, counts, and gg/G are
+// handled by the transient C worker (see docs/FINDER_VIM_SPEC.md, 2026-07-30).
+// This helper owns Visual Mode, marks, clipboard, and folder creation.
 enum Command {
-    case move(Direction, Int, wrapping: Bool)
     case visualStart
     case visualMove(Direction, Int)
     case visualEdge(Direction)
-    case holdStart(Direction)
-    case holdRepeat(Direction)
     case toggleMark
     case copy(CopyMode)
     case newFolderAtSelectionLevel

@@ -2,17 +2,8 @@ import AppKit
 import ApplicationServices
 import Foundation
 
-func localFilePath(_ url: URL) -> String {
-    guard let pathURL = CFURLCreateFilePathURL(
-              kCFAllocatorDefault,
-              url as CFURL,
-              nil
-          ) else {
-        return url.standardizedFileURL.path
-    }
-    return (pathURL.takeRetainedValue() as URL)
-        .standardizedFileURL.path
-}
+// FR-FILE-004: create a folder at the level of the current selection, bring it
+// on screen, and start Finder's rename editor on it.
 
 func itemDisplayName(
     _ element: AXUIElement,

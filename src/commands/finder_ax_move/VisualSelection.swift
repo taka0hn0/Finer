@@ -2,6 +2,10 @@ import AppKit
 import ApplicationServices
 import Foundation
 
+// Visual Mode. The origin is pinned when `v` is pressed and kept in a state
+// file, so every later keystroke extends the range from that fixed item
+// (FR-MODE-009).
+
 func targetIndex(
     currentIndex: Int?,
     itemCount: Int,
@@ -152,95 +156,4 @@ func extendVisualSelectionAfterPendingStart(
         if attempt < 19 { Thread.sleep(forTimeInterval: 0.001) }
     }
     throw MoveError.stateFile("Visual selection anchor is unavailable")
-}
-
-func moveInOutline(
-    _ outline: AXUIElement,
-    direction: Direction,
-    count: Int,
-    wrapping: Bool = false,
-    useNavigationAnchor: Bool = true,
-    currentIndexOverride: Int? = nil
-) throws -> Int {
-    let rows = try navigationItems(outline, role: kAXOutlineRole)
-    let selected = selectedItems(outline, role: kAXOutlineRole, items: rows)
-    let markedPaths = Set(readMarkedPaths(from: marksFileURL()))
-    let currentIndex = currentIndexOverride
-        ?? (useNavigationAnchor ? takeNavigationAnchor(in: rows) : nil)
-        ?? selected.last.flatMap { selectedItem in
-            navigationItemIndex(containing: selectedItem, in: rows)
-        }
-    let destinationIndex = targetIndex(
-        currentIndex: currentIndex,
-        itemCount: rows.count,
-        direction: direction,
-        count: count,
-        wrapping: wrapping
-    )
-
-    try setSelection(
-        visibleMarkAndCursorSelection(
-            selected: selected,
-            items: rows,
-            destinationIndex: destinationIndex,
-            markedPaths: markedPaths
-        ),
-        in: outline,
-        role: kAXOutlineRole,
-        allItems: rows
-    )
-    if !markedPaths.isEmpty,
-       let destinationURL = urlAttribute(rows[destinationIndex]) {
-        try writeNavigationAnchor(
-            indexHint: destinationIndex,
-            itemURL: destinationURL
-        )
-    }
-    return destinationIndex + 1
-}
-
-func moveInList(
-    _ list: AXUIElement,
-    direction: Direction,
-    count: Int,
-    wrapping: Bool = false,
-    useNavigationAnchor: Bool = true,
-    currentIndexOverride: Int? = nil
-) throws -> Int {
-    let items = try navigationItems(list, role: kAXListRole)
-
-    let selectedItems = elements(list, kAXSelectedChildrenAttribute)
-    let markedPaths = Set(readMarkedPaths(from: marksFileURL()))
-    let currentIndex = currentIndexOverride
-        ?? (useNavigationAnchor ? takeNavigationAnchor(in: items) : nil)
-        ?? selectedItems.first.flatMap { selectedItem in
-            navigationItemIndex(containing: selectedItem, in: items)
-        }
-    let destinationIndex = targetIndex(
-        currentIndex: currentIndex,
-        itemCount: items.count,
-        direction: direction,
-        count: count,
-        wrapping: wrapping
-    )
-
-    try setSelection(
-        visibleMarkAndCursorSelection(
-            selected: selectedItems,
-            items: items,
-            destinationIndex: destinationIndex,
-            markedPaths: markedPaths
-        ),
-        in: list,
-        role: kAXListRole,
-        allItems: items
-    )
-    if !markedPaths.isEmpty,
-       let destinationURL = urlAttribute(items[destinationIndex]) {
-        try writeNavigationAnchor(
-            indexHint: destinationIndex,
-            itemURL: destinationURL
-        )
-    }
-    return destinationIndex + 1
 }

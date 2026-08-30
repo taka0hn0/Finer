@@ -7,45 +7,6 @@ func readMarkedPaths(from fileURL: URL) -> [String] {
     return contents.split(separator: "\n").map(String.init)
 }
 
-func visibleMarkedItems(
-    selected: [AXUIElement],
-    items: [AXUIElement],
-    markedPaths: Set<String>
-) -> [AXUIElement] {
-    var result: [AXUIElement] = []
-    var includedIndices = Set<Int>()
-    for selectedItem in selected {
-        guard let index = navigationItemIndex(containing: selectedItem, in: items),
-              !includedIndices.contains(index),
-              let url = urlAttribute(items[index]),
-              markedPaths.contains(url.standardizedFileURL.path) else {
-            continue
-        }
-        result.append(items[index])
-        includedIndices.insert(index)
-    }
-    return result
-}
-
-func visibleMarkAndCursorSelection(
-    selected: [AXUIElement],
-    items: [AXUIElement],
-    destinationIndex: Int,
-    markedPaths: Set<String>
-) -> [AXUIElement] {
-    guard !markedPaths.isEmpty else { return [items[destinationIndex]] }
-
-    var result = visibleMarkedItems(
-        selected: selected,
-        items: items,
-        markedPaths: markedPaths
-    )
-    if !result.contains(where: { CFEqual($0, items[destinationIndex]) }) {
-        result.append(items[destinationIndex])
-    }
-    return result
-}
-
 func writeMarkedPaths(_ paths: [String], to fileURL: URL) throws {
     do {
         try FileManager.default.createDirectory(

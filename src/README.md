@@ -57,10 +57,17 @@ rebuild dependency.
 
 ## AX command helper
 
-`commands/finder_ax_move/` separates common types, Accessibility operations,
-navigation state, marks and selection, new-folder behavior, Visual selection,
-and command dispatch. `finder_ax_move.swift` contains only the executable
-entry point.
+`commands/finder_ax_move/` separates common types (`Core.swift`), Accessibility
+primitives, Finder menu discovery, Finder window retargeting, navigation
+context, navigation state files, Visual selection, marks and selection,
+new-folder behavior, argument parsing, and command dispatch.
+`finder_ax_move.swift` contains only the executable entry point.
+
+This helper does **not** implement Normal Mode movement. Single presses, holds,
+counted moves, and `gg`/`G` are handled by the transient C worker, and its
+`selected_index_fast` is the only implementation of the movement origin rule.
+Adding `down`/`up`/`hold-*` back here would recreate the divergence that the
+2026-08-30 Decision Log entry removed.
 
 ## Jump palette
 
