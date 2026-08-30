@@ -106,14 +106,10 @@ static CFIndex run_fast_ax_hold_repeat(
     fast_ax_scroll_state_t scroll_state;
     fast_ax_scroll_state_create(context, current, &scroll_state);
 
-    useconds_t interval = fast_ax_hold_interval_microseconds();
-    uint64_t interval_ticks = mach_ticks_for_microseconds(interval);
-    uint64_t next_step = mach_absolute_time();
+    hold_pacer_t pacer;
+    hold_pacer_start(&pacer, fast_ax_hold_interval_microseconds());
     while (monotonic_seconds() < deadline) {
-        uint64_t now = mach_absolute_time();
-        if (now < next_step) {
-            mach_wait_until(next_step);
-        }
+        hold_pacer_wait(&pacer);
         vertical_hold_refresh_t refresh = refresh_vertical_hold_state(
             hold_state
         );
@@ -135,12 +131,7 @@ static CFIndex run_fast_ax_hold_repeat(
         if (target < 0) break;
         current = target;
 
-        next_step += interval_ticks;
-        uint64_t finished = mach_absolute_time();
-        if (finished >= next_step) {
-            uint64_t missed = (finished - next_step) / interval_ticks + 1;
-            next_step += missed * interval_ticks;
-        }
+        hold_pacer_advance(&pacer);
     }
 
     CFIndex settled = 0;

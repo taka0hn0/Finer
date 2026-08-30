@@ -34,6 +34,43 @@ static bool send_worker_command(
     return sent == sizeof(command);
 }
 
+// Spawns a detached child with its standard descriptors on /dev/null. The
+// three helpers that start a process all need the same file actions, and
+// failing to build them is reported instead of being silently ignored.
+static bool spawn_with_null_stdio(
+    const char *path,
+    char *const arguments[],
+    pid_t *child
+) {
+    posix_spawn_file_actions_t file_actions;
+    if (posix_spawn_file_actions_init(&file_actions) != 0) return false;
+
+    bool prepared =
+        posix_spawn_file_actions_addopen(
+            &file_actions, STDIN_FILENO, "/dev/null", O_RDONLY, 0
+        ) == 0
+        && posix_spawn_file_actions_addopen(
+            &file_actions, STDOUT_FILENO, "/dev/null", O_WRONLY, 0
+        ) == 0
+        && posix_spawn_file_actions_addopen(
+            &file_actions, STDERR_FILENO, "/dev/null", O_WRONLY, 0
+        ) == 0;
+
+    pid_t spawned = 0;
+    bool spawned_ok = prepared
+        && posix_spawn(
+            &spawned,
+            path,
+            &file_actions,
+            NULL,
+            arguments,
+            environ
+        ) == 0;
+    posix_spawn_file_actions_destroy(&file_actions);
+    if (spawned_ok && child) *child = spawned;
+    return spawned_ok;
+}
+
 static bool run_toggle_mark_helper(void) {
     char helper_path[PATH_MAX];
     const char *override = getenv("FINDER_VIM_SWIFT_HELPER");
@@ -58,46 +95,13 @@ static bool run_toggle_mark_helper(void) {
         );
     }
 
-    posix_spawn_file_actions_t file_actions;
-    posix_spawn_file_actions_init(&file_actions);
-    posix_spawn_file_actions_addopen(
-        &file_actions,
-        STDIN_FILENO,
-        "/dev/null",
-        O_RDONLY,
-        0
-    );
-    posix_spawn_file_actions_addopen(
-        &file_actions,
-        STDOUT_FILENO,
-        "/dev/null",
-        O_WRONLY,
-        0
-    );
-    posix_spawn_file_actions_addopen(
-        &file_actions,
-        STDERR_FILENO,
-        "/dev/null",
-        O_WRONLY,
-        0
-    );
-
     char *arguments[] = {
         helper_path,
         "toggle-mark",
         NULL,
     };
-    pid_t child;
-    int spawn_error = posix_spawn(
-        &child,
-        helper_path,
-        &file_actions,
-        NULL,
-        arguments,
-        environ
-    );
-    posix_spawn_file_actions_destroy(&file_actions);
-    if (spawn_error != 0) return false;
+    pid_t child = 0;
+    if (!spawn_with_null_stdio(helper_path, arguments, &child)) return false;
 
     int status = 0;
     while (waitpid(child, &status, 0) < 0) {

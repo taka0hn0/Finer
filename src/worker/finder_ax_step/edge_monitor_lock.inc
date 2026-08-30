@@ -6,14 +6,13 @@ static int open_vertical_edge_monitor_lock(
     const char *view_name = view == edge_monitor_list_view
         ? "list"
         : "column";
-    const char *direction_name = direction == direction_down ? "down" : "up";
     char name[64];
     snprintf(
         name,
         sizeof(name),
         "finder_%s_%s_edge_monitor.lock",
         view_name,
-        direction_name
+        direction_name(direction)
     );
     state_path(path, sizeof(path), name);
     return open(path, O_CREAT | O_RDWR, 0600);
@@ -49,7 +48,7 @@ static void open_edge_trace(
         sizeof(name),
         "finder_%s_%s_edge_monitor_trace.tsv",
         view == edge_monitor_list_view ? "list" : "column",
-        direction == direction_down ? "down" : "up"
+        direction_name(direction)
     );
     state_path(path, sizeof(path), name);
     edge_trace_fd = open(path, O_CREAT | O_WRONLY | O_APPEND, 0600);

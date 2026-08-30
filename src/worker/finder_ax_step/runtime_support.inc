@@ -21,24 +21,6 @@ static bool socket_address(struct sockaddr_un *address) {
     return true;
 }
 
-static char direction_command(direction_t direction) {
-    switch (direction) {
-        case direction_down: return 'j';
-        case direction_up: return 'k';
-        case direction_left: return 'h';
-        case direction_right: return 'l';
-    }
-}
-
-static const char *direction_name(direction_t direction) {
-    switch (direction) {
-        case direction_down: return "down";
-        case direction_up: return "up";
-        case direction_left: return "left";
-        case direction_right: return "right";
-    }
-}
-
 static uint64_t realtime_nanoseconds(void) {
     struct timespec now;
     clock_gettime(CLOCK_REALTIME, &now);

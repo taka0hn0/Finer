@@ -52,6 +52,44 @@ static uint64_t mach_ticks_for_microseconds(useconds_t microseconds) {
     );
 }
 
+// Fixed-cadence tick source for the hold and edge-monitor loops. Each loop
+// keeps its own probe schedule and stop conditions; only the tick arithmetic is
+// shared, so nothing here reaches for Finder state or a callback.
+static void hold_pacer_start(
+    hold_pacer_t *pacer,
+    useconds_t interval_microseconds
+) {
+    pacer->interval_ticks = mach_ticks_for_microseconds(interval_microseconds);
+    pacer->next_step = mach_absolute_time();
+}
+
+static void hold_pacer_wait(const hold_pacer_t *pacer) {
+    if (mach_absolute_time() < pacer->next_step) {
+        mach_wait_until(pacer->next_step);
+    }
+}
+
+// Skips whole intervals that already elapsed so a slow step cannot leave a
+// backlog of catch-up taps for Finder to process after the key is released.
+// Returns the sampled tick count so a caller with its own probe schedule can
+// reuse it instead of reading the clock twice.
+static uint64_t hold_pacer_advance(hold_pacer_t *pacer) {
+    pacer->next_step += pacer->interval_ticks;
+    uint64_t finished = mach_absolute_time();
+    if (finished >= pacer->next_step) {
+        uint64_t missed =
+            (finished - pacer->next_step) / pacer->interval_ticks + 1;
+        pacer->next_step += missed * pacer->interval_ticks;
+    }
+    return finished;
+}
+
+// Restarts the cadence from now, for the Column wrap that just moved the
+// selection to the opposite edge.
+static void hold_pacer_restart(hold_pacer_t *pacer) {
+    pacer->next_step = mach_absolute_time() + pacer->interval_ticks;
+}
+
 static bool mark_state_is_empty(void) {
     CFArrayRef urls = copy_mark_urls();
     bool empty = CFArrayGetCount(urls) == 0;

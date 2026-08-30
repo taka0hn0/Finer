@@ -1,7 +1,3 @@
-static void state_path(char *buffer, size_t size, const char *name) {
-    snprintf(buffer, size, "%s/.local/state/finder-vim/%s", home_directory(), name);
-}
-
 static CFTypeRef copy_attribute(AXUIElementRef element, CFStringRef name) {
     if (metrics_path) ++metrics_ax_reads;
     CFTypeRef value = NULL;
@@ -18,6 +14,31 @@ static AXError set_attribute(
 ) {
     if (metrics_path) ++metrics_ax_writes;
     return AXUIElementSetAttributeValue(element, name, value);
+}
+
+// Every AX action goes through here so the metrics counter cannot drift from
+// the number of writes actually issued.
+static AXError perform_ax_action(
+    AXUIElementRef element,
+    CFStringRef action
+) {
+    if (metrics_path) ++metrics_ax_writes;
+    return AXUIElementPerformAction(element, action);
+}
+
+// Typed accessor for the many attributes that answer with another element.
+// Callers get NULL instead of repeating the CFGetTypeID check and the release
+// of an unexpected value.
+static AXUIElementRef copy_ax_element_attribute(
+    AXUIElementRef element,
+    CFStringRef attribute
+) {
+    CFTypeRef value = copy_attribute(element, attribute);
+    if (!value || CFGetTypeID(value) != AXUIElementGetTypeID()) {
+        if (value) CFRelease(value);
+        return NULL;
+    }
+    return (AXUIElementRef)value;
 }
 
 static bool role_of(AXUIElementRef element, navigation_role_t *role) {

@@ -1,23 +1,3 @@
-static AXUIElementRef copy_ax_element_attribute(
-    AXUIElementRef element,
-    CFStringRef attribute
-) {
-    CFTypeRef value = copy_attribute(element, attribute);
-    if (!value || CFGetTypeID(value) != AXUIElementGetTypeID()) {
-        if (value) CFRelease(value);
-        return NULL;
-    }
-    return (AXUIElementRef)value;
-}
-
-static AXError perform_ax_action(
-    AXUIElementRef element,
-    CFStringRef action
-) {
-    if (metrics_path) ++metrics_ax_writes;
-    return AXUIElementPerformAction(element, action);
-}
-
 static AXUIElementRef copy_vertical_scroll_bar(
     const navigation_context_t *context
 ) {

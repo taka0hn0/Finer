@@ -42,20 +42,6 @@ static bool hold_token_matches(
         && memcmp(initial_token, current_token, (size_t)initial_length) == 0;
 }
 
-typedef enum {
-    vertical_hold_stopped,
-    vertical_hold_unchanged,
-    vertical_hold_changed,
-} vertical_hold_refresh_t;
-
-typedef struct {
-    int down_fd;
-    int up_fd;
-    direction_t direction;
-    char token[64];
-    ssize_t token_length;
-} vertical_hold_state_t;
-
 static bool parse_hold_token_timestamp(
     const char *token,
     ssize_t token_length,

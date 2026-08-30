@@ -100,6 +100,48 @@ static int keystroke_suppressed_key_code_for_direction(direction_t direction) {
     }
 }
 
+// Textual and transport spellings of a direction. These are CLI arguments,
+// worker datagram payloads, and state file names rather than hot-path lookups,
+// so they live together here and every fragment spells a direction one way.
+// `arrow_key_code()` stays with the movement code: it is on the hold path and
+// the compiler folds its switch into the caller.
+static char direction_command(direction_t direction) {
+    switch (direction) {
+        case direction_down: return 'j';
+        case direction_up: return 'k';
+        case direction_left: return 'h';
+        case direction_right: return 'l';
+    }
+}
+
+static const char *direction_name(direction_t direction) {
+    switch (direction) {
+        case direction_down: return "down";
+        case direction_up: return "up";
+        case direction_left: return "left";
+        case direction_right: return "right";
+    }
+}
+
+static bool parse_direction(const char *value, direction_t *direction) {
+    static const direction_t directions[] = {
+        direction_down,
+        direction_up,
+        direction_left,
+        direction_right,
+    };
+    if (!value) return false;
+    for (size_t index = 0;
+            index < sizeof(directions) / sizeof(directions[0]);
+            ++index) {
+        if (strcmp(value, direction_name(directions[index])) == 0) {
+            *direction = directions[index];
+            return true;
+        }
+    }
+    return false;
+}
+
 typedef enum {
     navigation_outline,
     navigation_list,
@@ -182,6 +224,55 @@ typedef struct {
     bool column_phase_metrics_enabled;
 } metrics_record_t;
 
+// Types below are consumed by later fragments. They live here, with the rest
+// of the shared types, so no fragment has to trail a definition that only its
+// successor needs just to satisfy the fixed include order.
+
+typedef struct {
+    uint64_t interval_ticks;
+    uint64_t next_step;
+} hold_pacer_t;
+
+typedef struct {
+    AXUIElementRef scroll_bar;
+    AXUIElementRef value_indicator;
+    AXUIElementRef increment_button;
+    AXUIElementRef decrement_button;
+    CFNumberRef minimum_value;
+    CFNumberRef maximum_value;
+    CFIndex first_visible;
+    CFIndex last_visible;
+    bool enabled;
+} fast_ax_scroll_state_t;
+
+typedef enum {
+    vertical_hold_stopped,
+    vertical_hold_unchanged,
+    vertical_hold_changed,
+} vertical_hold_refresh_t;
+
+typedef struct {
+    int down_fd;
+    int up_fd;
+    direction_t direction;
+    char token[64];
+    ssize_t token_length;
+} vertical_hold_state_t;
+
+typedef struct {
+    CFIndex previous;
+    unsigned stable_observations;
+} vertical_edge_monitor_state_t;
+
+typedef struct {
+    AXUIElementRef container;
+    pid_t finder_pid;
+} column_edge_context_t;
+
+typedef struct {
+    CFTypeRef previous;
+} column_selection_stall_state_t;
+
 static int worker_idle_timeout_milliseconds = 750;
 static const char *program_path;
 static const char *metrics_path;
@@ -211,10 +302,69 @@ static CFStringRef copy_navigation_item_url_string(
     int depth
 );
 
+// Column phase timing is opt-in through FINDER_VIM_COLUMN_PHASE_METRICS. When
+// it is off every caller passes a NULL `column_phase_metrics_t *`, and neither
+// helper below reads the clock, so ordinary movement keeps paying nothing for
+// the instrumentation. Both stay in the header so movement_dispatch.inc, which
+// is included before metrics.inc, can use them through the forward
+// declarations above.
+static uint64_t phase_timer_start(const column_phase_metrics_t *column_phases) {
+    return column_phases ? monotonic_nanoseconds() : 0;
+}
+
+#define PHASE_TIMER_ADD(column_phases, field, started_nanoseconds) \
+    do { \
+        if (column_phases) { \
+            (column_phases)->field += counter_delta( \
+                monotonic_nanoseconds(), \
+                (started_nanoseconds) \
+            ); \
+        } \
+    } while (0)
+
 static const char *home_directory(void) {
     const char *home = getenv("HOME");
     if (home && home[0] != '\0') return home;
 
     struct passwd *password = getpwuid(getuid());
     return password ? password->pw_dir : "/tmp";
+}
+
+// Runtime state lives in one directory, and the two files that tests relocate
+// resolve their override in exactly one place. These are path helpers rather
+// than Accessibility calls, so they sit with the process foundation.
+static void state_path(char *buffer, size_t size, const char *name) {
+    snprintf(buffer, size, "%s/.local/state/finder-vim/%s", home_directory(), name);
+}
+
+static void overridable_state_path(
+    char *buffer,
+    size_t size,
+    const char *environment_variable,
+    const char *name
+) {
+    const char *override = getenv(environment_variable);
+    if (override && override[0] != '\0') {
+        snprintf(buffer, size, "%s", override);
+    } else {
+        state_path(buffer, size, name);
+    }
+}
+
+static void marks_path(char *buffer, size_t size) {
+    overridable_state_path(
+        buffer,
+        size,
+        "KARABINER_FINDER_MARKS_FILE",
+        "finder_marks.txt"
+    );
+}
+
+static void navigation_anchor_path(char *buffer, size_t size) {
+    overridable_state_path(
+        buffer,
+        size,
+        "KARABINER_FINDER_ANCHOR_FILE",
+        "finder_navigation_anchor.txt"
+    );
 }

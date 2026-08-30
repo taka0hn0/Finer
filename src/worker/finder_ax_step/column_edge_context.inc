@@ -63,19 +63,17 @@ static int run_owned_column_tap_repeat(
     double deadline,
     int movement_lock_fd
 ) {
-    useconds_t interval = column_owned_hold_interval_microseconds();
-    uint64_t interval_ticks = mach_ticks_for_microseconds(interval);
+    hold_pacer_t pacer;
+    hold_pacer_start(&pacer, column_owned_hold_interval_microseconds());
     uint64_t probe_ticks = mach_ticks_for_microseconds(
         column_selection_probe_interval_microseconds()
     );
-    uint64_t next_step = mach_absolute_time();
-    uint64_t next_probe = next_step + probe_ticks;
+    uint64_t next_probe = pacer.next_step + probe_ticks;
     CGKeyCode key_code = arrow_key_code(direction);
     int result = 0;
 
     while (monotonic_seconds() < deadline) {
-        uint64_t now = mach_absolute_time();
-        if (now < next_step) mach_wait_until(next_step);
+        hold_pacer_wait(&pacer);
         if (monotonic_seconds() >= deadline
             || !hold_token_matches(
                 token_fd,
@@ -146,16 +144,10 @@ static int run_owned_column_tap_repeat(
         }
 
         if (wrapped) {
-            next_step = mach_absolute_time() + interval_ticks;
+            hold_pacer_restart(&pacer);
             continue;
         }
-        next_step += interval_ticks;
-        uint64_t finished = mach_absolute_time();
-        if (finished >= next_step) {
-            uint64_t missed =
-                (finished - next_step) / interval_ticks + 1;
-            next_step += missed * interval_ticks;
-        }
+        hold_pacer_advance(&pacer);
     }
     return result;
 }

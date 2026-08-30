@@ -8,32 +8,28 @@ static CFIndex worker_move(
 ) {
     CFIndex validated_index = current_index_unknown;
     if (*context_created) {
-        uint64_t validation_started_nanoseconds = column_phases
-            ? monotonic_nanoseconds()
-            : 0;
+        uint64_t validation_started_nanoseconds =
+            phase_timer_start(column_phases);
         validated_index = current_index(context);
-        if (column_phases) {
-            column_phases->context_validation_nanoseconds += counter_delta(
-                monotonic_nanoseconds(),
-                validation_started_nanoseconds
-            );
-        }
+        PHASE_TIMER_ADD(
+            column_phases,
+            context_validation_nanoseconds,
+            validation_started_nanoseconds
+        );
     }
     if (*context_created && validated_index < 0) {
         navigation_context_release(context);
         *context_created = false;
     }
     if (!*context_created) {
-        uint64_t creation_started_nanoseconds = column_phases
-            ? monotonic_nanoseconds()
-            : 0;
+        uint64_t creation_started_nanoseconds =
+            phase_timer_start(column_phases);
         *context_created = navigation_context_create(context);
-        if (column_phases) {
-            column_phases->context_creation_nanoseconds += counter_delta(
-                monotonic_nanoseconds(),
-                creation_started_nanoseconds
-            );
-        }
+        PHASE_TIMER_ADD(
+            column_phases,
+            context_creation_nanoseconds,
+            creation_started_nanoseconds
+        );
         if (!*context_created) return false;
         validated_index = current_index(context);
     }
@@ -50,16 +46,13 @@ static CFIndex worker_move(
     if (position > 0) return position;
 
     if (*context_created) navigation_context_release(context);
-    uint64_t creation_started_nanoseconds = column_phases
-        ? monotonic_nanoseconds()
-        : 0;
+    uint64_t creation_started_nanoseconds = phase_timer_start(column_phases);
     *context_created = navigation_context_create(context);
-    if (column_phases) {
-        column_phases->context_creation_nanoseconds += counter_delta(
-            monotonic_nanoseconds(),
-            creation_started_nanoseconds
-        );
-    }
+    PHASE_TIMER_ADD(
+        column_phases,
+        context_creation_nanoseconds,
+        creation_started_nanoseconds
+    );
     if (!*context_created) return 0;
     validated_index = current_index(context);
     return move_worker_context(

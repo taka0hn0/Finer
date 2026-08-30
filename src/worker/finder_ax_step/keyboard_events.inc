@@ -201,22 +201,17 @@ static bool perform_finder_deselect_menu_action(void) {
     AXUIElementRef application = NULL;
     if (!finder_is_frontmost(NULL, &application)) return false;
 
-    CFTypeRef menu_bar_value = copy_attribute(application, kAXMenuBarAttribute);
-    CFRelease(application);
-    if (!menu_bar_value
-        || CFGetTypeID(menu_bar_value) != AXUIElementGetTypeID()) {
-        if (menu_bar_value) CFRelease(menu_bar_value);
-        return false;
-    }
-
-    AXUIElementRef menu_item = copy_deselect_menu_item(
-        (AXUIElementRef)menu_bar_value,
-        0
+    AXUIElementRef menu_bar = copy_ax_element_attribute(
+        application,
+        kAXMenuBarAttribute
     );
-    CFRelease(menu_bar_value);
+    CFRelease(application);
+    if (!menu_bar) return false;
+
+    AXUIElementRef menu_item = copy_deselect_menu_item(menu_bar, 0);
+    CFRelease(menu_bar);
     if (!menu_item) return false;
-    if (metrics_path) ++metrics_ax_writes;
-    AXError error = AXUIElementPerformAction(menu_item, kAXPressAction);
+    AXError error = perform_ax_action(menu_item, kAXPressAction);
     CFRelease(menu_item);
     return error == kAXErrorSuccess;
 }

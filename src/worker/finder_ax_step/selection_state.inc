@@ -1,12 +1,3 @@
-static void marks_path(char *buffer, size_t size) {
-    const char *override = getenv("KARABINER_FINDER_MARKS_FILE");
-    if (override && override[0] != '\0') {
-        snprintf(buffer, size, "%s", override);
-    } else {
-        state_path(buffer, size, "finder_marks.txt");
-    }
-}
-
 static CFArrayRef copy_mark_urls(void) {
     CFMutableArrayRef urls = CFArrayCreateMutable(
         kCFAllocatorDefault,
@@ -212,12 +203,7 @@ static bool write_navigation_anchor(
     if (!converted) return false;
 
     char path[PATH_MAX];
-    const char *override = getenv("KARABINER_FINDER_ANCHOR_FILE");
-    if (override && override[0] != '\0') {
-        snprintf(path, sizeof(path), "%s", override);
-    } else {
-        state_path(path, sizeof(path), "finder_navigation_anchor.txt");
-    }
+    navigation_anchor_path(path, sizeof(path));
     char temporary_path[PATH_MAX];
     int temporary_length = snprintf(
         temporary_path,

@@ -1,4 +1,8 @@
-static CFIndex current_index(const navigation_context_t *context) {
+// Resolves the current selection through the container's selection array only.
+// One AX request regardless of item count, so both the ordinary movement path
+// and the hold hot path use this and nothing else. Returns -1 when the array is
+// missing, empty, or holds an element outside the cached item array.
+static CFIndex selected_index_fast(const navigation_context_t *context) {
     CFIndex item_count = CFArrayGetCount(context->items);
     CFStringRef selected_attribute = context->role == navigation_outline
         ? kAXSelectedRowsAttribute
@@ -7,47 +11,55 @@ static CFIndex current_index(const navigation_context_t *context) {
         context->container,
         selected_attribute
     );
-    if (selected && CFArrayGetCount(selected) > 0) {
-        AXUIElementRef selected_item = (AXUIElementRef)CFArrayGetValueAtIndex(
-            selected,
-            0
-        );
-        CFIndex index = CFArrayGetFirstIndexOfValue(
-            context->items,
-            CFRangeMake(0, item_count),
-            selected_item
-        );
-        if (index == kCFNotFound && context->role != navigation_outline) {
-            AXUIElementRef item_ancestor = copy_navigation_item_ancestor(
-                selected_item,
-                context->items
-            );
-            if (item_ancestor) {
-                index = CFArrayGetFirstIndexOfValue(
-                    context->items,
-                    CFRangeMake(0, item_count),
-                    item_ancestor
-                );
-                CFRelease(item_ancestor);
-            }
-        }
-        CFRelease(selected);
-        if (index != kCFNotFound) return index;
-    } else if (selected) {
-        CFRelease(selected);
+    if (!selected || CFArrayGetCount(selected) == 0) {
+        if (selected) CFRelease(selected);
+        return -1;
     }
 
+    AXUIElementRef selected_item = (AXUIElementRef)CFArrayGetValueAtIndex(
+        selected,
+        0
+    );
+    CFIndex index = CFArrayGetFirstIndexOfValue(
+        context->items,
+        CFRangeMake(0, item_count),
+        selected_item
+    );
+    if (index == kCFNotFound && context->role != navigation_outline) {
+        AXUIElementRef item_ancestor = copy_navigation_item_ancestor(
+            selected_item,
+            context->items
+        );
+        if (item_ancestor) {
+            index = CFArrayGetFirstIndexOfValue(
+                context->items,
+                CFRangeMake(0, item_count),
+                item_ancestor
+            );
+            CFRelease(item_ancestor);
+        }
+    }
+    CFRelease(selected);
+    return index == kCFNotFound ? -1 : index;
+}
+
+static CFIndex current_index(const navigation_context_t *context) {
+    CFIndex index = selected_index_fast(context);
+    if (index >= 0) return index;
+
     // Compatibility fallback when the container does not expose its selected
-    // rows/children. This is intentionally kept off the common path.
-    for (CFIndex index = 0; index < item_count; ++index) {
+    // rows/children. This costs one AX request per item, so it stays off the
+    // common path and out of the hold loops, which use selected_index_fast.
+    CFIndex item_count = CFArrayGetCount(context->items);
+    for (CFIndex scan = 0; scan < item_count; ++scan) {
         AXUIElementRef item = (AXUIElementRef)CFArrayGetValueAtIndex(
             context->items,
-            index
+            scan
         );
         if (context->role == navigation_outline) {
-            if (bool_attribute(item, kAXSelectedAttribute)) return index;
+            if (bool_attribute(item, kAXSelectedAttribute)) return scan;
         } else if (descendant_selected(item, 0)) {
-            return index;
+            return scan;
         }
     }
     return -1;

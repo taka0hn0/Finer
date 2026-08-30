@@ -1,11 +1,6 @@
 static void token_path(char *buffer, size_t size, direction_t direction) {
-    const char *name;
-    switch (direction) {
-        case direction_down: name = "finder_down_hold.txt"; break;
-        case direction_up: name = "finder_up_hold.txt"; break;
-        case direction_left: name = "finder_left_hold.txt"; break;
-        case direction_right: name = "finder_right_hold.txt"; break;
-    }
+    char name[64];
+    snprintf(name, sizeof(name), "finder_%s_hold.txt", direction_name(direction));
     state_path(buffer, size, name);
 }
 

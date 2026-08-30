@@ -232,12 +232,7 @@ static CFIndex find_navigation_anchor_index(
 
 static CFIndex take_navigation_anchor(const navigation_context_t *context) {
     char path[PATH_MAX];
-    const char *override = getenv("KARABINER_FINDER_ANCHOR_FILE");
-    if (override && override[0] != '\0') {
-        snprintf(path, sizeof(path), "%s", override);
-    } else {
-        state_path(path, sizeof(path), "finder_navigation_anchor.txt");
-    }
+    navigation_anchor_path(path, sizeof(path));
 
     char claimed_path[PATH_MAX];
     int claimed_length = snprintf(

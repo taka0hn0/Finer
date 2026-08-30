@@ -1,23 +1,3 @@
-static bool parse_direction(const char *value, direction_t *direction) {
-    if (strcmp(value, "down") == 0) {
-        *direction = direction_down;
-        return true;
-    }
-    if (strcmp(value, "up") == 0) {
-        *direction = direction_up;
-        return true;
-    }
-    if (strcmp(value, "left") == 0) {
-        *direction = direction_left;
-        return true;
-    }
-    if (strcmp(value, "right") == 0) {
-        *direction = direction_right;
-        return true;
-    }
-    return false;
-}
-
 int main(int argc, char **argv) {
     program_path = argv[0];
     if (!configure_metrics()) return 64;

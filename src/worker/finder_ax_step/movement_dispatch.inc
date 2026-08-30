@@ -2,14 +2,9 @@ static bool post_column_navigation_key(
     CGKeyCode key_code,
     column_phase_metrics_t *column_phases
 ) {
-    if (!column_phases) return post_key_code(key_code);
-
-    uint64_t started_nanoseconds = monotonic_nanoseconds();
+    uint64_t started_nanoseconds = phase_timer_start(column_phases);
     bool success = post_key_code(key_code);
-    column_phases->event_post_nanoseconds += counter_delta(
-        monotonic_nanoseconds(),
-        started_nanoseconds
-    );
+    PHASE_TIMER_ADD(column_phases, event_post_nanoseconds, started_nanoseconds);
     return success;
 }
 

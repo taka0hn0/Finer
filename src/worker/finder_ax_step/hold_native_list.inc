@@ -10,19 +10,15 @@ static CFIndex run_native_list_hold_repeat(
     CFIndex last = selectable_vertical_edge_index(context, true);
     if (first < 0 || last < first) return 0;
 
-    useconds_t interval = list_native_hold_interval_microseconds();
-    uint64_t interval_ticks = mach_ticks_for_microseconds(interval);
-    uint64_t next_step = mach_absolute_time();
+    hold_pacer_t pacer;
+    hold_pacer_start(&pacer, list_native_hold_interval_microseconds());
     uint64_t probe_interval_ticks = mach_ticks_for_microseconds(16667);
-    uint64_t next_probe = next_step + probe_interval_ticks;
+    uint64_t next_probe = pacer.next_step + probe_interval_ticks;
     direction_t direction = hold_state->direction;
     CGKeyCode key_code = arrow_key_code(direction);
 
     while (monotonic_seconds() < deadline) {
-        uint64_t now = mach_absolute_time();
-        if (now < next_step) {
-            mach_wait_until(next_step);
-        }
+        hold_pacer_wait(&pacer);
         vertical_hold_refresh_t refresh = refresh_vertical_hold_state(
             hold_state
         );
@@ -44,12 +40,7 @@ static CFIndex run_native_list_hold_repeat(
         if (lock_fd >= 0) flock(lock_fd, LOCK_UN);
         if (!posted) break;
 
-        next_step += interval_ticks;
-        uint64_t finished = mach_absolute_time();
-        if (finished >= next_step) {
-            uint64_t missed = (finished - next_step) / interval_ticks + 1;
-            next_step += missed * interval_ticks;
-        }
+        uint64_t finished = hold_pacer_advance(&pacer);
 
         if (finished >= next_probe) {
             if (lock_fd >= 0) flock(lock_fd, LOCK_EX);

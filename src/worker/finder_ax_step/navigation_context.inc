@@ -39,13 +39,13 @@ static AXUIElementRef copy_nearest_navigation_container(
     for (int depth = 0; depth < 10; ++depth) {
         if (role_of(current, role)) return current;
 
-        CFTypeRef parent = copy_attribute(current, kAXParentAttribute);
+        AXUIElementRef parent = copy_ax_element_attribute(
+            current,
+            kAXParentAttribute
+        );
         CFRelease(current);
-        if (!parent || CFGetTypeID(parent) != AXUIElementGetTypeID()) {
-            if (parent) CFRelease(parent);
-            return NULL;
-        }
-        current = (AXUIElementRef)parent;
+        if (!parent) return NULL;
+        current = parent;
     }
     CFRelease(current);
     return NULL;
@@ -62,15 +62,15 @@ static AXUIElementRef copy_navigation_container(
     AXUIElementRef nearest = copy_nearest_navigation_container(focused, role);
     if (nearest) return nearest;
 
-    CFTypeRef window = copy_attribute(application, kAXFocusedWindowAttribute);
-    if (!window || CFGetTypeID(window) != AXUIElementGetTypeID()) {
-        if (window) CFRelease(window);
-        return NULL;
-    }
+    AXUIElementRef window = copy_ax_element_attribute(
+        application,
+        kAXFocusedWindowAttribute
+    );
+    if (!window) return NULL;
 
     AXUIElementRef best = NULL;
     double best_score = -1;
-    find_best_container((AXUIElementRef)window, 0, &best, &best_score);
+    find_best_container(window, 0, &best, &best_score);
     CFRelease(window);
     if (best) role_of(best, role);
     return best;
@@ -154,13 +154,13 @@ static AXUIElementRef copy_navigation_item_ancestor(
             ) != kCFNotFound) {
             return current;
         }
-        CFTypeRef parent = copy_attribute(current, kAXParentAttribute);
-        if (!parent || CFGetTypeID(parent) != AXUIElementGetTypeID()) {
-            if (parent) CFRelease(parent);
-            break;
-        }
+        AXUIElementRef parent = copy_ax_element_attribute(
+            current,
+            kAXParentAttribute
+        );
+        if (!parent) break;
         CFRelease(current);
-        current = (AXUIElementRef)parent;
+        current = parent;
     }
     CFRelease(current);
     return NULL;

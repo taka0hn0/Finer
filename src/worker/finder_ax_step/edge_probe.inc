@@ -78,12 +78,3 @@ static bool vertical_viewport_near_boundary(
     if (!*available) return false;
     return direction == direction_down ? value >= 0.98 : value <= 0.02;
 }
-
-typedef struct {
-    AXUIElementRef container;
-    pid_t finder_pid;
-} column_edge_context_t;
-
-typedef struct {
-    CFTypeRef previous;
-} column_selection_stall_state_t;
