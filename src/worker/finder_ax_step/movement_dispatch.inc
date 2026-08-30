@@ -301,9 +301,7 @@ static CFIndex move_to_edge(
             ? current_row - target_row
             : target_row - current_row;
         CGKeyCode key_code = last ? kVK_DownArrow : kVK_UpArrow;
-        for (CFIndex step = 0; step < steps; ++step) {
-            if (!post_key_code(key_code)) return 0;
-        }
+        if (!post_key_code_repeat(key_code, steps)) return 0;
         for (int attempt = 0; attempt < 40; ++attempt) {
             if (current_index(context) == target) break;
             usleep(500);

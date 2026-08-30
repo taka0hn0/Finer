@@ -27,8 +27,22 @@ path.
   `hold_native_list.inc`, and `hold_controller.inc`
 - Edge handling: `edge_monitor_state.inc`, `edge_monitor_lock.inc`,
   `edge_probe.inc`, `column_stall_state.inc`, `column_edge_context.inc`,
-  `column_edge_monitor.inc`, and `edge_monitor_commands.inc`
-- CLI: `cli.inc`
+  `column_edge_monitor.inc`, `list_edge_monitor.inc`,
+  `edge_monitor_worker.inc`, and `edge_monitor_commands.inc`
+- CLI: `cli_commands.inc` and `cli.inc`
+
+`prelude.inc` owns every type that more than one fragment needs, so no fragment
+has to trail a definition that only its successor uses just to satisfy the fixed
+include order. It also owns the state file paths and the direction spellings
+used by CLI arguments, worker datagrams, and token file names.
+`accessibility_primitives.inc` owns the typed AX accessors, including
+`copy_ax_element_attribute` and `perform_ax_action`; call those rather than
+repeating a `CFGetTypeID` check or incrementing the metrics counters by hand.
+
+The two delayed edge monitors are separate: `list_edge_monitor.inc` watches the
+List selection settle on the boundary row, `column_edge_monitor.inc` owns the
+Column tap-and-probe loop, and `edge_monitor_worker.inc` holds the lifetime and
+cleanup shared by both.
 
 Do not compile an `.inc` fragment independently. Add it to the ordered include
 list in `finder_ax_step.c`; the Makefile already tracks every fragment as a

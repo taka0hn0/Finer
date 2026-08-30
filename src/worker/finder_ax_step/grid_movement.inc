@@ -176,9 +176,7 @@ static CFIndex move_grid_horizontal(
             if (has_scroll_value && scroll_value < 0.999) {
                 if (!post_key_code(kVK_DownArrow)) return 0;
                 CFIndex column = grid_column_index(context, current);
-                for (CFIndex step = 0; step < column; ++step) {
-                    post_key_code(kVK_LeftArrow);
-                }
+                (void)post_key_code_repeat(kVK_LeftArrow, column);
                 wait_for_selection_change(context, current);
                 if (navigation_may_change) *navigation_may_change = true;
                 return current + 1;
@@ -188,27 +186,19 @@ static CFIndex move_grid_horizontal(
             }
             CFIndex row = grid_row_index(context, current);
             CFIndex column = grid_column_index(context, current);
-            for (CFIndex step = 0; step < row; ++step) {
-                post_key_code(kVK_UpArrow);
-            }
-            for (CFIndex step = 0; step < column; ++step) {
-                post_key_code(kVK_LeftArrow);
-            }
+            (void)post_key_code_repeat(kVK_UpArrow, row);
+            (void)post_key_code_repeat(kVK_LeftArrow, column);
         } else {
             if (!post_key_code(kVK_DownArrow)) return 0;
             CFIndex column = grid_column_index(context, current);
-            for (CFIndex step = 0; step < column; ++step) {
-                post_key_code(kVK_LeftArrow);
-            }
+            (void)post_key_code_repeat(kVK_LeftArrow, column);
         }
     } else {
         if (current == 0) {
             if (has_scroll_value && scroll_value > 0.001) {
                 if (!post_key_code(kVK_UpArrow)) return 0;
                 CFIndex target_column = maximum_grid_column(context);
-                for (CFIndex step = 0; step < target_column; ++step) {
-                    post_key_code(kVK_RightArrow);
-                }
+                (void)post_key_code_repeat(kVK_RightArrow, target_column);
                 wait_for_selection_change(context, current);
                 if (navigation_may_change) *navigation_may_change = true;
                 return current + 1;
@@ -218,18 +208,12 @@ static CFIndex move_grid_horizontal(
             }
             CFIndex target_row = grid_row_index(context, target);
             CFIndex target_column = grid_column_index(context, target);
-            for (CFIndex step = 0; step < target_row; ++step) {
-                post_key_code(kVK_DownArrow);
-            }
-            for (CFIndex step = 0; step < target_column; ++step) {
-                post_key_code(kVK_RightArrow);
-            }
+            (void)post_key_code_repeat(kVK_DownArrow, target_row);
+            (void)post_key_code_repeat(kVK_RightArrow, target_column);
         } else {
             if (!post_key_code(kVK_UpArrow)) return 0;
             CFIndex target_column = grid_column_index(context, target);
-            for (CFIndex step = 0; step < target_column; ++step) {
-                post_key_code(kVK_RightArrow);
-            }
+            (void)post_key_code_repeat(kVK_RightArrow, target_column);
         }
     }
 

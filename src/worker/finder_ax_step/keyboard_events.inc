@@ -75,6 +75,17 @@ static bool post_key_code(CGKeyCode key_code) {
     return key_down_posted && key_up_posted;
 }
 
+// Sends the same key n times. Grid row/column alignment and the Icon edge
+// jump express a distance as a burst of arrows, so the count lives at the call
+// site and the loop lives here. Stops at the first failed post: once the event
+// source refuses one event the remaining ones cannot reach Finder either.
+static bool post_key_code_repeat(CGKeyCode key_code, CFIndex count) {
+    for (CFIndex step = 0; step < count; ++step) {
+        if (!post_key_code(key_code)) return false;
+    }
+    return true;
+}
+
 static bool post_key_code_with_flags(
     CGKeyCode key_code,
     CGEventFlags flags

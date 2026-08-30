@@ -37,5 +37,8 @@
 #include "worker/finder_ax_step/column_stall_state.inc"
 #include "worker/finder_ax_step/column_edge_context.inc"
 #include "worker/finder_ax_step/column_edge_monitor.inc"
+#include "worker/finder_ax_step/list_edge_monitor.inc"
+#include "worker/finder_ax_step/edge_monitor_worker.inc"
 #include "worker/finder_ax_step/edge_monitor_commands.inc"
+#include "worker/finder_ax_step/cli_commands.inc"
 #include "worker/finder_ax_step/cli.inc"

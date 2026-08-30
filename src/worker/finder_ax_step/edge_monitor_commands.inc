@@ -89,7 +89,7 @@ static bool spawn_vertical_edge_monitor(
         return false;
     }
 
-    const char *direction_value = direction == direction_down ? "down" : "up";
+    const char *direction_value = direction_name(direction);
     const char *worker_command = view == edge_monitor_list_view
         ? "list-edge-monitor-worker"
         : "column-edge-monitor-worker";
@@ -100,39 +100,5 @@ static bool spawn_vertical_edge_monitor(
         NULL,
     };
 
-    posix_spawn_file_actions_t file_actions;
-    posix_spawn_file_actions_init(&file_actions);
-    posix_spawn_file_actions_addopen(
-        &file_actions,
-        STDIN_FILENO,
-        "/dev/null",
-        O_RDONLY,
-        0
-    );
-    posix_spawn_file_actions_addopen(
-        &file_actions,
-        STDOUT_FILENO,
-        "/dev/null",
-        O_WRONLY,
-        0
-    );
-    posix_spawn_file_actions_addopen(
-        &file_actions,
-        STDERR_FILENO,
-        "/dev/null",
-        O_WRONLY,
-        0
-    );
-
-    pid_t child;
-    int spawn_error = posix_spawn(
-        &child,
-        program_path,
-        &file_actions,
-        NULL,
-        arguments,
-        environ
-    );
-    posix_spawn_file_actions_destroy(&file_actions);
-    return spawn_error == 0;
+    return spawn_with_null_stdio(program_path, arguments, NULL);
 }
