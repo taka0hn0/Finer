@@ -29,7 +29,7 @@
 #include "worker/finder_ax_step/hold_position.inc"
 #include "worker/finder_ax_step/hold_scroll.inc"
 #include "worker/finder_ax_step/hold_fast_ax.inc"
-#include "worker/finder_ax_step/hold_native_list.inc"
+#include "worker/finder_ax_step/hold_native_vertical.inc"
 #include "worker/finder_ax_step/hold_controller.inc"
 #include "worker/finder_ax_step/edge_monitor_state.inc"
 #include "worker/finder_ax_step/edge_monitor_lock.inc"

@@ -65,6 +65,7 @@ check: build check-rules
 	./scripts/test_finer_jump.sh
 	./scripts/test_open_panel.sh
 	./scripts/test_edge_monitor.sh
+	zsh ./scripts/test_navigation_selection.sh
 	./scripts/test_mark_state.sh
 	./scripts/test_tap_burst_headless.sh
 	./scripts/test_column_phase_summary.sh

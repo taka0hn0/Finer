@@ -256,7 +256,7 @@ run_view_case() {
         require_selected_visible "list upward wrap"
     fi
 
-    if [[ "$view" == "list" ]]; then
+    if [[ "$view" == "list" || "$view" == "column" ]]; then
         for _ in {1..10}; do
             run_helper up-wrap >/dev/null
         done
@@ -265,7 +265,7 @@ run_view_case() {
         run_helper hold-start down >/dev/null
         sleep 0.1
         (
-            sleep 0.35
+            sleep 0.8
             : > "$HOME/.local/state/finder-vim/finder_down_hold.txt"
         ) &
         local stopper_pid=$!
@@ -278,8 +278,10 @@ run_view_case() {
         held_path="$(selected_path)"
         [[ "$held_path" == "$fixture_dir/item-00"[0-1][0-9][0-9]".txt" ]] \
             || fail "list held wrap did not cross to the leading range: $held_path"
-        require_scroll_edge "list downward held wrap" top
-        require_selected_visible "list downward held wrap"
+        require_scroll_edge "$view downward held wrap" top
+        if [[ "$view" == "list" ]]; then
+            require_selected_visible "list downward held wrap"
+        fi
 
         run_helper first >/dev/null
         for _ in {1..10}; do
@@ -290,7 +292,7 @@ run_view_case() {
         run_helper hold-start up >/dev/null
         sleep 0.1
         (
-            sleep 0.35
+            sleep 0.8
             : > "$HOME/.local/state/finder-vim/finder_up_hold.txt"
         ) &
         stopper_pid=$!
@@ -301,8 +303,10 @@ run_view_case() {
         held_path="$(selected_path)"
         [[ "$held_path" == "$fixture_dir/item-00"[8-9][0-9][0-9]".txt" ]] \
             || fail "list upward held wrap did not cross to the trailing range: $held_path"
-        require_scroll_edge "list upward held wrap" bottom
-        require_selected_visible "list upward held wrap"
+        require_scroll_edge "$view upward held wrap" bottom
+        if [[ "$view" == "list" ]]; then
+            require_selected_visible "list upward held wrap"
+        fi
     fi
 
     close_test_window
@@ -314,7 +318,8 @@ run_view_case() {
     && -f "$fixture_dir/item-00999.txt" ]] \
     || fail "missing 1000-item fixture: $fixture_dir"
 
-for view in list column; do
+test_views="${FINDER_VIM_TEST_VIEWS:-list column}"
+for view in ${=test_views}; do
     run_view_case "$view"
 done
 

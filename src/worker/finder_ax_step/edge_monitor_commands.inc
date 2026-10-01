@@ -84,9 +84,15 @@ static bool spawn_vertical_edge_monitor(
     // exit before it ever inspects Finder.  Create the generation token here,
     // immediately before the Column monitor is spawned.  Key-up still
     // truncates the same file, so the takeover repeat stops with physical j/k.
-    if (view == edge_monitor_column_view
-        && !write_hold_token(direction)) {
-        return false;
+    if (view == edge_monitor_column_view) {
+        direction_t opposite = direction == direction_down
+            ? direction_up
+            : direction_down;
+        if (!write_hold_token(direction)) return false;
+        if (!clear_hold_token(opposite)) {
+            clear_hold_token(direction);
+            return false;
+        }
     }
 
     const char *direction_value = direction_name(direction);

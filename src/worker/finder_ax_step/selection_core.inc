@@ -2,7 +2,10 @@
 // One AX request regardless of item count, so both the ordinary movement path
 // and the hold hot path use this and nothing else. Returns -1 when the array is
 // missing, empty, or holds an element outside the cached item array.
-static CFIndex selected_index_fast(const navigation_context_t *context) {
+static CFIndex selected_index_snapshot(
+    const navigation_context_t *context,
+    bool *selection_available
+) {
     CFIndex item_count = CFArrayGetCount(context->items);
     CFStringRef selected_attribute = context->role == navigation_outline
         ? kAXSelectedRowsAttribute
@@ -11,6 +14,7 @@ static CFIndex selected_index_fast(const navigation_context_t *context) {
         context->container,
         selected_attribute
     );
+    if (selection_available) *selection_available = selected != NULL;
     if (!selected || CFArrayGetCount(selected) == 0) {
         if (selected) CFRelease(selected);
         return -1;
@@ -43,9 +47,17 @@ static CFIndex selected_index_fast(const navigation_context_t *context) {
     return index == kCFNotFound ? -1 : index;
 }
 
+static CFIndex selected_index_fast(const navigation_context_t *context) {
+    return selected_index_snapshot(context, NULL);
+}
+
 static CFIndex current_index(const navigation_context_t *context) {
-    CFIndex index = selected_index_fast(context);
-    if (index >= 0) return index;
+    bool selection_available = false;
+    CFIndex index = selected_index_snapshot(context, &selection_available);
+    // An empty published selection is authoritative. Item-level flags can
+    // outlive deselection; scanning them must not resurrect an old cursor.
+    // An unmapped selection also means the cached items need refreshing.
+    if (selection_available) return index;
 
     // Compatibility fallback when the container does not expose its selected
     // rows/children. This costs one AX request per item, so it stays off the
@@ -105,6 +117,21 @@ static bool selected_item_is_visible(
     return visible;
 }
 
+static bool column_selection_matches_index(
+    const navigation_context_t *context,
+    CFIndex index
+) {
+    CFArrayRef actual = copy_array_attribute(
+        context->container, kAXSelectedChildrenAttribute
+    );
+    bool matches = actual && CFArrayGetCount(actual) == 1
+        && navigation_item_index(
+            context, (AXUIElementRef)CFArrayGetValueAtIndex(actual, 0)
+        ) == index;
+    if (actual) CFRelease(actual);
+    return matches;
+}
+
 static bool select_index(const navigation_context_t *context, CFIndex index) {
     if (!navigation_item_is_selectable(context, index)) return false;
     AXUIElementRef item = (AXUIElementRef)CFArrayGetValueAtIndex(context->items, index);
@@ -143,5 +170,12 @@ static bool select_index(const navigation_context_t *context, CFIndex index) {
         }
     }
     CFRelease(selection);
+    if (error != kAXErrorSuccess && context->role == navigation_list) {
+        // Some Column views can apply AXSelectedChildren and still return
+        // kAXErrorAttributeUnsupported. Retrying the movement then advances
+        // twice. Accept only the exact requested singleton, not merely a
+        // selection containing the target, and leave genuine failures intact.
+        if (column_selection_matches_index(context, index)) return true;
+    }
     return error == kAXErrorSuccess;
 }

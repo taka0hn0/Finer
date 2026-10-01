@@ -72,6 +72,10 @@ static CFIndex select_fast_ax_next(
                 kAXSelectedChildrenAttribute,
                 selection
             );
+            if (error != kAXErrorSuccess
+                && column_selection_matches_index(context, target)) {
+                error = kAXErrorSuccess;
+            }
         }
         if (error == kAXErrorSuccess) {
             scroll_fast_ax_target_to_visible(
@@ -84,6 +88,9 @@ static CFIndex select_fast_ax_next(
             );
             return target;
         }
+        // A failed Column write is not an unselectable heading. Continuing
+        // would skip real files, possibly the entire column, in a single tick.
+        if (context->role == navigation_list) return -1;
     }
     return -1;
 }
@@ -120,6 +127,7 @@ static CFIndex run_fast_ax_hold_repeat(
         }
         direction_t direction = hold_state->direction;
         if (lock_fd >= 0) flock(lock_fd, LOCK_EX);
+        uint64_t step_started = mach_absolute_time();
         CFIndex target = select_fast_ax_next(
             context,
             current,
@@ -131,7 +139,7 @@ static CFIndex run_fast_ax_hold_repeat(
         if (target < 0) break;
         current = target;
 
-        hold_pacer_advance(&pacer);
+        hold_pacer_complete_synchronous_step(&pacer, step_started);
     }
 
     CFIndex settled = 0;

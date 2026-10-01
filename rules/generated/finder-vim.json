@@ -894,6 +894,9 @@
             "modifiers": {
               "mandatory": [
                 "shift"
+              ],
+              "optional": [
+                "caps_lock"
               ]
             }
           },
@@ -946,6 +949,9 @@
             "modifiers": {
               "mandatory": [
                 "shift"
+              ],
+              "optional": [
+                "caps_lock"
               ]
             }
           },
@@ -1335,7 +1341,12 @@
           ],
           "description": "Visual Mode: Extend selection down by Finder motion count",
           "from": {
-            "key_code": "j"
+            "key_code": "j",
+            "modifiers": {
+              "optional": [
+                "caps_lock"
+              ]
+            }
           },
           "to": [
             {
@@ -2273,7 +2284,12 @@
           ],
           "description": "Normal Mode: Move down by Finder motion count",
           "from": {
-            "key_code": "j"
+            "key_code": "j",
+            "modifiers": {
+              "optional": [
+                "caps_lock"
+              ]
+            }
           },
           "to": [
             {
@@ -3211,7 +3227,12 @@
           ],
           "description": "Visual Mode: Extend selection up by Finder motion count",
           "from": {
-            "key_code": "k"
+            "key_code": "k",
+            "modifiers": {
+              "optional": [
+                "caps_lock"
+              ]
+            }
           },
           "to": [
             {
@@ -4149,7 +4170,12 @@
           ],
           "description": "Normal Mode: Move up by Finder motion count",
           "from": {
-            "key_code": "k"
+            "key_code": "k",
+            "modifiers": {
+              "optional": [
+                "caps_lock"
+              ]
+            }
           },
           "to": [
             {
@@ -5149,7 +5175,12 @@
           ],
           "description": "Experimental List native hold: Map j directly to Down Arrow",
           "from": {
-            "key_code": "j"
+            "key_code": "j",
+            "modifiers": {
+              "optional": [
+                "caps_lock"
+              ]
+            }
           },
           "to": [
             {
@@ -5203,7 +5234,12 @@
           ],
           "description": "Experimental List native hold with delayed edge monitor: Map j to Down Arrow",
           "from": {
-            "key_code": "j"
+            "key_code": "j",
+            "modifiers": {
+              "optional": [
+                "caps_lock"
+              ]
+            }
           },
           "parameters": {
             "basic.to_delayed_action_delay_milliseconds": 250
@@ -5288,7 +5324,12 @@
           ],
           "description": "Experimental List native hold with delayed edge monitor: Map k to Up Arrow",
           "from": {
-            "key_code": "k"
+            "key_code": "k",
+            "modifiers": {
+              "optional": [
+                "caps_lock"
+              ]
+            }
           },
           "parameters": {
             "basic.to_delayed_action_delay_milliseconds": 250
@@ -5373,7 +5414,12 @@
           ],
           "description": "Experimental List native hold: Map k directly to Up Arrow",
           "from": {
-            "key_code": "k"
+            "key_code": "k",
+            "modifiers": {
+              "optional": [
+                "caps_lock"
+              ]
+            }
           },
           "to": [
             {
@@ -5431,7 +5477,12 @@
           ],
           "description": "Experimental Column native hold: Map j directly to Down Arrow",
           "from": {
-            "key_code": "j"
+            "key_code": "j",
+            "modifiers": {
+              "optional": [
+                "caps_lock"
+              ]
+            }
           },
           "to": [
             {
@@ -5489,7 +5540,12 @@
           ],
           "description": "Experimental Column native hold: Map k directly to Up Arrow",
           "from": {
-            "key_code": "k"
+            "key_code": "k",
+            "modifiers": {
+              "optional": [
+                "caps_lock"
+              ]
+            }
           },
           "to": [
             {
@@ -5547,7 +5603,12 @@
           ],
           "description": "Experimental Column native hold with delayed edge monitor: Map j to Down Arrow",
           "from": {
-            "key_code": "j"
+            "key_code": "j",
+            "modifiers": {
+              "optional": [
+                "caps_lock"
+              ]
+            }
           },
           "parameters": {
             "basic.to_delayed_action_delay_milliseconds": 100
@@ -5555,9 +5616,18 @@
           "to": [
             {
               "set_variable": {
+                "name": "finder_native_column_vertical_owner",
+                "value": 1
+              }
+            },
+            {
+              "set_variable": {
                 "name": "finder_native_column_j_pressed",
                 "value": 1
               }
+            },
+            {
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_step vertical-edge-monitor-cancel >/dev/null 2>&1"
             },
             {
               "key_code": "down_arrow",
@@ -5572,7 +5642,13 @@
               }
             },
             {
-              "shell_command": "exec /usr/bin/truncate -s 0 $HOME/.local/state/finder-vim/finder_down_hold.txt"
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_step hold-stop down >/dev/null 2>&1"
+            },
+            {
+              "set_variable": {
+                "expression": "finder_native_column_vertical_owner == 1 ? 0 : finder_native_column_vertical_owner",
+                "name": "finder_native_column_vertical_owner"
+              }
             }
           ],
           "to_delayed_action": {
@@ -5581,6 +5657,11 @@
                 "conditions": [
                   {
                     "name": "finder_native_column_j_pressed",
+                    "type": "variable_if",
+                    "value": 1
+                  },
+                  {
+                    "name": "finder_native_column_vertical_owner",
                     "type": "variable_if",
                     "value": 1
                   }
@@ -5639,7 +5720,12 @@
           ],
           "description": "Experimental Column native hold with delayed edge monitor: Map k to Up Arrow",
           "from": {
-            "key_code": "k"
+            "key_code": "k",
+            "modifiers": {
+              "optional": [
+                "caps_lock"
+              ]
+            }
           },
           "parameters": {
             "basic.to_delayed_action_delay_milliseconds": 100
@@ -5647,9 +5733,18 @@
           "to": [
             {
               "set_variable": {
+                "name": "finder_native_column_vertical_owner",
+                "value": 2
+              }
+            },
+            {
+              "set_variable": {
                 "name": "finder_native_column_k_pressed",
                 "value": 1
               }
+            },
+            {
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_step vertical-edge-monitor-cancel >/dev/null 2>&1"
             },
             {
               "key_code": "up_arrow",
@@ -5664,7 +5759,13 @@
               }
             },
             {
-              "shell_command": "exec /usr/bin/truncate -s 0 $HOME/.local/state/finder-vim/finder_up_hold.txt"
+              "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_step hold-stop up >/dev/null 2>&1"
+            },
+            {
+              "set_variable": {
+                "expression": "finder_native_column_vertical_owner == 2 ? 0 : finder_native_column_vertical_owner",
+                "name": "finder_native_column_vertical_owner"
+              }
             }
           ],
           "to_delayed_action": {
@@ -5675,6 +5776,11 @@
                     "name": "finder_native_column_k_pressed",
                     "type": "variable_if",
                     "value": 1
+                  },
+                  {
+                    "name": "finder_native_column_vertical_owner",
+                    "type": "variable_if",
+                    "value": 2
                   }
                 ],
                 "shell_command": "exec $HOME/.local/libexec/finder-vim/finder_ax_step column-edge-monitor-start up >/dev/null 2>&1"
@@ -5708,7 +5814,12 @@
           ],
           "description": "Normal Mode: Map j to List wrap or Grid down with transient C worker",
           "from": {
-            "key_code": "j"
+            "key_code": "j",
+            "modifiers": {
+              "optional": [
+                "caps_lock"
+              ]
+            }
           },
           "parameters": {
             "basic.to_if_held_down_threshold_milliseconds": 150
@@ -5781,7 +5892,12 @@
           ],
           "description": "Normal Mode: Map k to List wrap or Grid up with transient C worker",
           "from": {
-            "key_code": "k"
+            "key_code": "k",
+            "modifiers": {
+              "optional": [
+                "caps_lock"
+              ]
+            }
           },
           "parameters": {
             "basic.to_if_held_down_threshold_milliseconds": 150
@@ -6086,7 +6202,12 @@
           ],
           "description": "Visual Mode: Extend selection down with j",
           "from": {
-            "key_code": "j"
+            "key_code": "j",
+            "modifiers": {
+              "optional": [
+                "caps_lock"
+              ]
+            }
           },
           "to": [
             {
@@ -6127,7 +6248,12 @@
           ],
           "description": "Visual Mode: Extend selection up with k",
           "from": {
-            "key_code": "k"
+            "key_code": "k",
+            "modifiers": {
+              "optional": [
+                "caps_lock"
+              ]
+            }
           },
           "to": [
             {

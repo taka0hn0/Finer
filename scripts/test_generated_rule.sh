@@ -250,7 +250,10 @@ def without_jump_palette_guard:
             .description == "Boost Mode: Hold Shift+j for Finder-native Down Arrow"
             and .from == {
                 "key_code":"j",
-                "modifiers":{"mandatory":["shift"]}
+                "modifiers":{
+                    "mandatory":["shift"],
+                    "optional":["caps_lock"]
+                }
             }
             and .to == [
                 {"shell_command":"exec $HOME/.local/libexec/finder-vim/finder_ax_step notify-key 38 4 125 0 >/dev/null 2>&1"},
@@ -285,7 +288,10 @@ def without_jump_palette_guard:
             .description == "Boost Mode: Hold Shift+k for Finder-native Up Arrow"
             and .from == {
                 "key_code":"k",
-                "modifiers":{"mandatory":["shift"]}
+                "modifiers":{
+                    "mandatory":["shift"],
+                    "optional":["caps_lock"]
+                }
             }
             and .to == [
                 {"shell_command":"exec $HOME/.local/libexec/finder-vim/finder_ax_step notify-key 40 4 126 0 >/dev/null 2>&1"},
@@ -309,7 +315,7 @@ def without_jump_palette_guard:
         | .manipulators[]
         | select(
             .description == "Experimental Column native hold: Map j directly to Down Arrow"
-            and .from == {"key_code":"j"}
+            and .from == {"key_code":"j","modifiers":{"optional":["caps_lock"]}}
             and .to == [{"key_code":"down_arrow","repeat":true}]
         )
         | select(
@@ -334,7 +340,7 @@ def without_jump_palette_guard:
         | .manipulators[]
         | select(
             .description == "Experimental Column native hold: Map k directly to Up Arrow"
-            and .from == {"key_code":"k"}
+            and .from == {"key_code":"k","modifiers":{"optional":["caps_lock"]}}
             and .to == [{"key_code":"up_arrow","repeat":true}]
         )
         | select(
@@ -359,23 +365,36 @@ def without_jump_palette_guard:
         | .manipulators[]
         | select(
             .description == "Experimental Column native hold with delayed edge monitor: Map j to Down Arrow"
-            and .from == {"key_code":"j"}
+            and .from == {"key_code":"j","modifiers":{"optional":["caps_lock"]}}
             and .parameters == {"basic.to_delayed_action_delay_milliseconds":100}
             and .to == [
+                {"set_variable":{"name":"finder_native_column_vertical_owner","value":1}},
                 {"set_variable":{"name":"finder_native_column_j_pressed","value":1}},
+                {"shell_command":"exec $HOME/.local/libexec/finder-vim/finder_ax_step vertical-edge-monitor-cancel >/dev/null 2>&1"},
                 {"key_code":"down_arrow","repeat":true}
             ]
             and .to_after_key_up == [
                 {"set_variable":{"name":"finder_native_column_j_pressed","value":0}},
-                {"shell_command":"exec /usr/bin/truncate -s 0 $HOME/.local/state/finder-vim/finder_down_hold.txt"}
+                {"shell_command":"exec $HOME/.local/libexec/finder-vim/finder_ax_step hold-stop down >/dev/null 2>&1"},
+                {"set_variable":{
+                    "expression":"finder_native_column_vertical_owner == 1 ? 0 : finder_native_column_vertical_owner",
+                    "name":"finder_native_column_vertical_owner"
+                }}
             ]
             and .to_delayed_action == {
                 "to_if_invoked":[{
-                    "conditions":[{
-                        "name":"finder_native_column_j_pressed",
-                        "type":"variable_if",
-                        "value":1
-                    }],
+                    "conditions":[
+                        {
+                            "name":"finder_native_column_j_pressed",
+                            "type":"variable_if",
+                            "value":1
+                        },
+                        {
+                            "name":"finder_native_column_vertical_owner",
+                            "type":"variable_if",
+                            "value":1
+                        }
+                    ],
                     "shell_command":"exec $HOME/.local/libexec/finder-vim/finder_ax_step column-edge-monitor-start down >/dev/null 2>&1"
                 }]
             }
@@ -402,23 +421,36 @@ def without_jump_palette_guard:
         | .manipulators[]
         | select(
             .description == "Experimental Column native hold with delayed edge monitor: Map k to Up Arrow"
-            and .from == {"key_code":"k"}
+            and .from == {"key_code":"k","modifiers":{"optional":["caps_lock"]}}
             and .parameters == {"basic.to_delayed_action_delay_milliseconds":100}
             and .to == [
+                {"set_variable":{"name":"finder_native_column_vertical_owner","value":2}},
                 {"set_variable":{"name":"finder_native_column_k_pressed","value":1}},
+                {"shell_command":"exec $HOME/.local/libexec/finder-vim/finder_ax_step vertical-edge-monitor-cancel >/dev/null 2>&1"},
                 {"key_code":"up_arrow","repeat":true}
             ]
             and .to_after_key_up == [
                 {"set_variable":{"name":"finder_native_column_k_pressed","value":0}},
-                {"shell_command":"exec /usr/bin/truncate -s 0 $HOME/.local/state/finder-vim/finder_up_hold.txt"}
+                {"shell_command":"exec $HOME/.local/libexec/finder-vim/finder_ax_step hold-stop up >/dev/null 2>&1"},
+                {"set_variable":{
+                    "expression":"finder_native_column_vertical_owner == 2 ? 0 : finder_native_column_vertical_owner",
+                    "name":"finder_native_column_vertical_owner"
+                }}
             ]
             and .to_delayed_action == {
                 "to_if_invoked":[{
-                    "conditions":[{
-                        "name":"finder_native_column_k_pressed",
-                        "type":"variable_if",
-                        "value":1
-                    }],
+                    "conditions":[
+                        {
+                            "name":"finder_native_column_k_pressed",
+                            "type":"variable_if",
+                            "value":1
+                        },
+                        {
+                            "name":"finder_native_column_vertical_owner",
+                            "type":"variable_if",
+                            "value":2
+                        }
+                    ],
                     "shell_command":"exec $HOME/.local/libexec/finder-vim/finder_ax_step column-edge-monitor-start up >/dev/null 2>&1"
                 }]
             }
@@ -445,7 +477,7 @@ def without_jump_palette_guard:
         | .manipulators[]
         | select(
             .description == "Experimental List native hold: Map j directly to Down Arrow"
-            and .from == {"key_code":"j"}
+            and .from == {"key_code":"j","modifiers":{"optional":["caps_lock"]}}
             and .to == [{"key_code":"down_arrow","repeat":true}]
         )
         | select(
@@ -480,7 +512,7 @@ def without_jump_palette_guard:
         | .manipulators[]
         | select(
             .description == "Experimental List native hold: Map k directly to Up Arrow"
-            and .from == {"key_code":"k"}
+            and .from == {"key_code":"k","modifiers":{"optional":["caps_lock"]}}
             and .to == [{"key_code":"up_arrow","repeat":true}]
         )
         | select(
@@ -515,7 +547,7 @@ def without_jump_palette_guard:
         | .manipulators[]
         | select(
             .description == "Experimental List native hold with delayed edge monitor: Map j to Down Arrow"
-            and .from == {"key_code":"j"}
+            and .from == {"key_code":"j","modifiers":{"optional":["caps_lock"]}}
             and .parameters == {"basic.to_delayed_action_delay_milliseconds":250}
             and .to == [
                 {"set_variable":{"name":"finder_native_list_j_pressed","value":1}},
@@ -556,7 +588,7 @@ def without_jump_palette_guard:
         | .manipulators[]
         | select(
             .description == "Experimental List native hold with delayed edge monitor: Map k to Up Arrow"
-            and .from == {"key_code":"k"}
+            and .from == {"key_code":"k","modifiers":{"optional":["caps_lock"]}}
             and .parameters == {"basic.to_delayed_action_delay_milliseconds":250}
             and .to == [
                 {"set_variable":{"name":"finder_native_list_k_pressed","value":1}},
@@ -740,7 +772,7 @@ def without_jump_palette_guard:
         | .manipulators[]
         | select(
             .description == "Visual Mode: Extend selection down by Finder motion count"
-            and .from == {"key_code":"j"}
+            and .from == {"key_code":"j","modifiers":{"optional":["caps_lock"]}}
             and finder_visual_conditions
             and exact_visual_count_commands("down")
             and clears_motion_count
@@ -752,7 +784,7 @@ def without_jump_palette_guard:
         | .manipulators[]
         | select(
             .description == "Visual Mode: Extend selection up by Finder motion count"
-            and .from == {"key_code":"k"}
+            and .from == {"key_code":"k","modifiers":{"optional":["caps_lock"]}}
             and finder_visual_conditions
             and exact_visual_count_commands("up")
             and clears_motion_count
@@ -910,7 +942,7 @@ def without_jump_palette_guard:
         | .manipulators[]
         | select(
             .description == "Normal Mode: Map j to List wrap or Grid down with transient C worker"
-            and .from == {"key_code":"j"}
+            and .from == {"key_code":"j","modifiers":{"optional":["caps_lock"]}}
             and .to == [
                 {"set_variable":{"name":"finder_normal_vertical_owner","value":1}},
                 {"shell_command":"exec $HOME/.local/libexec/finder-vim/finder_ax_step hold-start down >/dev/null 2>&1"}
@@ -946,7 +978,7 @@ def without_jump_palette_guard:
         | .manipulators[]
         | select(
             .description == "Normal Mode: Map k to List wrap or Grid up with transient C worker"
-            and .from == {"key_code":"k"}
+            and .from == {"key_code":"k","modifiers":{"optional":["caps_lock"]}}
             and .to == [
                 {"set_variable":{"name":"finder_normal_vertical_owner","value":2}},
                 {"shell_command":"exec $HOME/.local/libexec/finder-vim/finder_ax_step hold-start up >/dev/null 2>&1"}
@@ -1136,6 +1168,13 @@ def without_jump_palette_guard:
         | select(.key_code == "a")
         | select((.modifiers // []) | index("command"))
         | select((.modifiers // []) | index("option"))
+    ] | length == 0),
+    ([
+        .rules[]
+        | select(.description == "Finer Navigation")
+        | .manipulators[]
+        | select(.from.key_code == "j" or .from.key_code == "k")
+        | select(((.from.modifiers.optional // []) | index("caps_lock")) == null)
     ] | length == 0),
     ([
         .rules[].manipulators[].to[]?.shell_command?

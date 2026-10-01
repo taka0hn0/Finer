@@ -21,7 +21,17 @@ static CFIndex move_once_grid(
     bool *navigation_may_change
 ) {
     CFIndex position = 0;
-    if (current >= 0
+    if (current < 0) {
+        // Establish the cursor without also applying a native arrow. The
+        // first j must not skip the first item (or leave an empty Grid inert).
+        CFIndex destination = direction == direction_up
+                || direction == direction_left
+            ? count - 1
+            : 0;
+        position = set_visible_mark_and_cursor_selection(context, destination)
+            ? destination + 1
+            : 0;
+    } else if (current >= 0
         && (direction == direction_left || direction == direction_right)) {
         if (context->has_marks) {
             CFIndex destination = direction == direction_right
@@ -176,11 +186,21 @@ static CFIndex move_once_current_index(
     CFIndex current_hint,
     bool use_navigation_anchor
 ) {
+    CFIndex actual = current_hint != current_index_unknown
+        ? current_hint
+        : current_index(context);
     CFIndex anchor = context->cursor_index >= 0
         ? context->cursor_index
         : use_navigation_anchor
             ? take_navigation_anchor(context)
             : -1;
+    // A mark operation can leave an anchor for the next command. Once
+    // Finder is unselected (including reopening the same directory), that
+    // anchor must not restore item 0 and then advance the first j to item 1.
+    if (actual < 0 && !context->has_marks) {
+        context->predicted_index = -1;
+        return -1;
+    }
     if (anchor >= 0 && !context->has_marks
         && !select_index(context, anchor)) {
         anchor = -1;
@@ -192,9 +212,7 @@ static CFIndex move_once_current_index(
     if (context->role == navigation_grid && context->predicted_index >= 0) {
         return context->predicted_index;
     }
-    return current_hint != current_index_unknown
-        ? current_hint
-        : current_index(context);
+    return actual;
 }
 
 static CFIndex move_once(

@@ -82,7 +82,7 @@ static hold_session_status_t hold_session_begin(
 }
 
 // Fallback repeat for the cases the specialised loops do not cover: horizontal
-// holds, Column, and any vertical hold with confirmed marks.
+// holds and any vertical hold with confirmed marks.
 static CFIndex run_worker_hold_repeat(
     navigation_context_t *context,
     bool *context_created,
@@ -148,8 +148,8 @@ static int run_hold_repeat(direction_t direction) {
 
     CFIndex last_position = 0;
     double deadline = monotonic_seconds() + 300.0;
-    if (supports_native_list_hold(&context, direction)) {
-        last_position = run_native_list_hold_repeat(
+    if (supports_native_vertical_hold(&context, direction)) {
+        last_position = run_native_vertical_hold_repeat(
             &context,
             &session.hold_state,
             deadline,

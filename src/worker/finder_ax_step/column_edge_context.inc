@@ -35,6 +35,37 @@ static bool column_edge_context_create(
     return true;
 }
 
+static bool column_selected_child_is_boundary(
+    const column_edge_context_t *context,
+    AXUIElementRef selected_child,
+    direction_t direction
+) {
+    CFArrayRef items = copy_navigation_items(
+        context->container,
+        navigation_list
+    );
+    if (!items) return false;
+
+    CFIndex count = CFArrayGetCount(items);
+    CFIndex index = direction == direction_down ? count - 1 : 0;
+    CFIndex step = direction == direction_down ? -1 : 1;
+    bool at_boundary = false;
+    for (; index >= 0 && index < count; index += step) {
+        AXUIElementRef item = (AXUIElementRef)CFArrayGetValueAtIndex(
+            items,
+            index
+        );
+        CFStringRef url = copy_navigation_item_url_string(item, 0);
+        if (!url) continue;
+        CFRelease(url);
+        at_boundary = CFEqual(item, selected_child);
+        break;
+    }
+
+    CFRelease(items);
+    return at_boundary;
+}
+
 static bool post_column_vertical_wrap(
     const column_edge_context_t *context,
     direction_t direction,
@@ -106,14 +137,21 @@ static int run_owned_column_tap_repeat(
                     stall_state,
                     current
                 );
+            bool at_boundary = stalled
+                && column_selected_child_is_boundary(
+                    context,
+                    current,
+                    direction
+                );
             if (current) CFRelease(current);
             EDGE_TRACE(
-                "observe\tt=%.6f\tkind=column-stall\tstalled=%d\n",
+                "observe\tt=%.6f\tkind=column-stall\tstalled=%d\tboundary=%d\n",
                 monotonic_seconds(),
-                stalled
+                stalled,
+                at_boundary
             );
 
-            if (stalled) {
+            if (at_boundary) {
                 bool token_current = hold_token_matches(
                     token_fd,
                     initial_token,

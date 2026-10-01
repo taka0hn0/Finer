@@ -49,6 +49,12 @@ static bool clear_hold_token(direction_t direction) {
     return success;
 }
 
+static bool clear_vertical_hold_tokens(void) {
+    bool down_cleared = clear_hold_token(direction_down);
+    bool up_cleared = clear_hold_token(direction_up);
+    return down_cleared && up_cleared;
+}
+
 static ssize_t read_token(int descriptor, char *buffer, size_t size) {
     ssize_t count = pread(descriptor, buffer, size - 1, 0);
     if (count < 0) return count;

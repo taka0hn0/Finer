@@ -7,13 +7,21 @@ static int open_vertical_edge_monitor_lock(
         ? "list"
         : "column";
     char name[64];
-    snprintf(
-        name,
-        sizeof(name),
-        "finder_%s_%s_edge_monitor.lock",
-        view_name,
-        direction_name(direction)
-    );
+    if (view == edge_monitor_column_view) {
+        snprintf(
+            name,
+            sizeof(name),
+            "finder_column_vertical_edge_monitor.lock"
+        );
+    } else {
+        snprintf(
+            name,
+            sizeof(name),
+            "finder_%s_%s_edge_monitor.lock",
+            view_name,
+            direction_name(direction)
+        );
+    }
     state_path(path, sizeof(path), name);
     return open(path, O_CREAT | O_RDWR, 0600);
 }
@@ -115,7 +123,7 @@ static int run_vertical_edge_monitor_lock_self_test(void) {
     if (child == 0) {
         int next_fd = open_vertical_edge_monitor_lock(
             edge_monitor_column_view,
-            direction_down
+            direction_up
         );
         bool acquired = next_fd >= 0
             && acquire_vertical_edge_monitor_lock(next_fd, true);

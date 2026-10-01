@@ -1,7 +1,7 @@
 static void print_usage(void) {
     fprintf(
         stderr,
-        "Usage: finder_ax_step <clear-selection|toggle-mark|edge-monitor-self-test|edge-monitor-lock-self-test|hold-token-stop-self-test|vertical-hold-state-self-test|vertical-scroll-value|selected-visible|scroll-state|first|last|down-wrap|up-wrap|left-wrap|right-wrap> | "
+        "Usage: finder_ax_step <clear-selection|toggle-mark|edge-monitor-self-test|edge-monitor-lock-self-test|hold-token-stop-self-test|vertical-hold-state-self-test|vertical-edge-monitor-cancel|vertical-scroll-value|selected-visible|scroll-state|first|last|down-wrap|up-wrap|left-wrap|right-wrap> | "
         "notify-key <key-code> <modifiers> <suppressed-key-code|-1> <suppressed-modifiers> | "
         "count-move <down|up> <1...99> | "
         "<hold-start|hold-token-start|hold-stop|hold-stop-now|hold-repeat> <down|up|left|right> | "
@@ -32,6 +32,9 @@ int main(int argc, char **argv) {
                     || enqueue_clear_selection()
                 ? 0
                 : 1;
+        }
+        if (strcmp(command, "vertical-edge-monitor-cancel") == 0) {
+            return clear_vertical_hold_tokens() ? 0 : 1;
         }
         if (strcmp(command, "vertical-scroll-value") == 0) {
             return run_vertical_scroll_value_command();

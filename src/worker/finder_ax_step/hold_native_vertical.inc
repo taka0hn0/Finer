@@ -1,4 +1,6 @@
-static CFIndex run_native_list_hold_repeat(
+// List and Column share native taps and observed-boundary wrapping. Neither
+// view predicts the selection from the number of events posted.
+static CFIndex run_native_vertical_hold_repeat(
     navigation_context_t *context,
     vertical_hold_state_t *hold_state,
     double deadline,
@@ -40,9 +42,7 @@ static CFIndex run_native_list_hold_repeat(
         if (lock_fd >= 0) flock(lock_fd, LOCK_UN);
         if (!posted) break;
 
-        uint64_t finished = hold_pacer_advance(&pacer);
-
-        if (finished >= next_probe) {
+        if (mach_absolute_time() >= next_probe) {
             if (lock_fd >= 0) flock(lock_fd, LOCK_EX);
             CFIndex observed = current_index(context);
             if (observed >= 0) last_observed = observed;
@@ -65,10 +65,14 @@ static CFIndex run_native_list_hold_repeat(
                     : last;
             }
             if (lock_fd >= 0) flock(lock_fd, LOCK_UN);
-            do {
-                next_probe += probe_interval_ticks;
-            } while (next_probe <= finished);
+            // Schedule from completion, not from the pre-AX timestamp. A
+            // slow synchronous query must not cause another immediate probe.
+            next_probe = mach_absolute_time() + probe_interval_ticks;
         }
+        // Include AX work in the tick budget, just as the Column loop does.
+        // Otherwise a slow probe leaves next_step in the past and emits an
+        // immediate catch-up tap on the next iteration.
+        hold_pacer_advance(&pacer);
     }
 
     if (!process_is_frontmost(context->finder_pid)) return 0;

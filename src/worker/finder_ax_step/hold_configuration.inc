@@ -84,6 +84,16 @@ static uint64_t hold_pacer_advance(hold_pacer_t *pacer) {
     return finished;
 }
 
+// Synchronous AX steps already finish selection and reveal before returning.
+// Enforce the minimum start-to-start interval, without waiting for another
+// timer slot after a slow step or replaying any missed slots.
+static void hold_pacer_complete_synchronous_step(
+    hold_pacer_t *pacer,
+    uint64_t step_started
+) {
+    pacer->next_step = step_started + pacer->interval_ticks;
+}
+
 // Restarts the cadence from now, for the Column wrap that just moved the
 // selection to the opposite edge.
 static void hold_pacer_restart(hold_pacer_t *pacer) {
@@ -102,14 +112,18 @@ static bool native_list_hold_enabled(void) {
     return !value || strcmp(value, "0") != 0;
 }
 
-static bool supports_native_list_hold(
+static bool supports_native_vertical_hold(
     const navigation_context_t *context,
     direction_t direction
 ) {
-    return native_list_hold_enabled()
+    const char *column_native = getenv("FINDER_VIM_HOLD_COLUMN_NATIVE");
+    bool supported_view = context->role == navigation_outline
+        ? native_list_hold_enabled()
+        : context->role == navigation_list
+            && column_native && strcmp(column_native, "1") == 0;
+    return supported_view
         && mark_state_is_empty()
-        && (direction == direction_down || direction == direction_up)
-        && context->role == navigation_outline;
+        && (direction == direction_down || direction == direction_up);
 }
 
 static bool supports_fast_ax_hold(
