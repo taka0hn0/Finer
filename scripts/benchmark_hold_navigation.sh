@@ -264,6 +264,10 @@ for ((iteration = 1; iteration <= iterations; ++iteration)); do
     rm -f "$stop_timestamp_file"
 
     result=pass
+    if (( repeat_finished < stop_requested )); then
+        print -u2 -- "Hold controller returned before key release: iteration $iteration"
+        result=fail
+    fi
     if [[ ! "$repeat_position" =~ '^[1-9][0-9]*$' ]]; then
         result=fail
         repeat_position=0
